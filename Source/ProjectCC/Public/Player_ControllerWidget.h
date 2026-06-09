@@ -46,6 +46,7 @@ protected:
 	virtual void NativeDestruct() override;
 
 	void BindEvents();
+	void BindOwnerState();
 	void UnBindEvents();
 
 public:
@@ -82,6 +83,7 @@ protected:
 	void HandleHPChanged(float NewHP, float MaxHP);
 
 	FTimerHandle FadeTimerHandle;
+	FTimerHandle RetryPSBindTimerHandle;
 	float LastHitHP;
 	void UpdateFadeOpacity();
 

@@ -8,6 +8,7 @@
 #include "Item.h"
 #include "Weapon.h"
 #include "PlayMode_Match.h"
+#include "EffectManagerComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -43,6 +44,9 @@ AArea::AArea()
 	TestMesh->SetSimulatePhysics(false);
 	TestMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	TestMesh->SetupAttachment(MeshPivot);
+
+	//이펙트 담당 컴포넌트
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 // Called when the game starts or when spawned

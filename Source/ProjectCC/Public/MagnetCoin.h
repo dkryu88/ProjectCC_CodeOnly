@@ -22,6 +22,8 @@ protected:
 
 	UPROPERTY(VisibleAnywhere)
 	class UStaticMeshComponent* MagnetCoinMesh;
+	UPROPERTY()
+	class UEffectManagerComponent* EffectManagerComp;
 
 public:
 	// Called every frame

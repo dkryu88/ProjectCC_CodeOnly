@@ -5,7 +5,9 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Player_Character.h"
+#include "EffectManagerComponent.h"
 #include "MapConstructor.h"
+
 // Sets default values
 AKillPlane::AKillPlane()
 {
@@ -23,6 +25,9 @@ AKillPlane::AKillPlane()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetupAttachment(KillCollider);
+
+	//ÀÌÆåÆ® ´ã´ç ÄÄÆ÷³ÍÆ®
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 // Called when the game starts or when spawned

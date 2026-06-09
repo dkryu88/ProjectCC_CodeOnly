@@ -43,6 +43,11 @@ void UPlayer_ControllerWidget::InitWidget(APlayer_Character* Player) {
 	SetItem();
 	SetWeapon();
 	SetWeaponUseCount();
+	
+	//OwnerState Bind 실패 시 1프레임 뒤에 재시도
+	if (!OwnerState && GetWorld()) {
+		GetWorld()->GetTimerManager().SetTimer(RetryPSBindTimerHandle, this, &ThisClass::BindOwnerState, 0.1f, true);
+	}
 
 	HideMatchEventUI();
 }
@@ -78,6 +83,9 @@ void UPlayer_ControllerWidget::NativeDestruct() {
 }
 
 void UPlayer_ControllerWidget::BindEvents() {
+	//Event 바인딩 전에 Player_State부터 바인딩
+	BindOwnerState();
+
 	if (OwnerState) {
 		OwnerState->OnCoinChanged.RemoveAll(this);
 		OwnerState->OnItemChanged.RemoveAll(this);
@@ -104,6 +112,41 @@ void UPlayer_ControllerWidget::BindEvents() {
 	SetItem();
 	SetCoin();
 	SetRank();
+}
+
+//Player의 State 바인딩 (최초 바인딩 실패 시 재시도 용도)
+void UPlayer_ControllerWidget::BindOwnerState()
+{
+	if (!OwnerCharacter) return;
+
+	APlayer_State* NewState = OwnerCharacter->GetPlayerState<APlayer_State>();
+	if (!NewState) return;
+
+	//최초 바인딩 실패 시 다시 바인딩 시도이므로 이미 같은 State가 있다면 Skip
+	if (OwnerState == NewState) return;
+
+	//NewState와 다르다면 Dumy Data 또는 쓰레기값이 있을 가능성이 높으므로 Coin,Item,Rank 바인딩 제거
+	if (OwnerState) {
+		OwnerState->OnCoinChanged.RemoveAll(this);
+		OwnerState->OnItemChanged.RemoveAll(this);
+		OwnerState->OnRankChanged.RemoveAll(this);
+	}
+
+	//플레이어의 State를 정상적으로 재적용
+	OwnerState = NewState;
+	OwnerState->OnCoinChanged.RemoveAll(this);
+	OwnerState->OnItemChanged.RemoveAll(this);
+	OwnerState->OnRankChanged.RemoveAll(this);
+
+	//재적용된 State에 대해 Coin, Item, Rank 재바인딩
+	OwnerState->OnCoinChanged.AddUObject(this, &UPlayer_ControllerWidget::HandleCoinChanged);
+	OwnerState->OnItemChanged.AddUObject(this, &UPlayer_ControllerWidget::HandleItemChanged);
+	OwnerState->OnRankChanged.AddUObject(this, &UPlayer_ControllerWidget::HandleRankChanged);
+
+	//Coin, Item, Rank 초기화
+	SetCoin();
+	SetRank();
+	SetItem();
 }
 
 void UPlayer_ControllerWidget::UnBindEvents() {
@@ -343,6 +386,9 @@ UImage* UPlayer_ControllerWidget::FindImageByNameContains(UWidget* RootWidget, c
 
 void UPlayer_ControllerWidget::SetCoin() {
 	if (!Text_Coin) return;
+	if (!OwnerState && OwnerCharacter) {
+		OwnerState = OwnerCharacter->GetPlayerState<APlayer_State>();
+	}
 
 	int32 Coin = OwnerState ? OwnerState->GetPlayerCoin() : 0;
 	Text_Coin->SetText(FText::AsNumber(Coin));
@@ -350,6 +396,9 @@ void UPlayer_ControllerWidget::SetCoin() {
 
 void UPlayer_ControllerWidget::SetRank() {
 	if (!Text_Rank) return;
+	if (!OwnerState && OwnerCharacter) {
+		OwnerState = OwnerCharacter->GetPlayerState<APlayer_State>();
+	}
 	if (!OwnerState) {
 		Text_Rank->SetText(FText::FromString(TEXT("-")));
 		return;

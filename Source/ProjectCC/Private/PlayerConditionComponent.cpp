@@ -47,7 +47,7 @@ void UPlayerConditionComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 				Condition.NextEffectTimer += Condition.EffectInterval;
 				Condition.ConditionEffect->PersistEffect(Player, this, Condition, Condition.EffectInterval);
 
-				if (Condition.EffectCount >= 0) {
+				if (Condition.EffectCount > 0) {
 					Condition.RemainingTickCount--;
 
 					if (Condition.RemainingTickCount <= 0) break;

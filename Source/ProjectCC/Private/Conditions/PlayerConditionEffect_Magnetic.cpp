@@ -20,7 +20,7 @@ void UPlayerConditionEffect_Magnetic::PersistEffect(APlayer_Character* Player, U
 	}
 
 	ScanTimer += DeltaTime;
-	if (ScanTimer >= 2.f) {
+	if (ScanTimer >= 0.16f) {
 		ScanTimer = 0.f;
 		MagneticSweep(Player);
 	}

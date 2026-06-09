@@ -33,6 +33,7 @@ public:
 
 	virtual void Func_AttackedByPlayer_Implementation(APlayer_Character* Player) override;
 	virtual void Func_Destroy_Implementation() override;
+	virtual void ApplyAdditionalSetting() override;
 
 	void SpawnCoin();
 	bool CollectNearbySafeBlocksFromMap(TArray<FVector>& SafeBlockLocations, int32 instanceSearchRadius, int32 instanceSearchHeight);

@@ -10,6 +10,7 @@ class USphereComponent;
 class UStaticMeshComponent;
 class AMapConstructor;
 class APlayer_Character;
+class UEffectManagerComponent;
 
 UCLASS()
 class PROJECTCC_API ACoin : public AActor
@@ -35,6 +36,9 @@ protected:
 	//플레이어 탐지 범위
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	USphereComponent* Detect;
+	//이펙트 담당 컴포넌트
+	UPROPERTY()
+	UEffectManagerComponent* EffectManagerComp;
 	//현재 매치에서 사용 중인 맵
 	UPROPERTY()
 	TObjectPtr<AMapConstructor> NowMap = nullptr;

@@ -3,6 +3,7 @@
 
 #include "MagnetCoin.h"
 #include "Player_Character.h"
+#include "EffectManagerComponent.h"
 #include "Player_State.h"
 
 // Sets default values
@@ -15,6 +16,8 @@ AMagnetCoin::AMagnetCoin()
 	SetRootComponent(MagnetCoinMesh);
 
 	MagnetCoinMesh->SetCollisionProfileName(TEXT("NoCollision"));
+
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 //Magnet Coin 최초 설정

@@ -208,15 +208,15 @@ void APlayer_State::ClearReservedWeapon()
 void APlayer_State::AddPlayerEliminate()
 {
 	if (!HasAuthority()) return;
-	OnEliminateChanged.Broadcast(PlayerEliminate);
 	PlayerEliminate += 1;
+	OnEliminateChanged.Broadcast(PlayerEliminate);
 }
 
 void APlayer_State::AddPlayerOut()
 {
 	if (!HasAuthority()) return;
-	OnOutChanged.Broadcast(PlayerOut);
 	PlayerOut += 1;
+	OnOutChanged.Broadcast(PlayerOut);
 }
 
 //UI 갱신을 위한 OnRep

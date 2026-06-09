@@ -42,6 +42,8 @@ void AMatch_Event_Meteor::SpawnMeteor() {
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+		FRotator SpawnRotation = FRotator(FMath::RandRange(-30.f, 30.f), FMath::RandRange(-180.f, 180.f), FMath::RandRange(-30.f, 30.f));
+
 		AMapObjects_Meteor* Meteor = GetWorld()->SpawnActor<AMapObjects_Meteor>(MapObjects_Meteor, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
 		if (Meteor) {
 			Meteor->NowMap = NowMap;          // 맵 참조 전달

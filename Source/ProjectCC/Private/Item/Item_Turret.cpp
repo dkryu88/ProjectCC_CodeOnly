@@ -111,6 +111,7 @@ bool AItem_Turret::UseEffect_Implementation(APlayer_Character* Player) {
 
 	if (NewTurret) {
 		// 설치한 플레이어를 소유자로 지정하여 아군 판정이나 점수 계산에 활용
+		NewTurret->OwnPlayer = Player;
 		NewTurret->OwnPlayerController = Cast<AMatch_PlayerController>(Player->GetController());
 		UGameplayStatics::FinishSpawningActor(NewTurret, SpawnTransform);
 

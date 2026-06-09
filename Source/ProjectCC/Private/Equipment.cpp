@@ -5,6 +5,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/StaticMeshComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "EffectManagerComponent.h"
 #include "Components/BoxComponent.h"
 
 // Sets default values
@@ -29,6 +30,9 @@ AEquipment::AEquipment(const FObjectInitializer& ObjectInitializer) : Super(Obje
 	//ECC_GameTraceChannel1 <- 콜리전 프리셋 1번 (Interaction)
 	PickupCollider->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	PickupCollider->SetGenerateOverlapEvents(true);
+
+	//이펙트 담당 컴포넌트
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 // Called when the game starts or when spawned

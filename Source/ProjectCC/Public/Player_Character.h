@@ -22,6 +22,7 @@ class AAttackPreviewGuide;
 class UPlayerConditionComponent;
 class UPlayerTransformationComponent;
 class UPlayerVisualManagerComponent;
+class UEffectManagerComponent;
 class UPlayer_CharacterWidget;
 class UNiagaraSystem;
 class UNiagaraComponent;
@@ -444,10 +445,13 @@ public:
 	void Multicast_PlayRecoverReaction();
 	//무기/물체별 일반 애니메이션 재생
 	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate);
+	void Multicast_PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartTime);
 	//무기/물체별 특수 애니메이션 재생
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayOverrideMontage(UAnimMontage* Montage, FName StartSection = NAME_None, bool bRestart = true, bool bPauseAfter = false);
+	//슬롯 애니메이션(시퀀스) 정지
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_StopSlotAnimation(FName SlotName, float BlendOutTime);
 	//몽차주 애니메이션 정지
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_StopMontage(UAnimMontage* Montage, float BlendOutTime);
@@ -502,6 +506,9 @@ public:
 	//피격 시 캐릭터 방향 저장
 	UPROPERTY()
 	FRotator TargetHitRotation;	
+	//플레이어 이펙트--------------------
+	UPROPERTY()
+	UEffectManagerComponent* EffectManagerComp;
 public:
 	//현재 매치에서 플레이 중인 맵
 	AMapConstructor* NowMap;
@@ -625,7 +632,7 @@ public:
 	//플레이어 피격 애니메이션 재생
 	void PlayDamageAnimation(float Damage, bool bBigHit);
 	//플레이어 기본 무기/물체 공격 애니메이션 재생
-	void PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate);
+	void PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartTime);
 	//재생할 애니메이션이 어떤것인지 확인
 	bool NeedToPlayAllBodyAnimation();
 	//각 장착물들에 대해 재생할 애니메이션 확인 및 재생
@@ -652,6 +659,8 @@ public:
 	float BigHitStopTime = 0.f;
 	//강한 피격 후 Recover 시작 타이머
 	FTimerHandle BigHitRecoverTimerHandle;
+	//공격 애니메이션 완료 후 조준 중이면 조준 애니메이션 재생 타이머
+	FTimerHandle ResumeAimAnimationTimerHandle;
 public:
 	//현재 플레이어의 Player_State
 	TObjectPtr<APlayer_State> NowPlayer_State;

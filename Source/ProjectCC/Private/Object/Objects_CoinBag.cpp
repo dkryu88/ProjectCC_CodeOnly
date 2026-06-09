@@ -34,8 +34,32 @@ void AObjects_CoinBag::Func_AttackedByPlayer_Implementation(APlayer_Character* P
 void AObjects_CoinBag::Func_Destroy_Implementation() {
 	Super::Func_Destroy_Implementation();
 	if (HasAuthority()) {
-		SpawnCoin();
+		//코인 3개 소환
+		for (int32 i = 0; i < 3; ++i) {
+			SpawnCoin();
+		}
 	}
+}
+
+void AObjects_CoinBag::ApplyAdditionalSetting()
+{
+	if (!PhysicsCollider || !HasAuthority()) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	PhysicsCollider->SetSimulatePhysics(true);
+	PhysicsCollider->SetEnableGravity(true);
+
+	//밀렸을 때 쉽게 밀리지 않도록 Damping 증가
+	PhysicsCollider->SetLinearDamping(0.85f);
+	//질량 증가
+	PhysicsCollider->SetMassOverrideInKg(NAME_None, 100.f, true);
+	//무게 중심을 아래로 이동
+	PhysicsCollider->SetCenterOfMass(FVector(0.f, 0.f, -25.f), NAME_None);
+	//회전 관성 증가
+	PhysicsCollider->BodyInstance.InertiaTensorScale = FVector(2.f, 2.f, 1.f);
+	PhysicsCollider->BodyInstance.UpdateMassProperties();
 }
 
 void AObjects_CoinBag::SpawnCoin() {

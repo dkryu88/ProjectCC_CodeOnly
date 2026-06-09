@@ -52,10 +52,10 @@ struct FPlayerStats {
 	float AttackRange = 0.85f;
 	//공격 범위 각도 (0 ~ 360)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AttackDegree = 20.f;
+	float AttackDegree = 17.5f;
 	//공격 범위 크기
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AttackRadius = 20.f;
+	float AttackRadius = 15.f;
 	//공격 선딜레이
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float AttackEarlierDelay = 0.05f;

@@ -418,9 +418,14 @@ void AWeapon::ApplyEquipState()
 		AttachToComponent(EquippedPlayer->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("SK_PlayerHand"));
 
 		if (!GripSocketName.IsNone() && Mesh && Mesh->DoesSocketExist(GripSocketName)) {
-			FVector HandSocketWorld = EquippedPlayer->GetMesh()->GetSocketLocation(TEXT("SK_PlayerHand"));
-			FVector GripSocketWorld = Mesh->GetSocketLocation(GripSocketName);
-			FVector Offset = HandSocketWorld - GripSocketWorld;
+			FTransform HandSocketWorld = EquippedPlayer->GetMesh()->GetSocketTransform(TEXT("SK_PlayerHand"), RTS_World);
+
+			FQuat GripSocketWorldRotation = Mesh->GetSocketQuaternion(GripSocketName);
+			FQuat DeltaRotation = HandSocketWorld.GetRotation() * GripSocketWorldRotation.Inverse();
+			AddActorWorldRotation(DeltaRotation);
+
+			FVector GripSocketWorldLocation = Mesh->GetSocketLocation(GripSocketName);
+			FVector Offset = HandSocketWorld.GetLocation() - GripSocketWorldLocation;
 			AddActorWorldOffset(Offset);
 		}
 	}

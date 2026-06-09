@@ -45,6 +45,7 @@ class UObjectsDataAsset;
 class UObjectsFunction;
 class APlayer_Character;
 class AMatch_PlayerController;
+class UEffectManagerComponent;
 
 UCLASS()
 class PROJECTCC_API AObjects : public AActor
@@ -77,6 +78,8 @@ public:
 	TObjectPtr<UPrimitiveComponent> PhysicsCollider;
 	UPROPERTY(VisibleAnywhere)
 	UBoxComponent* InterActionCollider;
+	UPROPERTY()
+	UEffectManagerComponent* EffectManagerComp;
 	//물체 Mesh의 기준점
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	USceneComponent* MeshPivot;
@@ -216,6 +219,8 @@ public:
 	void ApplyCurrentState();
 	//각 물체별 추가 물리 설정
 	virtual void ApplyAdditionalSetting();
+	//물체 중 OwnerPlayer에 의해 색이 바뀌는 머터리얼이 있는 경우 그 색을 Player의 PortraitId로 적용
+	void ApplyPortraitIdColorToMesh();
 	//초기 물체 데이터 설정
 	void SetObjectsStat();
 	//물체 Mesh 크기를 BoxCollider에 반영

@@ -33,6 +33,7 @@
 #include "Player_CharacterWidget.h"
 #include "Player_AdditionalWidget.h"
 #include "PlayMode_Match.h"
+#include "EffectManagerComponent.h"
 #include "MapConstructor.h"
 #include "BlockType.h"
 #include "PlayerStats.h"
@@ -109,7 +110,7 @@ APlayer_Character::APlayer_Character()
 	PickupDetectRange->InitBoxExtent(FVector(50, 50, 90));
 	//상호작용 감지 Collision 설정
 	PickupDetectRange->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	PickupDetectRange->SetCollisionObjectType(ECC_Pawn);
+	PickupDetectRange->SetCollisionObjectType(ECC_GameTraceChannel1);
 	PickupDetectRange->SetCollisionResponseToAllChannels(ECR_Ignore);
 	//ECC_GameTraceChannel1 <- 콜리전 프리셋 1번 (Interaction)
 	PickupDetectRange->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
@@ -138,6 +139,8 @@ APlayer_Character::APlayer_Character()
 	WidgetComponent->SetDrawSize(FVector2D(180.f, 60.f));
 	WidgetComponent->SetManuallyRedraw(false);
 	WidgetComponent->SetRedrawTime(0.03f);
+	//플레이어 이펙트 컴포넌트 부착
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 
 	//플레이어 스탯 초기값 설정
 	AStat = GetWeaponStat();
@@ -320,7 +323,7 @@ void APlayer_Character::AddInputBlockController(FName ControllerName, bool bBloc
 {
 	if (!HasAuthority()) return;
 	if (ControllerName.IsNone()) return;
-
+	
 	//같은 이름의 컨트롤러는 갱신
 	RemoveInputBlockController(ControllerName);
 
@@ -918,10 +921,23 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir){
 	LastDodgeTime = CurrentTime;
 	bIsDodging = true;
 
-	//장착된 무기/물체가 특수 회피 애니메이션이 있는 경우 재생
-	if (HasAuthority()) {
-		PlayEquipmentAnimation(EFunctionInterActionReason::Dodge);
+	//공격 후 Aim애니메이션 복구 타이머가 있다면, 회피 중에는 끄기
+	GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+	if (HasAuthority())
+	{
+		Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.03f);
+		Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.03f);
 	}
+	else {
+		UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+		if (AnimInstance) {
+			AnimInstance->StopSlotAnimation(0.03f, FName(TEXT("UpperBody")));
+			AnimInstance->StopSlotAnimation(0.03f, FName(TEXT("DefaultSlot")));
+		}
+	}
+	//장착된 무기/물체의 회피 애니메이션이 따로 있는경우 재생
+	if (HasAuthority()) PlayEquipmentAnimation(EFunctionInterActionReason::Dodge);
+
 	//회피 시 변경되는 Condition 상태 제어
 	if (HasAuthority()) {
 		NotifyConditionEvent(EPlayerConditionEvent::Dodge, true);
@@ -972,6 +988,14 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir){
 			}
 			//회피 완료 처리
 			bIsDodging = false;
+
+			if (HasAuthority()) {
+				if (bIsAiming && !bIsOut && !bIsHitted) {
+					PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
+				}
+
+				ForceNetUpdate();
+			}
 			}),
 		DodgeDuration,
 		false
@@ -1575,7 +1599,6 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
 	if (!bCanControl) return;
 	if (bIsOut) return;
-	if (bIsDodging) return;
 	if (!HasAuthority()) {
 		Server_Aim(false);
 	}
@@ -1607,6 +1630,11 @@ void APlayer_Character::SetAimInternal(bool bAiming) {
 	//무기가 조준 애니메이션이 따로 있는 경우 그 애니메이션을 재생 (중복 재생을 방지하기 위해 비조준->조준일 때만 재생)
 	if (HasAuthority() && bIsAiming && !bWasAiming) {
 		PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
+	}
+	else if (!bIsAiming && bWasAiming) {
+		GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+		Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.15f);
+		Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.15f);
 	}
 }
 //조준 위치를 서버에 전송
@@ -3459,14 +3487,27 @@ void APlayer_Character::PlayDamageAnimation(float Damage, bool bBigHit) {
 	}), ReleaseDelay, false);
 }
 
-void APlayer_Character::PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate)
+void APlayer_Character::PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartFrame)
 {
 	if (!Sequence) return;
 
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	if (!AnimInstance) return;
 
-	AnimInstance->PlaySlotAnimationAsDynamicMontage(Sequence, SlotName, BlendInTime, BlendOutTime, PlayRate);
+	float StartTime = 0.f;
+
+	if (StartFrame > 0) {
+		float AnimLength = Sequence->GetPlayLength();
+		int32 NumKeys = Sequence->GetNumberOfSampledKeys();
+
+		if (AnimLength > 0.01 && NumKeys > 1) {
+			float FPS = (NumKeys - 1) / AnimLength;
+			StartTime = StartFrame / FPS;
+			StartTime = FMath::Clamp(StartTime, 0.f, FMath::Max(0.f, AnimLength));
+		}
+	}
+
+	AnimInstance->PlaySlotAnimationAsDynamicMontage(Sequence, SlotName, BlendInTime, BlendOutTime, PlayRate, LoopCount, -1.f, StartTime);
 }
 
 bool APlayer_Character::NeedToPlayAllBodyAnimation()
@@ -3485,6 +3526,13 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 
 	FEquipmentActionAnimation TargetAnimation;
 	bool bFoundAnimation = false;
+	int32 LoopCount = 1;
+	int32 StartFrame = 0;
+
+	//조준 애니메이션은 조준 해제까지 무한 루프
+	if (Reason == EFunctionInterActionReason::Aim) {
+		LoopCount = 999999;
+	}
 
 	if (NowWeapon && NowWeapon->WeaponData) {
 		FEquipmentActionAnimation* FoundAnimation = NowWeapon->WeaponData->AdditionalAnimation.Find(Reason);
@@ -3503,19 +3551,42 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 			bFoundAnimation = true;
 		}
 	}
+
+	if (!bFoundAnimation) return false;
+
+	StartFrame = TargetAnimation.StartFrame;
+
 	//장착된 무기/물체가 없는 경우 일반공격 모션 재생
-	else if (!NowWeapon && !NowObjects && Reason == EFunctionInterActionReason::Attack) {
+	if (!NowWeapon && !NowObjects && Reason == EFunctionInterActionReason::Attack) {
 		UAnimSequence* NormalAttackSequence = GetNormalAttackSequence();
 
 		if (!NormalAttackSequence) return false;
 
 		FName SlotName = GetActionSlotName(false);
-		Multicast_PlayAnimationDynamic(NormalAttackSequence, SlotName, 0.025f, 0.1f, 1.f);
+		Multicast_PlayAnimationDynamic(NormalAttackSequence, SlotName, 0.025f, 0.1f, 1.f, 1, 0);
 
 		return true;
 	}
 
-	if (!bFoundAnimation) return false;
+	//조준 중 공격 하여 공격 모션 재생 시 시작 프레임을 일부 건너뜀
+	if (bIsAiming && Reason == EFunctionInterActionReason::Attack) {
+		bool bHasAimAnimation = false;
+
+		if (NowWeapon && NowWeapon->WeaponData) {
+			FEquipmentActionAnimation* AimAnim = NowWeapon->WeaponData->AdditionalAnimation.Find(EFunctionInterActionReason::Aim);
+			if(AimAnim) bHasAimAnimation = AimAnim->IsValid();
+			
+		}
+		else if (NowObjects && NowObjects->ObjectsData) {
+			FEquipmentActionAnimation* AimAnim = NowObjects->ObjectsData->AdditionalAnimation.Find(EFunctionInterActionReason::Aim);
+			if(AimAnim) bHasAimAnimation = AimAnim->IsValid();
+		}
+
+		if (bHasAimAnimation && TargetAnimation.InterceptStartFrame >= 0) {
+			StartFrame = TargetAnimation.InterceptStartFrame;
+		}
+	}
+
 	//Override할 몽타주가 있는 경우 몽타주 재생
 	if (TargetAnimation.MontageOverride) {
 		Multicast_PlayOverrideMontage(TargetAnimation.MontageOverride);
@@ -3523,10 +3594,46 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 	}
 	//Override할 몽타주가 없는 경우(전신 애니메이션의 경우) Sequence를 SlotName에 맞게 재생
 	if (TargetAnimation.Sequence) {
-		FName SlotName = GetActionSlotName(TargetAnimation.bForceFullBody);
+		FName SlotName;
 
-		Multicast_PlayAnimationDynamic(TargetAnimation.Sequence, SlotName, TargetAnimation.BlendInTime, TargetAnimation.BlendOutTime, TargetAnimation.PlayRate);
+		//조준은 상체만 사용하므로 UpperBody로 고정
+		if (Reason == EFunctionInterActionReason::Aim) {
+			SlotName = FName(TEXT("UpperBody"));
+		}
+		//회피는 전신을 사용하므로 DefaultSlot으로 고정
+		else if (Reason == EFunctionInterActionReason::Dodge) {
+			SlotName = FName(TEXT("DefaultSlot"));
+		}
+		else {
+			SlotName = GetActionSlotName(TargetAnimation.bForceFullBody);
+		}
 
+		Multicast_PlayAnimationDynamic(TargetAnimation.Sequence, SlotName, TargetAnimation.BlendInTime, TargetAnimation.BlendOutTime, TargetAnimation.PlayRate, LoopCount, StartFrame);
+
+		//조준 중 공격 애니메이션이 끝나면 조준 애니메이션 복구
+		if (Reason == EFunctionInterActionReason::Attack && bIsAiming) {
+			float AnimLength = TargetAnimation.Sequence->GetPlayLength();
+			float StartTime = 0.f;
+
+			if (StartFrame > 0) {
+				int32 NumKeys = TargetAnimation.Sequence->GetNumberOfSampledKeys();
+				if (AnimLength > 0.01 && NumKeys > 1) {
+					float FPS = (NumKeys - 1) / AnimLength;
+					StartTime = StartFrame / FPS;
+					StartTime = FMath::Clamp(StartTime, 0.f, FMath::Max(0.f, AnimLength));
+				}
+			}
+			float RemainTime = (AnimLength - StartTime) / FMath::Max(TargetAnimation.PlayRate, 0.01f);
+			RemainTime = FMath::Max(0.01f, RemainTime - TargetAnimation.BlendOutTime);
+
+			GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+			GetWorldTimerManager().SetTimer(ResumeAimAnimationTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+				if (!bIsAiming) return;
+				if (bIsOut || bIsDodging || bIsHitted) return;
+
+				PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
+			}), RemainTime, false);
+		}
 		return true;
 	}
 
@@ -3749,9 +3856,9 @@ void APlayer_Character::Multicast_PlayHitReaction_Implementation(float Damage, b
 }
 
 //현재 장착물의 일반 공격 모션 재생
-void APlayer_Character::Multicast_PlayAnimationDynamic_Implementation(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate)
+void APlayer_Character::Multicast_PlayAnimationDynamic_Implementation(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartFrame)
 {
-	PlayAnimationDynamic(Sequence, SlotName, BlendInTime, BlendOutTime, PlayRate);
+	PlayAnimationDynamic(Sequence, SlotName, BlendInTime, BlendOutTime, PlayRate, LoopCount, StartFrame);
 }
 
 void APlayer_Character::Multicast_PlayOverrideMontage_Implementation(UAnimMontage* Montage, FName StartSection, bool bRestart, bool bPauseAfter)
@@ -3769,6 +3876,15 @@ void APlayer_Character::Multicast_PlayOverrideMontage_Implementation(UAnimMontag
 
 	if (StartSection != NAME_None) AnimInstance->Montage_JumpToSection(StartSection, Montage);
 	if (bPauseAfter) AnimInstance->Montage_Pause(Montage);
+}
+
+
+void APlayer_Character::Multicast_StopSlotAnimation_Implementation(FName SlotName, float BlendOutTime)
+{
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance) return;
+
+	AnimInstance->StopSlotAnimation(BlendOutTime, SlotName);
 }
 
 void APlayer_Character::Multicast_PlayRecoverReaction_Implementation()

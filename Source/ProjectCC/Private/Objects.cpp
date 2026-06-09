@@ -8,8 +8,10 @@
 #include "Area.h"
 #include "Match_PlayerController.h"
 #include "Player_Character.h"
+#include "Player_State.h"
 #include "PlayerTransformationComponent.h"
 #include "PlayMode_Match.h"
+#include "EffectManagerComponent.h"
 #include "MapConstructor.h"
 #include "Objects_HPWidget.h"
 #include "Kismet/GameplayStatics.h"
@@ -27,7 +29,7 @@ AObjects::AObjects(const FObjectInitializer& ObjectInitializer)
 	SetReplicateMovement(true);
 
 	//물체 물리 Collider 부착 (상속 받은 객체가 재설정)
-	PhysicsCollider = CreateDefaultSubobject<UShapeComponent, UBoxComponent>(TEXT("PhysicsCollider"));
+	PhysicsCollider = CreateDefaultSubobject<UPrimitiveComponent, UBoxComponent>(TEXT("PhysicsCollider"));
 	SetRootComponent(PhysicsCollider);
 	//물리 동기화
 	PhysicsCollider->SetIsReplicated(true);
@@ -62,6 +64,8 @@ AObjects::AObjects(const FObjectInitializer& ObjectInitializer)
 	InterActionCollider->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	InterActionCollider->SetGenerateOverlapEvents(true);
 	InterActionCollider->SetupAttachment(PhysicsCollider);
+	//이펙트 담당 컴포넌트 부착
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 
 }
 
@@ -108,6 +112,8 @@ void AObjects::BeginPlay()
 	}
 
 	ApplyCurrentState();
+	//Player의 PortraitId에 따라 색이 달라지는 머터리얼이 있는 경우 색상 설정
+	ApplyPortraitIdColorToMesh();
 
 	//물체가 HP 위젯을 사용하는 경우 HP 위젯 초기화 및 HPWidgetComp에 위젯 부착
 	if (ObjectsData && ObjectsData->bUseHPWidget && HPWidgetComp && Objects_HPWidget) {
@@ -335,6 +341,7 @@ void AObjects::SetObjectsStat() {
 void AObjects::SetSizeofBoxColliderwithMesh(UBoxComponent* Collider)
 {
 	if (!Mesh || !Mesh->GetStaticMesh() || !Collider) return;
+
 	FBoxSphereBounds MeshBounds = Mesh->GetStaticMesh()->GetBounds();
 	FVector MeshSize = MeshPivot->GetRelativeScale3D().GetAbs();
 	//Mesh의 각 크기값을 획득
@@ -369,6 +376,45 @@ void AObjects::SetSizeofSphereColliderwithMesh(USphereComponent* Collider) {
 	//최종 Collider 크기 설정
 	Collider->SetSphereRadius(Radius);
 }
+
+void AObjects::ApplyPortraitIdColorToMesh()
+{
+	if (!OwnPlayer) return;
+	
+	APlayer_State* PS = OwnPlayer->GetThePlayerState();
+	if (!PS) return;
+
+	TArray<UMeshComponent*> MeshComponents;
+	GetComponents<UMeshComponent>(MeshComponents);
+
+	int32 PortraitId = PS->GetPortraitId();
+	
+	for (UMeshComponent* mesh : MeshComponents) {
+		
+		if (!mesh) continue;
+		int32 MaterialCount = mesh->GetNumMaterials();
+		
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
+			UMaterialInterface* CurrentMaterial = mesh->GetMaterial(MaterialIndex);
+			if (!CurrentMaterial) continue;
+
+			float UsingPortraitColor = 0.f;
+
+			bool bHasUsingPortraitColor = CurrentMaterial->GetScalarParameterValue(FMaterialParameterInfo(TEXT("UsingPortraitColor")), UsingPortraitColor);
+
+			//PortraitId를 사용하는 머터리얼이 아닌 경우 스킵
+			if (!bHasUsingPortraitColor || UsingPortraitColor < 0.5f) continue;
+
+			UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
+			if (!MID) MID = mesh->CreateDynamicMaterialInstance(MaterialIndex, CurrentMaterial);
+			if (!MID) continue;
+
+			MID->SetScalarParameterValue(TEXT("PortraitId"), (float)PortraitId);
+		}
+	}
+	
+}
+
 bool AObjects::PickedByPlayer(APlayer_Character* player) {
 	if (!HasAuthority()) return false;
 	if (!player) return false;
@@ -1027,6 +1073,7 @@ void AObjects::ChangeToNormalType(const FHitResult& Hit)
 void AObjects::OnRep_OwnPlayer()
 {
 	ApplyCurrentState();
+	ApplyPortraitIdColorToMesh();
 }
 
 //각 물체의 고유 기능(자식 클래스가 상속받아 구현)
@@ -1044,4 +1091,3 @@ void AObjects::Func_AttackedByPlayer_Implementation(APlayer_Character* AttackPla
 
 //물체 물리 추가 설정 (상속 받는 클래스에서 지정)
 void AObjects::ApplyAdditionalSetting() {}
-

@@ -79,6 +79,8 @@ bool AWeapon_ShotGun::FirePellets()
 			{
 				// 본인이 들고 있는 오브젝트는 스킵
 				if (HittedObj == EquippedPlayer->NowObjects) continue;
+				//본인 소유의 오브젝트는 스킵
+				if (HittedObj->OwnPlayer == EquippedPlayer) continue; 
 				// HP가 없는 오브젝트는 스킵
 				if (!HittedObj->ObjectsData || !HittedObj->ObjectsData->bUseHP) continue;
 				// 오브젝트에 탄알 데미지 적용 (전체 데미지/펠릿 수 (소숫점 올림으로 적용))

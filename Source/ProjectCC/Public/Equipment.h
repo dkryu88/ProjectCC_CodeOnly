@@ -12,6 +12,7 @@ class UBoxComponent;
 class APlayer_Character;
 class AObjects;
 class UPrimitiveComponent;
+class UEffectManagerComponent;
 
 UENUM(BlueprintType)
 enum class EEquipmentType : uint8 {
@@ -48,6 +49,8 @@ public:
 	UPrimitiveComponent* PhysicsCollider;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment")
 	TObjectPtr<UBoxComponent> PickupCollider;
+	UPROPERTY()
+	UEffectManagerComponent* EffectManagerComp;
 	UPROPERTY(EditDefaultsOnly, Category = "Equipment")
 	EEquipmentType EquipmentType = EEquipmentType::Weapon;
 	//이미 장착 중인 Equipment인지 확인 (서버에서 관리)
@@ -55,7 +58,7 @@ public:
 	bool bIsEquipped = false;
 	//Equipment의 맵에 존재할 수 있는 시간
 	UPROPERTY(Replicated)
-	float LifeTime = 300.f;
+	float LifeTime = 30.f;
 	//Equipment가 장착/장착해제 되면 즉시 호출회든 함수(OnRep)
 	UFUNCTION()
 	virtual void OnRep_IsEquipped();

@@ -34,10 +34,10 @@ public:
 	//Condition 중 받는 효과 수치
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float EffectValue = 0.f;
-	//Condition 중 효과 받는 횟수
+	//Condition 중 효과 받는 횟수 (횟수 제한 없으려면 -1)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 EffectCount = 3;
-	//Condition 중 효과 받는 간격
+	//Condition 중 효과 받는 간격 (지속효과가 없는 경우 0)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float EffectInterval = 0.f;
 	//효과 중첩 적용 가능 여부

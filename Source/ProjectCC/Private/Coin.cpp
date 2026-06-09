@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "PlayMode_Match.h"
 #include "MapConstructor.h"
+#include "EffectManagerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -43,6 +44,9 @@ ACoin::ACoin()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetupAttachment(Detect);
+
+	//ÀÌÆåÆ® ´ã´ç ÄÄÆ÷³ÍÆ® ºÎÂø
+	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 // Called when the game starts or when spawned
