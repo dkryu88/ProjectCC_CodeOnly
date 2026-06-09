@@ -1687,7 +1687,37 @@ void APlayer_Character::UpdateAimTargetPoint()
 	FHitResult AimHit;
 	bool bHavingAimHit = PC->GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(AimTraceChannel), true, AimHit);
 
-	CurrentAimTargetPoint = bHavingAimHit ? AimHit.ImpactPoint : FallbackPoint;
+	//CurrentAimTargetPoint = bHavingAimHit ? AimHit.ImpactPoint : FallbackPoint;
+	// 조준포인터 용암위 버그 수정
+	if (bHavingAimHit) {
+			// 블록체널이라면 그 위치 가져옴
+		CurrentAimTargetPoint = AimHit.ImpactPoint;
+	}
+	else {
+		// 킬존 용암의 콜리전에서 마우스포인트를 오버랩으로 바꿨음
+		// 마우스포인터는 용암위로 올라가나
+		// 캐릭터 회전과 공격범위가 따라가지 못해
+		// else에서 따라가도록 설정
+		FVector WorldLocation, WorldDirection;
+
+		// 마우스 커서 화면 위치에서 3D로 광선 발사
+		if (PC->DeprojectMousePositionToWorld(WorldLocation, WorldDirection)) {
+			FVector PlaneNormal(0.f, 0.f, 1.f);	//케릭터 발바닥 높이
+			FVector PlanePoint = GetActorLocation();
+
+			// 마우스광선과 캐릭터 발바닥 높이의 교차점 찾기
+			FVector Intersection = FMath::LinePlaneIntersection(
+				WorldLocation,	// 선분 시작점
+				WorldLocation + WorldDirection * 1000.f,	// 선분 끝점 (10m로 설정)
+				PlanePoint,	//평면 위 한점
+				PlaneNormal	//평면 바닥 방향
+			);
+			// 마우스 방향 위치로 초기화
+			FallbackPoint = Intersection;
+		}
+		CurrentAimTargetPoint = FallbackPoint;
+	}
+
 	bHavingCurrentAimTargetPoint = true;
 }
 
