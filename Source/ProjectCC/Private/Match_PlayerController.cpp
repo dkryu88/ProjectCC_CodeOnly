@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Match_PlayerController.h"
@@ -37,19 +37,19 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 	if (!IsLocalController()) return;
 	TryFinishLocalSetup();
 
-	//ScreenWidgetÀÌ ¾øÀ¸¸é »õ·Î »ı¼º
+	//ScreenWidgetì´ ì—†ìœ¼ë©´ ìƒˆë¡œ ìƒì„±
 	if (Player_ControllerWidget && !ScreenWidget) {
 		ScreenWidget = CreateWidget<UPlayer_ControllerWidget>(this, Player_ControllerWidget);
 		if (ScreenWidget) {
 			ScreenWidget->AddToViewport(0);
 		}
 	}
-	//ScreenWidgetÀÌ ÀÖÀ¸¸é ÇöÀç ¼ÒÀ¯ÁßÀÎ Player¸¦ ±âÁØÀ¸·Î ÃÊ±âÈ­
+	//ScreenWidgetì´ ìˆìœ¼ë©´ í˜„ì¬ ì†Œìœ ì¤‘ì¸ Playerë¥¼ ê¸°ì¤€ìœ¼ë¡œ ì´ˆê¸°í™”
 	if (ScreenWidget) {
 		APlayer_Character* player = Cast<APlayer_Character>(InPawn);
 		if (player) {
 			ScreenWidget->InitWidget(player);
-			//Shop ¹öÆ° ¹ÙÀÎµù
+			//Shop ë²„íŠ¼ ë°”ì¸ë”©
 			BindShopButton();
 		}	
 	}
@@ -214,7 +214,7 @@ void AMatch_PlayerController::OnPressedSpaceKey()
 	if (!bWaitingRespawn) return;
 	if (!bCanRespawnNow) return;
 
-	//¸®½ºÆù ¿äÃ» ½Ã Áï½Ã »óÁ¡ ´İ±â
+	//ë¦¬ìŠ¤í° ìš”ì²­ ì‹œ ì¦‰ì‹œ ìƒì  ë‹«ê¸°
 	if (bShopOpen) {
 		CloseShop();
 	}
@@ -222,7 +222,7 @@ void AMatch_PlayerController::OnPressedSpaceKey()
 	Server_RequestRespawn();
 }
 
-//Out »óÅÂ UI ÀüÈ¯
+//Out ìƒíƒœ UI ì „í™˜
 void AMatch_PlayerController::SetOutWidget()
 {
 	if (!IsLocalPlayerController()) return;
@@ -238,7 +238,7 @@ void AMatch_PlayerController::SetOutWidget()
 		player->SetPlayerWidgetVisibility(false);
 	}
 }
-//ÇÃ·¹ÀÌ »óÅÂ UI ÀüÈ¯
+//í”Œë ˆì´ ìƒíƒœ UI ì „í™˜
 void AMatch_PlayerController::SetPlayWidget() {
 	if (!IsLocalPlayerController()) return;
 	if (!GetWorld()) return;
@@ -257,7 +257,7 @@ void AMatch_PlayerController::SetPlayWidget() {
 void AMatch_PlayerController::OpenScoreBoard()
 {
 	if (!IsLocalController()) return;
-	//»óÁ¡ÀÌ ¿­·ÁÀÖ´Â »óÅÂ¿¡¼­´Â ½ºÄÚ¾îº¸µå ¿­¶÷ ºÒ°¡
+	//ìƒì ì´ ì—´ë ¤ìˆëŠ” ìƒíƒœì—ì„œëŠ” ìŠ¤ì½”ì–´ë³´ë“œ ì—´ëŒ ë¶ˆê°€
 	if (bShopOpen) return;
 
 	if (!ScoreWidget && Match_ScoreBoardWidget) {
@@ -318,13 +318,13 @@ void AMatch_PlayerController::OpenShop()
 		CloseShop();
 		return;
 	}
-	//»óÁ¡ ¿­±â Àü¿¡ ½ºÄÚ¾îº¸µå ´İ±â
+	//ìƒì  ì—´ê¸° ì „ì— ìŠ¤ì½”ì–´ë³´ë“œ ë‹«ê¸°
 	CloseScoreBoard();
 
 	ShopWidget->SetVisibility(ESlateVisibility::Visible);
 	bShopOpen = true;
 
-	//Shop ¹öÆ°ÀÌ Æ÷Ä¿½º¸¦ ¸ÔÁö ¾Êµµ·Ï Viewport¿¡ Æ÷Ä¿½º ÀÌµ¿
+	//Shop ë²„íŠ¼ì´ í¬ì»¤ìŠ¤ë¥¼ ë¨¹ì§€ ì•Šë„ë¡ Viewportì— í¬ì»¤ìŠ¤ ì´ë™
 	UWidgetBlueprintLibrary::SetFocusToGameViewport();
 }
 
@@ -339,7 +339,7 @@ void AMatch_PlayerController::CloseShop()
 	UWidgetBlueprintLibrary::SetFocusToGameViewport();
 }
 
-/*--------------RPC ¸ğÀ½ -------------------*/
+/*--------------RPC ëª¨ìŒ -------------------*/
 void AMatch_PlayerController::Server_SubmitMatchData_Implementation(const FString& nickname, int32 portraitId)
 {
 	APlayer_State* Player_State = GetPlayerState<APlayer_State>();
@@ -356,13 +356,13 @@ void AMatch_PlayerController::Server_ReportMatchLoaded_Implementation()
 
 	Player_State->SetMatchLevelLoaded(true);
 
-	//¸ÅÄ¡ ½ÃÀÛ ½Ã µô·¹ÀÌ ¼³Á¤
+	//ë§¤ì¹˜ ì‹œì‘ ì‹œ ë”œë ˆì´ ì„¤ì •
 	if (APlayMode_Match* MatchMode = GetWorld()->GetAuthGameMode<APlayMode_Match>()) {
 		MatchMode->CheckAllPlayersLoadedAndStartDelay();
 	}
 }
 
-//¼­¹ö¿¡ ¼öµ¿ ¸®½ºÆù ¿äÃ»
+//ì„œë²„ì— ìˆ˜ë™ ë¦¬ìŠ¤í° ìš”ì²­
 void AMatch_PlayerController::Server_RequestRespawn_Implementation()
 {
 	APlayMode_Match* Match = GetWorld()->GetAuthGameMode<APlayMode_Match>();
@@ -371,7 +371,7 @@ void AMatch_PlayerController::Server_RequestRespawn_Implementation()
 	}
 }
 
-//¼­¹ö¿¡ ±¸¸Å ¿äÃ» Server RPC
+//ì„œë²„ì— êµ¬ë§¤ ìš”ì²­ Server RPC
 void AMatch_PlayerController::Server_Purchase_Implementation(EShopBoxs Box)
 {
 	APlayMode_Match* MatchMode = GetWorld() ? GetWorld()->GetAuthGameMode<APlayMode_Match>() : nullptr;
@@ -384,7 +384,7 @@ void AMatch_PlayerController::Server_Purchase_Implementation(EShopBoxs Box)
 	Client_ShopPurchaseResult(bSuccess);
 }
 
-//°üÀü ½ÃÀÛ Client RPC
+//ê´€ì „ ì‹œì‘ Client RPC
 void AMatch_PlayerController::Client_StartSpectating_Implementation(AActor* SpectatorTarget)
 {
 	if (!IsLocalController()) return;
@@ -397,19 +397,19 @@ void AMatch_PlayerController::Client_StartSpectating_Implementation(AActor* Spec
 
 	SetOutWidget();
 }
-//UI ÀÔ·Â ¸ğµå Client RPC
+//UI ì…ë ¥ ëª¨ë“œ Client RPC
 void AMatch_PlayerController::Client_ApplyUIInputMode_Implementation()
 {
 	ApplyUIInputMode();
 }
 
-//Game ÀÔ·Â ¸ğµå Client RPC
+//Game ì…ë ¥ ëª¨ë“œ Client RPC
 void AMatch_PlayerController::Client_ApplyGameInputMode_Implementation()
 {
 	ApplyGameInputMode();
 }
 
-//ÇöÀç ¸®½ºÆù µ¥ÀÌÅÍ¸¦ ¼¼ÆÃ Client RPC
+//í˜„ì¬ ë¦¬ìŠ¤í° ë°ì´í„°ë¥¼ ì„¸íŒ… Client RPC
 void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaiting, bool bCanRespawn)
 {
 	bWaitingRespawn = bWaiting;
@@ -482,7 +482,7 @@ void AMatch_PlayerController::Client_StartSpectatingDefaultCamera_Implementation
 		SetOutWidget();
 		return;
 	}
-	//¾øÀ¸¸é Å«ÀÏ
+	//ì—†ìœ¼ë©´ í°ì¼
 	UE_LOG(LogTemp, Error, TEXT("[Spectate][Client] No Default Camera found in local world"));
 }
 
@@ -508,6 +508,19 @@ void AMatch_PlayerController::Client_UpdateCountDown_Implementation(int32 number
 		ScreenWidget->SetUIState(EPlayerUIState::Countdown);
 		ScreenWidget->SetCountdown(number);
 	}
+
+	// [ì‚¬ìš´ë“œ] ì¹´ìš´íŠ¸ë‹¤ìš´ íš¨ê³¼ìŒ
+	if (number == 6 && CountdownSound) {
+		UGameplayStatics::PlaySound2D(this, CountdownSound);
+		if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+			GI->AdjustBgmVolume(0.5f, 0.1f);	//0.5ì´ˆë§Œì— 50í”„ë¡œë¡œ ì†Œë¦¬í¬ê¸° ì¤„ì„
+		}
+	}
+	if (number == 1) {
+		if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+			GI->AdjustBgmVolume(0.5f, 1.0f);	//1ì´ˆë§Œì— 100í”„ë¡œë¡œ ì†Œë¦¬í¬ê¸° ëŒë ¤ë†“ìŒ
+		}
+	}
 }
 
 void AMatch_PlayerController::Client_StartPlayingUI_Implementation()
@@ -529,17 +542,17 @@ void AMatch_PlayerController::Client_EndMatch_Implementation()
 	EndMatch();
 }
 
-//±¸¸Å ¼º°ø ¾Ë¸² Client RPC
+//êµ¬ë§¤ ì„±ê³µ ì•Œë¦¼ Client RPC
 void AMatch_PlayerController::Client_ShopPurchaseResult_Implementation(bool bSuccess)
 {
 	if (!IsLocalController()) return;
 	if (!bSuccess) return;
 	
-	//±¸¸Å ¿Ï·á »óÅÂ·Î º¯°æ
+	//êµ¬ë§¤ ì™„ë£Œ ìƒíƒœë¡œ ë³€ê²½
 	bAlreadyPurchasedInShop = true;
-	//»óÁ¡ ´İ±â
+	//ìƒì  ë‹«ê¸°
 	CloseShop();
-	//»óÁ¡ ¹öÆ° ¼û±èÃ³¸®
+	//ìƒì  ë²„íŠ¼ ìˆ¨ê¹€ì²˜ë¦¬
 	UpdateShopButtonVisibility();
 }
 
