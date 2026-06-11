@@ -66,6 +66,7 @@ void UAllPlayMode_GameInstance::StopBgm()
 	GetWorld()->GetTimerManager().ClearTimer(BgmTransitionTimer);
 }
 
+// bgm 재생시간 return
 float UAllPlayMode_GameInstance::GetCurrnetBgmDuration() const
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->GetSound()) {
@@ -74,10 +75,19 @@ float UAllPlayMode_GameInstance::GetCurrnetBgmDuration() const
 	return 0.0f;
 }
 
+// bgm 볼륨 조절
 void UAllPlayMode_GameInstance::AdjustBgmVolume(float FadeTime, float TargetVolum)
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->IsPlaying()) {
 		CurrentBgmComponent->AdjustVolume(FadeTime, TargetVolum);
+	}
+}
+
+// bgm 재생 속도
+void UAllPlayMode_GameInstance::SetBgmPitch(float NewPitch)
+{
+	if (CurrentBgmComponent && CurrentBgmComponent->IsPlaying()) {
+		CurrentBgmComponent->SetPitchMultiplier(NewPitch);
 	}
 }
 

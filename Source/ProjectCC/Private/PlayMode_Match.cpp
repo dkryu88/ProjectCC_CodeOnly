@@ -198,6 +198,9 @@ void APlayMode_Match::EndMatchLogic()
 				player->AddInputBlockController(FName("MatchEnd"), true, true, true, false);
 			}
 			PC->Client_ApplyUIInputMode();
+
+			// [사운드] 매치 종료 시 bgm fadeout
+			PC->Client_FadeOutBgm();
 		}
 	}
 

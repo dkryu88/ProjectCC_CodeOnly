@@ -550,6 +550,8 @@ bool APlayer_Character::IsCurrentWeaponHoldLikeAttack()
 	return Stat->AttackInputType == EWeaponAttackInputType::Continuous || Stat->AttackInputType == EWeaponAttackInputType::Repeat;
 }
 
+
+
 //카메라 회전 설정
 void APlayer_Character::CamTurn(const struct FInputActionValue& inputValue) {
 
@@ -823,17 +825,43 @@ void APlayer_Character::Player_Jump(const struct FInputActionValue& inputValue) 
 	UWorld* World = GetWorld();
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	if (!Movement) return;
+
+	if (Movement->IsFalling()) return;	// [추가] 점프키 중복입력 방지
+
 	float CurrentTime = World->GetTimeSeconds();
 	//쿨타임이 남았다면 종료
 	if (CurrentTime - LastJumpTime < JumpCoolTime) return;
 	LastJumpTime = CurrentTime;
 	Jump();
 
+	// [사운드]
+	if (JumpSound) {
+		UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
+	}
+	if (!HasAuthority()) {
+		Server_PlayJumpSound();
+	}
+	else {
+		Multicast_PlayJumpSound();
+	}
+
 	//점프 시 변경되는 Condition 상태 제어
 	if (HasAuthority()) {
 		NotifyConditionEvent(EPlayerConditionEvent::Jump, true);
 	}
 }
+
+void APlayer_Character::Server_PlayJumpSound_Implementation(){
+	Multicast_PlayJumpSound();
+}
+
+void APlayer_Character::Multicast_PlayJumpSound_Implementation(){
+	if (IsLocallyControlled())return;
+	if (JumpSound) {
+		UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
+	}
+}
+
 
 
 bool APlayer_Character::BuildCurrentAttackPreviewData(FAimPreviewVisualData& OutData)

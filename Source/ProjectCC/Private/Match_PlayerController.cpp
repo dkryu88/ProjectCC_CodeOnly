@@ -21,6 +21,7 @@
 #include "Engine/World.h"
 #include "Camera/CameraActor.h"
 #include "TimerManager.h"
+#include "Components/AudioComponent.h"	// [사운드] 경고음
 
 void AMatch_PlayerController::BeginPlay() {
 	Super::BeginPlay();
@@ -561,6 +562,17 @@ void AMatch_PlayerController::Client_UpdateMatchEventCountdown_Implementation(FN
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventCountdown(EventName, SecondsUntilEvent);
 	}
+
+	// [사운드] 5초 이하로 남았을 때 경고음 실행
+	if (SecondsUntilEvent <= 5 && SecondsUntilEvent > 0) {
+		if (EventWarningSound) {
+			// 경고음 컴포넌트가 없거나 재생중이 아닐때, 1번만 실행하도록 함
+			if (!WarningAudioComponent || !WarningAudioComponent->IsPlaying()) {
+				// PlaySound2D 대신 SpawnSound2D를 사용하여, UAudioComponent를 반환
+				WarningAudioComponent = UGameplayStatics::SpawnSound2D(this, EventWarningSound);
+			}
+		}
+	}
 }
 
 void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName EventName, int32 RemainSeconds)
@@ -568,10 +580,34 @@ void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName E
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventActive(EventName, RemainSeconds);
 	}
+
+	// [사운드] 이벤트가 시작되면 bgm 재생속도 증가
+	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GI->SetBgmPitch(1.5f);
+	}
+
+	// [사운드] 경고음 WarningAudioComponent 종료
+	if (WarningAudioComponent && WarningAudioComponent->IsPlaying()) {
+		WarningAudioComponent->Stop();
+		WarningAudioComponent = nullptr;
+	}
 }
 
 void AMatch_PlayerController::Client_HideMatchEventUI_Implementation() {
 	if (ScreenWidget) {
 		ScreenWidget->HideMatchEventUI();
+	}
+
+	// [사운드] 이벤트가 끝나면 bgm 재생속도 원복
+	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GI->SetBgmPitch(1.0f);
+	}
+}
+
+// [사운드] 매치 종료 시 bgm 종료 함수
+void AMatch_PlayerController::Client_FadeOutBgm_Implementation() {
+	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance()))	{
+		// BGM 볼륨을 '3초' 동안 '0(무음)'으로 감수
+		GI->AdjustBgmVolume(3.0f, 0.0f);
 	}
 }

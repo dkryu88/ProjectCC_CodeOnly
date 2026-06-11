@@ -8,7 +8,7 @@
 #include "Match_PlayerController.generated.h"
 
 /**
- * 각 플레이어가 사용하는 player controller 
+ * 각 플레이어가 사용하는 player controller
  */
 
 class UInputMappingContext;
@@ -21,7 +21,7 @@ UCLASS()
 class PROJECTCC_API AMatch_PlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
 public:
 	virtual void BeginPlay() override;
 	virtual void SetPawn(APawn* InPawn) override;
@@ -45,32 +45,32 @@ public:
 	UPlayer_ControllerWidget* GetPlayerScreenWidget() const { return ScreenWidget; }
 
 protected:
-	UPROPERTY(EditDefaultsOnly, Category="Input")
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> MatchInputMappingContext;
 	//플레이어 화면 UI Widget 클래스
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UPlayer_ControllerWidget> Player_ControllerWidget;
 	//플레이어 화면 UI Widget
 	UPROPERTY()
 	TObjectPtr<UPlayer_ControllerWidget> ScreenWidget;
 	//플레이어 스코어보드 UI Widget 클래스
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UMatch_ScoreBoardWidget> Match_ScoreBoardWidget;
 	//플레이어 스코어보드 UI WIdget
 	UPROPERTY()
 	TObjectPtr<UMatch_ScoreBoardWidget> ScoreWidget;
 	//플레이어 상점 UI Widget 클래스
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UMatch_ShopWidget> Match_ShopWidget;
 	//플레이어 상점 UI Widget
 	UPROPERTY()
 	TObjectPtr<UMatch_ShopWidget> ShopWidget;
-	
+
 	//현재 관전중은 플레이어
 	UPROPERTY()
 	TObjectPtr<AActor> CurrentSpectatingTarget = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, Category="Match")
+	UPROPERTY(EditDefaultsOnly, Category = "Match")
 	float SetupRetryInterval = 0.1f;
 
 	UPROPERTY()
@@ -116,11 +116,23 @@ protected:
 	UFUNCTION()
 	void CloseShop();
 
-	// [사운드]카운트다운 효과음
+	// [사운드] =================================================
+	// [사운드] 카운트다운 효과음
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<class USoundBase> CountdownSound;
 
-	
+	// [사운드] 이벤트 시작 전 경고음
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<class USoundBase> EventWarningSound;
+
+	// [사운드] 경고음 재생정지를 조종할 컴포넌트
+	UPROPERTY()
+	TObjectPtr<class UAudioComponent> WarningAudioComponent;
+public:
+	// [사운드] 매치 종료시 bgm 정지 함수
+	UFUNCTION(Client,Reliable)
+	void Client_FadeOutBgm();
+
 public:
 	//서버에 Player_State 데이터를 전송
 	UFUNCTION(Server, Reliable)

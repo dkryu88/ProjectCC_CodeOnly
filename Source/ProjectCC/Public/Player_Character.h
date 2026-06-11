@@ -751,4 +751,18 @@ public:
 	FVector VisualMeshLocation = FVector::ZeroVector;
 	FVector DefaultCamLocation = FVector::ZeroVector;
 	FVector VisualCamLocation = FVector::ZeroVector;
+
+	// [사운드]=======================================================
+	// 점프 효과음 지정 변수
+	UPROPERTY(EditDefaultsOnly, Category="Sound")
+	TObjectPtr<USoundBase> JumpSound;
+
+	UFUNCTION(Server,Reliable)
+	void Server_PlayJumpSound();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayJumpSound();
+
+	//
+
 };

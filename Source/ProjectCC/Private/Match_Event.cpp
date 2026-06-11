@@ -32,9 +32,5 @@ void AMatch_Event::StopEvent_Implementation()
 	Destroy();
 }
 
-
 void AMatch_Event::ApplyEventToPlayer_Implementation(APlayer_Character* Player) {}
-
-
-
 

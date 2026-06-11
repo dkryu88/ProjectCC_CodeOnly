@@ -78,7 +78,7 @@ public:
 	UPROPERTY()
 	bool bPendingCreateLANSession = false;
 
-	// [사운드] BGM 재생 관련---------------------------
+	// [사운드] BGM 재생 관련 함수============================================================
 	// BGM 재생
 	UFUNCTION(BlueprintCallable, Category="Sound")
 	void PlayBgm(USoundBase* NewBgm);
@@ -94,6 +94,10 @@ public:
 	// 지정한 변화시간동안 볼륨 조절시킴(유지시간이 아니라 변화되는 시간, 타켓볼륨 : 20%로 줄이고 싶다면 0.2f 입력)
 	UFUNCTION(BlueprintCallable, Category="Sound")
 	void AdjustBgmVolume(float FadeTime, float TargetVolum);
+
+	// bgm 재생속도(pitch)를 변경
+	UFUNCTION(BlueprintCallable, Category = "Sound")
+	void SetBgmPitch(float NewPitch);
 
 
 protected:
@@ -113,7 +117,7 @@ protected:
 	UPROPERTY()
 	TArray<FMatchResultData> MatchResults;
 
-	// [사운드] 
+	// [사운드] =============================================================================
 	// 현재 재생중인 오디오 기억하고 제어하기 위한 컴포넌트 포인터
 	UPROPERTY(BlueprintReadOnly, Category = "Sound", meta = (AllowPrivateAccess = "true"))
 	class UAudioComponent* CurrentBgmComponent;
