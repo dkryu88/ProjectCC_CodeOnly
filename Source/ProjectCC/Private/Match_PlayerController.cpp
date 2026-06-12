@@ -514,7 +514,7 @@ void AMatch_PlayerController::Client_UpdateCountDown_Implementation(int32 number
 	if (number == 6 && CountdownSound) {
 		UGameplayStatics::PlaySound2D(this, CountdownSound);
 		if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-			GI->AdjustBgmVolume(0.5f, 0.1f);	//0.5초만에 50프로로 소리크기 줄임
+			GI->AdjustBgmVolume(0.5f, 0.5f);	//0.5초만에 50프로로 소리크기 줄임
 		}
 	}
 	if (number == 1) {

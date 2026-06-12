@@ -5,6 +5,7 @@
 #include "Player_Character.h"
 #include "MapConstructor.h"
 #include "Engine/OverlapResult.h"
+#include "Kismet/GameplayStatics.h"	// [사운드]
 
 AObjects_Bomb::AObjects_Bomb(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -46,6 +47,14 @@ void AObjects_Bomb::Explode()
 	}
 	if (!map) return;
 
+	// [사운드]
+	if (HasAuthority()) {
+		if (OwnPlayer) {
+			SetOwner(OwnPlayer);
+		}
+		Multicast_PlayBombExplosionSound(this->GetActorLocation());
+	}
+
 	bExploded = true;
 
 	FVector ExplosionOrigin = GetActorLocation();
@@ -78,7 +87,19 @@ void AObjects_Bomb::Explode()
 		}
 	}
 
-	Destroy();
+	//Destroy();
+	// 네트워크 패킷 배달을 위한 0.5초 수명 연장
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	SetActorTickEnabled(false);
+	SetLifeSpan(0.5f);
 
 }
 
+// [사운드] 
+void AObjects_Bomb::Multicast_PlayBombExplosionSound_Implementation(FVector PlayLocation)
+{
+	if (BombExplosionSound) {						
+		UGameplayStatics::PlaySoundAtLocation(this, BombExplosionSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
+	}
+}

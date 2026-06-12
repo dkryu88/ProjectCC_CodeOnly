@@ -192,6 +192,11 @@ void APlayer_Character::PossessedBy(AController* NewController)
 void APlayer_Character::PawnClientRestart() {
 	Super::PawnClientRestart();
 	InitPlayerWidget();
+
+	// [사운드] 카메라에 붙어있던 귀(이어폰)를 플레이어 위치로 옮김(사운드 보간의 거리를 알맞게 설정하기 위한 기준)
+	if (APlayerController* PC = Cast<APlayerController>(GetController())) {
+		PC->SetAudioListenerOverride(GetCapsuleComponent(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
 }
 
 void APlayer_Character::OnRep_MoveSpeed()
@@ -549,8 +554,6 @@ bool APlayer_Character::IsCurrentWeaponHoldLikeAttack()
 
 	return Stat->AttackInputType == EWeaponAttackInputType::Continuous || Stat->AttackInputType == EWeaponAttackInputType::Repeat;
 }
-
-
 
 //카메라 회전 설정
 void APlayer_Character::CamTurn(const struct FInputActionValue& inputValue) {
@@ -3992,6 +3995,12 @@ void APlayer_Character::Client_Out_Implementation()
 			springArmComp->CameraLagSpeed = 3.f;
 			springArmComp->CameraLagMaxDistance = 100.f;
 		}
+
+		// [사운드] 사망시
+		// 캐릭터에 붙였던 귀(이어폰)를 다시 카메라로 원복
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) {
+			PC->ClearAudioListenerOverride();
+		}
 	}
 }
 
@@ -4021,6 +4030,28 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 		AdditionalImageWidget = nullptr;
 	}
 }
+
+// [사운드]====================================================================
+// [사운드] 아이템 사용시 효과음 재생
+void APlayer_Character::Multicast_PlayItemUseSound_Implementation(USoundBase* ItemUseSound)
+{
+	UE_LOG(LogTemp, Error, TEXT("Function : play"));
+	if (ItemUseSound) {
+		// 아이템 사용 사운드는 본인 몸에서 나오도록 붙임
+		UGameplayStatics::SpawnSoundAttached(ItemUseSound, GetMesh(), NAME_None, FVector::ZeroVector, EAttachLocation::SnapToTarget, false, 1.f, 1.f, 0.f, nullptr);
+		UE_LOG(LogTemp, Error, TEXT("Function : play Sound"));
+	}
+}
+
+// [사운드] 오브젝트 폭발음 등 재생시(오브젝트가 파괴될 때 사운드)
+void APlayer_Character::Multicast_PlyaObjectSound_Implementation(USoundBase* ObjectDestroySound, FVector PlayLocation)
+{
+	if (ObjectDestroySound) {
+		UGameplayStatics::PlaySoundAtLocation(this, ObjectDestroySound, PlayLocation, 1.f, 1.f, 0.f, nullptr);
+	}
+}
+
+
 
 /*체크해보기*/
 //FMath::Max(A, B) -> A와 B 중 큰 쪽을 반환하는 함수

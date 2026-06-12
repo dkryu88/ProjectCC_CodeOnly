@@ -82,6 +82,14 @@ public:
 	virtual void ApplyWorldState() override;
 	//아이템 물리 Collider 사이즈 설정
 	void SetSizeofItemColliderwithMesh();
+
+	// [사운드]=============================
+	// 아이템 픽업 사운드 : 생성자에서 위치주소로 찾게해서 모든 자식 아이템들에서 공통으로 사용 가능
+	UPROPERTY(VisibleAnywhere, Category="Sound")
+	TObjectPtr<class USoundBase> ItemPickupSound;
+	// 아이템 사용 사운드 : 자식 클래스의 블루프린트에서 참조하여 사용하게 함(부모클래스에서 1번만 선언해 모든 자식클래스에서 사용)
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<class USoundBase> ItemUseSound;
 };
 
 //효과 구현은 Equipment에 있는 효과 함수를 Override 하여 사용

@@ -19,7 +19,7 @@ FString UAllPlayMode_GameInstance::GetPlayerLocalNickname()
 	return LocalPlayerNickName;
 }
 
-// bgm 재생
+// [사운드]bgm 재생
 void UAllPlayMode_GameInstance::PlayBgm(USoundBase* NewBgm)
 {
 	if (!NewBgm) return;
@@ -42,7 +42,7 @@ void UAllPlayMode_GameInstance::PlayBgm(USoundBase* NewBgm)
 	}
 }
 
-// PlayBgm함수에서 예약된 다음 노래 재생
+// [사운드]PlayBgm함수에서 예약된 다음 노래 재생
 void UAllPlayMode_GameInstance::PlayNextBgm()
 {
 	if (!NextBgm) return;
@@ -57,7 +57,7 @@ void UAllPlayMode_GameInstance::PlayNextBgm()
 	NextBgm = nullptr;
 }
 
-// bgm 정지
+// [사운드]bgm 정지
 void UAllPlayMode_GameInstance::StopBgm()
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->IsPlaying()) {
@@ -66,7 +66,7 @@ void UAllPlayMode_GameInstance::StopBgm()
 	GetWorld()->GetTimerManager().ClearTimer(BgmTransitionTimer);
 }
 
-// bgm 재생시간 return
+// [사운드]bgm 재생시간 return
 float UAllPlayMode_GameInstance::GetCurrnetBgmDuration() const
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->GetSound()) {
@@ -75,7 +75,7 @@ float UAllPlayMode_GameInstance::GetCurrnetBgmDuration() const
 	return 0.0f;
 }
 
-// bgm 볼륨 조절
+// [사운드]bgm 볼륨 조절
 void UAllPlayMode_GameInstance::AdjustBgmVolume(float FadeTime, float TargetVolum)
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->IsPlaying()) {
@@ -83,7 +83,7 @@ void UAllPlayMode_GameInstance::AdjustBgmVolume(float FadeTime, float TargetVolu
 	}
 }
 
-// bgm 재생 속도
+// [사운드]bgm 재생 속도
 void UAllPlayMode_GameInstance::SetBgmPitch(float NewPitch)
 {
 	if (CurrentBgmComponent && CurrentBgmComponent->IsPlaying()) {

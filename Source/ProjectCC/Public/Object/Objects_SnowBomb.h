@@ -29,6 +29,14 @@ public:
 	virtual void Func_BecomeNormalType_Implementation(const FHitResult& Hit) override;
 	virtual void Func_Destroy_Implementation() override;
 
+	// [사운드]===========================================
+	UPROPERTY(EditDefaultsOnly, Category="Sound")
+	TObjectPtr<class USoundBase> FreezeSound;
+
+	// 사운드 재생 멀티캐스트
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayFreezeSound(FVector PlayLocation);
+
 private:
 	//폭발 딜레이 타이머
 	FTimerHandle ExplodeTimerHandle;

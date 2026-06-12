@@ -8,6 +8,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
+#include "Kismet/GameplayStatics.h"	// [사운드]
 
 AItem::AItem() {
 	bReplicates = true;
@@ -22,6 +23,12 @@ AItem::AItem() {
 	MeshPivot->SetupAttachment(ItemCollider);
 	PickupCollider->SetupAttachment(ItemCollider);
 	Mesh->SetupAttachment(MeshPivot);
+
+	// [사운드] 아이템 픽업 공통 사운드
+	static ConstructorHelpers::FObjectFinder<USoundBase> SoundAsset(TEXT("/Script/Engine.SoundCue'/Game/Resources/Sound/Item/PickupSound/Itme_Pickup_Cue.Itme_Pickup_Cue'"));
+	if (SoundAsset.Succeeded()) {
+		ItemPickupSound = SoundAsset.Object;
+	}
 }
 
 void AItem::OnConstruction(const FTransform& Transform) {
@@ -185,6 +192,14 @@ void AItem::ApplyEquipState()
 		UE_LOG(LogTemp, Error, TEXT("No Detected EquippedPlayer"));
 		return; 
 	}
+
+	// [사운드] 아이템 습득시
+	if (EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
+		if (ItemPickupSound) {
+			UGameplayStatics::PlaySound2D(this, ItemPickupSound);
+		}
+	}
+
 	//아이템을 슬롯에 장착
 	AttachToComponent(EquippedPlayer->ItemSlot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 }

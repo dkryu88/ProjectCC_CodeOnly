@@ -8,6 +8,7 @@
 #include "Match_PlayerController.h"
 #include "Player_Character.h"
 #include "Engine/OverlapResult.h"
+#include "Kismet/GameplayStatics.h"	// [사운드]
 
 AObjects_Mine::AObjects_Mine(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(TEXT("PhysicsCollider"))){
 	SizeMagnification = SizeMagnification * 1.25;
@@ -75,10 +76,21 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 				if (Victim) {
 					APlayer_Character* Attacker = IsValid(OwnPlayer) ? OwnPlayer : nullptr;
 					Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, true, false);
+
+					// [사운드]
+					Multicast_PlayMineExplosionSound(Victim->GetActorLocation());
 				}
 			}
 		}
 
 		Destroy();
+	}
+}
+
+// [사운드] 멀티캐스트 재생
+void AObjects_Mine::Multicast_PlayMineExplosionSound_Implementation(FVector PlayLocation)
+{
+	if (MineExplosionSound) {
+		UGameplayStatics::PlaySoundAtLocation(this, MineExplosionSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
 	}
 }

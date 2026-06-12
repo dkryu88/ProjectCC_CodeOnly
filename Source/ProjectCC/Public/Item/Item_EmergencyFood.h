@@ -22,11 +22,11 @@ public:
 	virtual bool UseEffect_Implementation(APlayer_Character* Player) override;
 	
 	// [사운드]=========================================
-	UPROPERTY(EditDefaultsOnly, Category = "Sound")
-	TObjectPtr<class USoundBase> EatSound;
+	//UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	//TObjectPtr<class USoundBase> EatSound;
 
-	// [사운드] 멀티캐스트 재생 함수
-	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayEatSound(FVector SpawnLocation);
+	//// [사운드] 멀티캐스트 재생 함수
+	//UFUNCTION(NetMulticast, Unreliable)
+	//void Multicast_PlayEatSound(FVector SpawnLocation);
 
 };
