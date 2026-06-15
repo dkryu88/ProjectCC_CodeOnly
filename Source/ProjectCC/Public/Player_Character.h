@@ -763,13 +763,21 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayJumpSound();
 
+	// 코인 습득 사운드
+	UPROPERTY(EditDefaultsOnly, Category="Sound")
+	TObjectPtr<class USoundBase> CoinPickupSound;
+
+	// 나 혼자 듣는 소리 재생(코인 등)
+	UFUNCTION(Client,Unreliable)
+	void Client_PlaySound2D(class USoundBase* SoundToPlay);
+
 	// 아이템 사용 사운드 재생함수 (아이템의 마지막사용횟수에 사운드가 재생되지 않는 문제를 아이템이 아닌 플레이어가 재생하게 만들어 문제 해결)
 	UFUNCTION(NetMulticast,Unreliable)
-	void Multicast_PlayItemUseSound(class USoundBase* ItemUseSound);
+	void Multicast_PlaySoundAttached(class USoundBase* SoundToPlay);
 
 	// Bulltet 등의 오브젝트가 파괴될 때(폭탄 등이 월드에서 폭발해 폭발음을 내며 사라질 때) 재생 함수 
 	// 자식 오브젝트에서 소리 재생시 클라이언트에서 소리가 나지 않는 버그 해결 위함 (Destroy되면 클라이언트에서 패킷 연결이 안되어 소리가 안나오기때문에) 
 	UFUNCTION(NetMulticast,Unreliable)
-	void Multicast_PlyaObjectSound(class USoundBase* ObjectDestroySound, FVector PlayLocation);
+	void Multicast_PlaySoundAtLocation(class USoundBase* ObjectDestroySound, FVector PlayLocation);
 
 };

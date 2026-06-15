@@ -42,6 +42,12 @@ bool AItem_EmergencyEscape::UseEffect_Implementation(APlayer_Character* Player)
 		Player->SetActorLocation(TargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
 		TargetPlayer->SetActorLocation(SafeDestinationForTarget, false, nullptr, ETeleportType::TeleportPhysics);
 
+		// [»ç¿îµå]
+		if (ItemUseSound) {
+			Player->Multicast_PlaySoundAttached(ItemUseSound);
+			TargetPlayer->Multicast_PlaySoundAttached(ItemUseSound);
+		}
+
 		Player->AddInputBlockController(FName("EmergencyEscape"), true, false, true, false);
 		TargetPlayer->AddInputBlockController(FName("EmergencyEscape"), true, false, true, false);
 

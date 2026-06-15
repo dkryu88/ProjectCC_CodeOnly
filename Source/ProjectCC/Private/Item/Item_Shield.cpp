@@ -23,6 +23,12 @@ bool AItem_Shield::UseEffect_Implementation(APlayer_Character* Player) {
 			NewShield->OwnPlayer = Player;
 			NewShield->EquipSupport(Player);
 			Player->NowSupport = NewShield;
+
+			// [»ç¿îµå]
+			if (Player->HasAuthority()) {
+				Player->Multicast_PlaySoundAttached(ItemUseSound);
+			}
+
 			return true;
 		}
 		else {

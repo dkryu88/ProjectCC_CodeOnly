@@ -4032,22 +4032,31 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 }
 
 // [사운드]====================================================================
-// [사운드] 아이템 사용시 효과음 재생
-void APlayer_Character::Multicast_PlayItemUseSound_Implementation(USoundBase* ItemUseSound)
+// [사운드] Type1 : 내 몸에서 재생되는 사운드(3D)
+// 적용하는 곳 : [아이템] 사용시 효과음 재생	// 사운드는 각 아이템의 블루프린트에서 참조설정(Item.h에서 선언됨)
+void APlayer_Character::Multicast_PlaySoundAttached_Implementation(USoundBase* SoundToPlay)
 {
-	UE_LOG(LogTemp, Error, TEXT("Function : play"));
-	if (ItemUseSound) {
+	if (SoundToPlay) {
 		// 아이템 사용 사운드는 본인 몸에서 나오도록 붙임
-		UGameplayStatics::SpawnSoundAttached(ItemUseSound, GetMesh(), NAME_None, FVector::ZeroVector, EAttachLocation::SnapToTarget, false, 1.f, 1.f, 0.f, nullptr);
-		UE_LOG(LogTemp, Error, TEXT("Function : play Sound"));
+		UGameplayStatics::SpawnSoundAttached(SoundToPlay, GetMesh(), NAME_None, FVector::ZeroVector, EAttachLocation::SnapToTarget, false, 1.f, 1.f, 0.f, nullptr);
 	}
 }
 
-// [사운드] 오브젝트 폭발음 등 재생시(오브젝트가 파괴될 때 사운드)
-void APlayer_Character::Multicast_PlyaObjectSound_Implementation(USoundBase* ObjectDestroySound, FVector PlayLocation)
+// [사운드] Type2 : 특정 위치에서 재생되는 사운드(3D)
+// 적용하는 곳 : [오브젝트] 폭발음 등 재생시(오브젝트가 파괴될 때 사운드)
+void APlayer_Character::Multicast_PlaySoundAtLocation_Implementation(USoundBase* ObjectDestroySound, FVector PlayLocation)
 {
 	if (ObjectDestroySound) {
 		UGameplayStatics::PlaySoundAtLocation(this, ObjectDestroySound, PlayLocation, 1.f, 1.f, 0.f, nullptr);
+	}
+}
+
+// [사운드] Type3 : 나 혼자 듣는 사운드(2D)
+// 적용하는 곳 : [코인] 습득 사운드 재생 함수(클라이언트:본인만 들림)
+void APlayer_Character::Client_PlaySound2D_Implementation(USoundBase* SoundToPlay)
+{
+	if (SoundToPlay && IsLocallyControlled()) {
+		UGameplayStatics::PlaySound2D(this, SoundToPlay);
 	}
 }
 

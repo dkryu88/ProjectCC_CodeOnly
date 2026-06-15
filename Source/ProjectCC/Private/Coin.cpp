@@ -333,6 +333,10 @@ void ACoin::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* O
 	if (PlayerState && Player != LastOwnerPlayer) {
 		bIsTaken = true;
 		PlayerState->AddCoin(CoinValue);
+
+		// [사운드] 코인 습득 사운드 재생
+		Player->Client_PlaySound2D(Player->CoinPickupSound);
+
 		if (APlayMode_Match* Match = GetWorld()->GetAuthGameMode<APlayMode_Match>()) {
 			Match->UpdatePlayersRank();
 		}

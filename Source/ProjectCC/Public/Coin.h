@@ -62,6 +62,11 @@ protected:
 	//로컬에 생성된 코인을 서버 코인 발사에 동기화
 	UFUNCTION(NetMulticast, Reliable)
 	void Mulitcast_StartCoinLaunch(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& TargetLocation);
+
+	//// [사운드] 코인 픽업 사운드
+	//UPROPERTY(EditDefaultsOnly, Category="Sound")
+	//TObjectPtr<class USoundBase> CoinPickupSound;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

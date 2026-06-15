@@ -7,12 +7,17 @@
 
 bool AItem_SpeedShoes::UseEffect_Implementation(APlayer_Character* Player)
 {
-    if (!HasAuthority() || !Player || !FastConditionData) return false;
+	if (!HasAuthority() || !Player || !FastConditionData) return false;
 
-    if (Player->ConditionComp) {
-        Player->ConditionComp->ApplyCondition(FastConditionData, Player, SpeedDuration);
-        return true;
-    }
+	if (Player->ConditionComp) {
+		Player->ConditionComp->ApplyCondition(FastConditionData, Player, SpeedDuration);
 
-    return false;
+		// [»ç¿îµå]
+		if (Player->HasAuthority()) {
+			Player->Multicast_PlaySoundAttached(ItemUseSound);
+		}
+		return true;
+	}
+
+	return false;
 }

@@ -38,4 +38,9 @@ protected:
 
 	void TeleportAllPlayers();
 	bool FindRandomLocation(FVector& OutLocation);
+
+	// [사운드] 텔레포트 효과음
+	UPROPERTY(EditDefaultsOnly, Category="Sound")
+	TObjectPtr<class USoundBase> TeleportSound;
+
 };

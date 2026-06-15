@@ -30,8 +30,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<class USoundBase> BombExplosionSound;
 
-	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayBombExplosionSound(FVector PlayLocation);
+	/*UFUNCTION(NetMulticast, Unreliable)	//플레이어로 사운드 재상함수 이관
+	void Multicast_PlayBombExplosionSound(FVector PlayLocation);*/
 
 private:
 	//폭발 딜레이 타이머

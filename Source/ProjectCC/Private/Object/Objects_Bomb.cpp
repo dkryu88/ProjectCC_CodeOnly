@@ -14,7 +14,7 @@ AObjects_Bomb::AObjects_Bomb(const FObjectInitializer& ObjectInitializer) : Supe
 void AObjects_Bomb::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	map = NowMap;
 
 	if (!map && OwnPlayer) {
@@ -51,8 +51,11 @@ void AObjects_Bomb::Explode()
 	if (HasAuthority()) {
 		if (OwnPlayer) {
 			SetOwner(OwnPlayer);
+
+			if (BombExplosionSound) {
+				OwnPlayer->Multicast_PlaySoundAtLocation(BombExplosionSound, GetActorLocation());
+			}
 		}
-		Multicast_PlayBombExplosionSound(this->GetActorLocation());
 	}
 
 	bExploded = true;
@@ -97,9 +100,9 @@ void AObjects_Bomb::Explode()
 }
 
 // [»ç¿îµå] 
-void AObjects_Bomb::Multicast_PlayBombExplosionSound_Implementation(FVector PlayLocation)
-{
-	if (BombExplosionSound) {						
-		UGameplayStatics::PlaySoundAtLocation(this, BombExplosionSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
-	}
-}
+//void AObjects_Bomb::Multicast_PlayBombExplosionSound_Implementation(FVector PlayLocation)
+//{
+//	if (BombExplosionSound) {						
+//		UGameplayStatics::PlaySoundAtLocation(this, BombExplosionSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
+//	}
+//}

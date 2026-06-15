@@ -55,6 +55,9 @@ void AMagnetCoin::Tick(float DeltaTime)
 		if (FVector::Dist(CurrentLocation, TargetLocation) < 60.f) {
 			if (HasAuthority() && TargetPlayer->GetThePlayerState()) {
 				TargetPlayer->GetThePlayerState()->AddCoin(MagnetCoinValue);
+
+				// [»ç¿îµå]
+				TargetPlayer->Client_PlaySound2D(TargetPlayer->CoinPickupSound);
 			}
 			Destroy();
 		}
