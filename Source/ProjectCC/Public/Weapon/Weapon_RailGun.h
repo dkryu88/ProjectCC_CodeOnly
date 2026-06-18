@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Weapon.h"
+#include "Animation/AnimSequence.h"
 #include "Weapon_RailGun.generated.h"
 
 /**
@@ -12,16 +13,24 @@
 
 class APlayer_Character;
 
+enum class ERailGunAnimState : uint8 {
+	None,
+	Charging,
+	Firing
+};
+
 UCLASS()
 class PROJECTCC_API AWeapon_RailGun : public AWeapon
 {
 	GENERATED_BODY()
 	
 public:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual bool BeforeAttackWeaponFunction() override;
 	virtual bool InteractionWeaponFunction(EFunctionInterActionReason Reason) override;
 	virtual void ReleaseAttackWeaponFunction() override;
 	virtual void AdditionalUnEquipWeaponFunction() override;
+	virtual bool BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualData& PreviewData) override;
 
 	void FireRailGunBeam(float Damage, float Radius, float GaugePercent);
 	float GetDamageByGauge(float Gauge, float MaxDamage);
@@ -33,7 +42,20 @@ public:
 	void ReleaseRailGunAttack();
 	void CancelRailGunAttack();
 
+	void InstantHideRailGunPreview(float Duration);
+
+	void PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32 LoopCount);
+	void StopRailGunAnimation();
 public:
+	//레일건 충전 애니메이션 
+	UPROPERTY(EditAnywhere, Category="RainGun | Animation")
+	TObjectPtr<UAnimSequence> RailGunChargeAnimation = nullptr;
+	//레일건 공격 중 애니메이션
+	UPROPERTY(EditAnywhere, Category = "RainGun | Animation")
+	TObjectPtr<UAnimSequence> RailGunAttackAnimation = nullptr;
+	//레일건 공격 완료 애니메이션
+	UPROPERTY(EditAnywhere, Category = "RainGun | Animation")
+	TObjectPtr<UAnimSequence> RailGunCompleteAnimation = nullptr;
 	// 발사 가능 최소 게이지 — 이 값 미만에서 Release하면 발사 안 함
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
 	float MinGauge = 25.f;
@@ -53,15 +75,34 @@ public:
 
 	// 게이지 MinGauge일 때 빔 반경
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
-	float MinBeamRadius = 10.f;
+	float MinBeamRadius = 20.f;
 
 	// 게이지 75 이상에서 고정되는 최대 빔 반경
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
-	float MaxBeamRadius = 80.f;
+	float MaxBeamRadius = 50.f;
 	
 	//레일건의 현재 차징 중 여부
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing = OnRep_RailGunCharging)
 	bool bRailGunCharging = false;
+
+	UFUNCTION()
+	void OnRep_RailGunCharging();
+
+	// 현재 충전 게이지 (0~100)
+	UPROPERTY(Replicated)
+	float ChargeGauge = 0.f;
+
+	// 현재 프리뷰를 보여주고 있는지 여부
+	UPROPERTY(ReplicatedUsing = OnRep_NoShowingRailGunPreview)
+	bool bNoShowingRailGunPreview = false;
+
+	bool bLocalNoShowingRailGunPreview = false;
+
+	UFUNCTION()
+	void OnRep_NoShowingRailGunPreview();
+
+	//프리뷰 일시 숨김 타이머
+	FTimerHandle InstantHideRailGunPreviewTimerHandle;
 
 	// 이번 틱에 사용할 빔 반경
 	float PendingRadius = 0.f;
@@ -69,8 +110,8 @@ public:
 	// 이번 발사에 사용할 충전 데미지
 	float PendingDamage = 0.f;
 
-	// 현재 충전 게이지 (0~100)
-	float ChargeGauge = 0.f;
+	//레일건 발사 애니메이션 상태
+	ERailGunAnimState RailGunAnimState = ERailGunAnimState::None;
 
 	// 최근 충전 시간 (충전 간격을 맞추기 위함)
 	float LastChargeTime = -1.f;

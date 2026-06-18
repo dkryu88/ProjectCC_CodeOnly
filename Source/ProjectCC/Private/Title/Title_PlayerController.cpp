@@ -17,6 +17,9 @@
 #include "Components/Button.h"
 #include "GameFramework/InputSettings.h"
 #include "InputCoreTypes.h"
+//[사운드] 추가
+#include "Effect/AudioManagerSubsystem.h"
+#include "Effect/GameAudioDataAsset.h"
 
 
 ATitle_PlayerController::ATitle_PlayerController()
@@ -38,6 +41,15 @@ void ATitle_PlayerController::BeginPlay()
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->OnSessionStateChanged.AddDynamic(this, &ATitle_PlayerController::HandleSessionStateChanged);
 			HandleSessionStateChanged(SessionSubsystem->LastUIState, SessionSubsystem->LastUIMessage);
+		}
+	}
+
+	//[사운드]Title BGM 재생
+	if (IsLocalController()) {
+		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
+			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->TitleBGM) {
+				AudioSub->PlayBGM(AudioSub->GetAudioData()->TitleBGM, 0.5f);
+			}
 		}
 	}
 

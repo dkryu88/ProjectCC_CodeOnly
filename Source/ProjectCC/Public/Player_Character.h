@@ -22,7 +22,7 @@ class AAttackPreviewGuide;
 class UPlayerConditionComponent;
 class UPlayerTransformationComponent;
 class UPlayerVisualManagerComponent;
-class UEffectManagerComponent;
+class UGameEffectManagerComponent;
 class UPlayer_CharacterWidget;
 class UNiagaraSystem;
 class UNiagaraComponent;
@@ -94,6 +94,8 @@ public:
 	bool bIsDodging = false;
 	UPROPERTY(Replicated)
 	bool bIsAiming = false;
+	UPROPERTY(Replicated)
+	bool bIsAttacking = false;
 
 public:
 	//UI Delegate 바인드
@@ -103,10 +105,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UWidgetComponent> WidgetComponent;
 
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UPlayer_CharacterWidget> PlayerHeadWidget;
-	
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UPlayer_AdditionalWidget> AdditionalImageWidgetClass;
 
 	UPROPERTY(Transient)
@@ -233,7 +235,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Interaction")
 	TObjectPtr<UBoxComponent> PickupDetectRange;
 	//장착 무기
-	UPROPERTY(ReplicatedUsing = OnRep_NowWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_NowWeapon, BlueprintReadOnly)
 	TObjectPtr<AWeapon> NowWeapon;
 	//장착 무기 변경 시 서버/로컬 알림
 	UFUNCTION()
@@ -242,7 +244,7 @@ public:
 	UPROPERTY(Replicated)
 	TObjectPtr<AItem> NowItem;
 	//장착 물체
-	UPROPERTY(ReplicatedUsing = OnRep_NowObjects)
+	UPROPERTY(ReplicatedUsing = OnRep_NowObjects, BlueprintReadOnly)
 	TObjectPtr<AObjects> NowObjects;
 	//장착 물체 변경 시 서버/로컬 알림
 	UFUNCTION()
@@ -253,9 +255,6 @@ public:
 	//아이템 슬롯
 	UPROPERTY(EditAnywhere, Category = "EquipmentSlot")
 	TObjectPtr<USceneComponent> ItemSlot;
-	//물체 슬롯
-	UPROPERTY(EditAnywhere, Category = "EquipmentSlot")
-	TObjectPtr<USceneComponent> ObjectsSlot;
 	//서포트 슬롯
 	UPROPERTY(EditAnywhere, Category = "EquipmentSlot")
 	TObjectPtr<USceneComponent> SupportSlot;
@@ -337,15 +336,15 @@ public:
 	UPROPERTY(Replicated)
 	bool bIsHitted = false;
 	//플레이어 조준점--------------------------------------------------
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Aim|Cursor")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aim|Cursor")
 	TSubclassOf<UUserWidget> Player_AimPointWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> AimPoint;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Aim|Cursor")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aim|Cursor")
 	FVector2D AimPointWidgetSize = FVector2D(50.f, 50.f);
 	UPROPERTY(Transient)
 	TEnumAsByte<EMouseCursor::Type> SavedMouseCursor = EMouseCursor::Default;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Aim|Cursor")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aim|Cursor")
 	bool bHideSystemCursorWhileAiming = true;
 	UPROPERTY(Transient)
 	bool bShowMouseCursor = false;
@@ -438,7 +437,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
 	float OutAnimDuration = 2.f;
 	//일반 피격 몽타주 재생
-	UFUNCTION(NetMulticast,Unreliable)
+	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayHitReaction(float Damage, bool _bIsOut, bool bApplyRotation, FVector AttackDir, bool bBigHit = false);
 	//Recover 몽타주 재생
 	UFUNCTION(NetMulticast, Unreliable)
@@ -456,31 +455,31 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_StopMontage(UAnimMontage* Montage, float BlendOutTime);
 	//강한 피격 몽타주
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
 	TObjectPtr<UAnimMontage> BigHittedMontage;
 	//강한 피격으로 날아가는 중인지 여부
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
 	bool bHoldBigHittingPose = false;
 	//강한 피격 재생 여부
-	UPROPERTY(Replicated, BlueprintReadOnly, Category="BigHit")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BigHit")
 	bool bIsBigHitReaction = false;
 	//강한 피격 기준
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="BigHit")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BigHit")
 	float BigHitKnockBackRule = 2000.f;
 	//Recover 재생 기준 속도
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="BigHit")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BigHit")
 	float RecoverVelocityRule = 50.f;
 	//강한피격-Recover 전환 유지 시간
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="BigHit")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BigHit")
 	float BigHitRecoverStopHoldTime = 0.5f;
 	//BigHit 직후 LaunchCharacter가 적용되기 전 바로 Recover 방지 시간
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="BigHIt")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BigHIt")
 	float BigHitRecoverMinCheckDelay = 0.2f;
 	//Recover 몽타주
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
 	TObjectPtr<UAnimMontage> RecoverMontage;
 	//강한 피격 후 Recover 재생 여부
-	UPROPERTY(Replicated, BlueprintReadOnly, Category="BigHit")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BigHit")
 	bool bIsRecoverReaction = false;
 	//일반 피격 몽타주
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
@@ -495,7 +494,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
 	TObjectPtr<UAnimSequence> SecondNormalAttack;
 	//일반 공격 애니메이션 전환 가능 시간
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Animation")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Animation")
 	float ChangeNormalAttackAnimationTime = 1.f;
 	//현재 일반 공격 애니메이션 인덱스
 	UPROPERTY()
@@ -505,10 +504,10 @@ public:
 	float LastNormalAttackTime = -1.f;
 	//피격 시 캐릭터 방향 저장
 	UPROPERTY()
-	FRotator TargetHitRotation;	
+	FRotator TargetHitRotation;
 	//플레이어 이펙트--------------------
 	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
+	UGameEffectManagerComponent* EffectManagerComp;
 public:
 	//현재 매치에서 플레이 중인 맵
 	AMapConstructor* NowMap;
@@ -571,6 +570,8 @@ public:
 	//플레이어 조준
 	void Aim(const struct FInputActionValue& inputValue);
 	void AimStop(const struct FInputActionValue& inputValue);
+	//조준 상태 해제 (프리뷰/마우스 포인트 등을 조준 해제 상태로 설정) - AimStop 내의 기능
+	void CancelAimState();
 	void SetAimInternal(bool bAiming);
 	void TrySendtoServerAimPoint();
 	//가까운 Equipments 중 가장 가까운 것을 반환
@@ -603,7 +604,7 @@ public:
 	//플레이어 데미지 적용 전 처리
 	float TakeDamage(float damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 	//클라이언트가 데미지 적용
-	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack = true, bool bApplyRotation = true, bool bForceDamage = false);
+	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack = true, bool bApplyRotation = true, bool bForceDamage = false, float OverrideKnockBackStrength = -1.f);
 	//플레이어 넉백
 	void ApplyKnockBack(FVector& AttackDir, float Strength, float UpStrength);
 	//코인 손실--------------------------------------------------------------
@@ -633,6 +634,8 @@ public:
 	void PlayDamageAnimation(float Damage, bool bBigHit);
 	//플레이어 기본 무기/물체 공격 애니메이션 재생
 	void PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartTime);
+	//전신/상체 조준 애니메이션 전환/갱신
+	void UpdateAimAnimationSlot();
 	//재생할 애니메이션이 어떤것인지 확인
 	bool NeedToPlayAllBodyAnimation();
 	//각 장착물들에 대해 재생할 애니메이션 확인 및 재생
@@ -645,6 +648,8 @@ public:
 	UAnimSequenceBase* GetCurrentGripSequence();
 	//기본 공격 애니메이션 획득
 	UAnimSequence* GetNormalAttackSequence();
+	//각 행동별 애니메이션 Intercept 여부 확인 및 적용
+	bool ApplyAnimationIntercept(EFunctionInterActionReason InterceptorReason, EFunctionInterActionReason TargetReason, const FEquipmentActionAnimation& TargetAnimation, FName TargetSlotName, int32& InOutStartFrame);
 	//강한 피격 애니메이션 시작
 	void StartBigHitReaction();
 	//강한 피격 애니메이션 갱신 -> Reaction 애니메이션 시작 검사
@@ -653,14 +658,20 @@ public:
 	void StartRecoverReaction();
 	//Recover 및 강한 피격 애니메이션 종료
 	void EndBigHitReaction();
+	//현재 재생중인 애니메이션 획득
+	bool GetCurrentEquipmentActionAnimation(EFunctionInterActionReason Reason, FEquipmentActionAnimation& Animation);
 	//강한 피격 시작 시간
 	float BigHitStartTime = 0.f;
 	//강한 피격 종료 시간
 	float BigHitStopTime = 0.f;
+	//전신 조준 애니메이션 사용 여부
+	bool bUsingFullBodyAimAnimation = false;
 	//강한 피격 후 Recover 시작 타이머
 	FTimerHandle BigHitRecoverTimerHandle;
 	//공격 애니메이션 완료 후 조준 중이면 조준 애니메이션 재생 타이머
 	FTimerHandle ResumeAimAnimationTimerHandle;
+	//공격 상태 종료 타이머 (애니메이션 기준)
+	FTimerHandle EndAttackStateTimerHandle;
 public:
 	//현재 플레이어의 Player_State
 	TObjectPtr<APlayer_State> NowPlayer_State;
@@ -706,7 +717,7 @@ public:
 	//속도 조정자 제거
 	void RemoveSpeedControllerByName(FName ControllerName);
 	void RemoveSpeedControllerByPriority(int32 Priority);
- 	//플레이어의 현재 상태 데이터를 서버에서 획득
+	//플레이어의 현재 상태 데이터를 서버에서 획득
 	APlayer_State* GetThePlayerState();
 	//플레이어의 현재 상태 데이터를 반영
 	virtual void OnRep_PlayerState() override;
@@ -751,33 +762,4 @@ public:
 	FVector VisualMeshLocation = FVector::ZeroVector;
 	FVector DefaultCamLocation = FVector::ZeroVector;
 	FVector VisualCamLocation = FVector::ZeroVector;
-
-	// [사운드]=======================================================
-	// 점프 효과음 지정 변수
-	UPROPERTY(EditDefaultsOnly, Category="Sound")
-	TObjectPtr<USoundBase> JumpSound;
-
-	UFUNCTION(Server,Reliable)
-	void Server_PlayJumpSound();
-
-	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayJumpSound();
-
-	// 코인 습득 사운드
-	UPROPERTY(EditDefaultsOnly, Category="Sound")
-	TObjectPtr<class USoundBase> CoinPickupSound;
-
-	// 나 혼자 듣는 소리 재생(코인 등)
-	UFUNCTION(Client,Unreliable)
-	void Client_PlaySound2D(class USoundBase* SoundToPlay);
-
-	// 아이템 사용 사운드 재생함수 (아이템의 마지막사용횟수에 사운드가 재생되지 않는 문제를 아이템이 아닌 플레이어가 재생하게 만들어 문제 해결)
-	UFUNCTION(NetMulticast,Unreliable)
-	void Multicast_PlaySoundAttached(class USoundBase* SoundToPlay);
-
-	// Bulltet 등의 오브젝트가 파괴될 때(폭탄 등이 월드에서 폭발해 폭발음을 내며 사라질 때) 재생 함수 
-	// 자식 오브젝트에서 소리 재생시 클라이언트에서 소리가 나지 않는 버그 해결 위함 (Destroy되면 클라이언트에서 패킷 연결이 안되어 소리가 안나오기때문에) 
-	UFUNCTION(NetMulticast,Unreliable)
-	void Multicast_PlaySoundAtLocation(class USoundBase* ObjectDestroySound, FVector PlayLocation);
-
 };

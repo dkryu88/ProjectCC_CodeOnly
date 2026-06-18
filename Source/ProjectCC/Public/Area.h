@@ -7,8 +7,8 @@
 #include "Area.generated.h"
 
 class UBoxComponent;
-class UEffectManagerComponent;
 class AMapConstructor;
+class UNiagaraComponent;
 class APlayer_Character;
 
 UCLASS()
@@ -32,8 +32,9 @@ protected:
 	USceneComponent* MeshPivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Area")
 	TObjectPtr<UStaticMeshComponent> TestMesh;
-	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AreaEffect")
+	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AreaDetail")
 	float AreaDuration = 0.5f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AreaDetail")

@@ -4,7 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Effect/FGameEffectData.h"
 #include "ItemDataAsset.generated.h"
+
 
 UENUM(BlueprintType)
 enum class EItemGrade : uint8
@@ -45,4 +47,15 @@ public:
 	//æ∆¿Ã≈€ æ∆¿Ãƒ‹
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
 	TObjectPtr<UTexture2D> ItemIcon = nullptr;
+
+	//æ∆¿Ã≈€ ¿Ã∆Â∆Æ----------------------------------------------
+	//»πµÊ ¿Ã∆Â∆Æ
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ItemEffect")
+	FGameEffectData GetEffect;
+	//ªÁøÎ ¿Ã∆Â∆Æ
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ItemEffect")
+	FGameEffectData UseEffect;
+	//º“∏Í ¿Ã∆Â∆Æ
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ItemEffect")
+	FGameEffectData DestroyEffect;
 };

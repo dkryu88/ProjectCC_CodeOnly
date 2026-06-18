@@ -7,7 +7,6 @@
 #include "KillPlane.generated.h"
 
 class UBoxComponent;
-class UEffectManagerComponent;
 
 UCLASS()
 class PROJECTCC_API AKillPlane : public AActor
@@ -34,8 +33,6 @@ public:
 	UStaticMeshComponent* Mesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "KillPlane")
 	UBoxComponent* KillCollider;
-	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
 	//KillCollider 크기 배율
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
 	FVector SizeMagnification = FVector(1.f, 1.f, 1.f);

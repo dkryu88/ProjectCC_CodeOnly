@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Weapon.h"
@@ -22,14 +22,14 @@ AWeapon::AWeapon(const FObjectInitializer& ObjectInitializer) : Super(ObjectInit
 	bReplicates = true;
 	SetReplicateMovement(true);
 
-	//ë¬´ê¸° ë¬¼ë¦¬ collider ìƒì„±
+	//¹«±â ¹°¸® collider »ı¼º
 	WeaponCollider = CreateDefaultSubobject<UPrimitiveComponent, UBoxComponent>(TEXT("WeaponPhysicsCollider"));
 	WeaponCollider->SetNotifyRigidBodyCollision(true);
 	WeaponCollider->SetAllUseCCD(true);
 	WeaponCollider->OnComponentHit.AddDynamic(this, &AWeapon::OnWeaponHit);
 	PhysicsCollider = WeaponCollider;
 	SetRootComponent(WeaponCollider);
-	//Mesh Pivot ì„¤ì • í›„ MeshPivotê³¼ PickupColliderì„ ItemCollider í•˜ìœ„ë¡œ ë¶€ì°©
+	//Mesh Pivot ¼³Á¤ ÈÄ MeshPivot°ú PickupColliderÀ» ItemCollider ÇÏÀ§·Î ºÎÂø
 	MeshPivot = CreateDefaultSubobject<USceneComponent>(TEXT("MeshPivot"));
 	MeshPivot->SetupAttachment(WeaponCollider);
 	PickupCollider->SetupAttachment(WeaponCollider);
@@ -62,7 +62,7 @@ void AWeapon::OnConstruction(const FTransform& Transform) {
 
 void AWeapon::BeginPlay() {
 	Super::BeginPlay();
-	//WeaponColliderì˜ ë¬¼ë¦¬ ì„¤ì •
+	//WeaponColliderÀÇ ¹°¸® ¼³Á¤
 	if (WeaponCollider) {
 		SetPhysicsCollider(WeaponCollider);
 	}
@@ -84,7 +84,7 @@ void AWeapon::OnRep_NowUseCount()
 void AWeapon::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	//í•„ë“œì— ì¼ì • ì‹œê°„ ì´ìƒ ë°©ì¹˜ë˜ë©´ ì œê±°
+	//ÇÊµå¿¡ ÀÏÁ¤ ½Ã°£ ÀÌ»ó ¹æÄ¡µÇ¸é Á¦°Å
 	if (!bIsEquipped && HasAuthority()) {
 		CurrentTick += DeltaTime;
 		if (CurrentTick > TickInterval) {
@@ -102,11 +102,11 @@ void AWeapon::Tick(float DeltaTime)
 bool AWeapon::PickedByPlayer(APlayer_Character* player) {
 	if (!HasAuthority()) return false;
 	if (!player) return false;
-	//í”Œë ˆì´ì–´ê°€ ë¬´ê¸°ë¥¼ ì£¼ì› ë‹¤ë©´ í”Œë ˆì´ì–´ì—ì„œ ë¬´ê¸° íšë“ í•¨ìˆ˜ ì‹¤í–‰
+	//ÇÃ·¹ÀÌ¾î°¡ ¹«±â¸¦ ÁÖ¿ü´Ù¸é ÇÃ·¹ÀÌ¾î¿¡¼­ ¹«±â È¹µæ ÇÔ¼ö ½ÇÇà
 	return player->PickWeapon(this);
 }
 
-//ë¬´ê¸°ê°€ ë˜ì ¸ì¡Œì„ ë•Œ íˆíŠ¸ íŒì •
+//¹«±â°¡ ´øÁ®Á³À» ¶§ È÷Æ® ÆÇÁ¤
 void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 	if (!HasAuthority()) return;
@@ -132,12 +132,12 @@ float AWeapon::OnPreHit(APlayer_Character* TargetPlayer, bool& bSkipRotation)
 	return 1.f;
 }
 
-//í•´ë‹¹ ë¬´ê¸°ì˜ ìŠ¤íƒ¯ì„ íšë“
+//ÇØ´ç ¹«±âÀÇ ½ºÅÈÀ» È¹µæ
 FWeaponStats* AWeapon::GetWeaponStats() {
 	return WeaponData ? &WeaponData->Stats : nullptr;
 }
 
-//í”Œë ˆì´ì–´ì˜ ì •ë³´ë¥¼ ë¬´ê¸° ì •ë³´ë¡œ ë³€ê²½ (Statê³¼ ë¬´ê´€)
+//ÇÃ·¹ÀÌ¾îÀÇ Á¤º¸¸¦ ¹«±â Á¤º¸·Î º¯°æ (Stat°ú ¹«°ü)
 void AWeapon::GetWeaponInfo(APlayer_Character* EPlayer)
 {
 	if (!HasAuthority()) return;
@@ -146,29 +146,29 @@ void AWeapon::GetWeaponInfo(APlayer_Character* EPlayer)
 	EPlayer->Aim_TurnSpeed += WeaponData ? WeaponData->Aim_TurnSpeed : 0;
 }
 
-//ë¬´ê¸° ì¥ì°©
+//¹«±â ÀåÂø
 void AWeapon::Equip(APlayer_Character* Player) {
 	if (!HasAuthority()) return;
-	//ì¥ì°© í”Œë ˆì´ì–´ ì§€ì •
+	//ÀåÂø ÇÃ·¹ÀÌ¾î ÁöÁ¤
 	if (!Player) return;
-	//ë¬´ê¸°ë¥¼ ì¥ì°©ëœ ìƒíƒœë¡œ ë³€ê²½, ë¬´ê¸° ë§¤ì‰¬ì˜ ë¬¼ë¦¬ ì„¤ì • ë³€ê²½
+	//¹«±â¸¦ ÀåÂøµÈ »óÅÂ·Î º¯°æ, ¹«±â ¸Å½¬ÀÇ ¹°¸® ¼³Á¤ º¯°æ
 	SetEquipState(Player);
 	EquippedPlayer->GetCapsuleComponent()->IgnoreActorWhenMoving(this, true);
 	if (WeaponData) {
-		//ìµœì´ˆ ìƒì„±ëœ ë¬´ê¸°ì˜ ì‚¬ìš© íšŸìˆ˜ ì´ˆê¸°í™”
+		//ÃÖÃÊ »ı¼ºµÈ ¹«±âÀÇ »ç¿ë È½¼ö ÃÊ±âÈ­
 		if (NowUseCount == -2) NowUseCount = WeaponData->MaxUseCount;
-		//ë¬´ê¸° ì¥ì°© íš¨ê³¼ ë°œë™
+		//¹«±â ÀåÂø È¿°ú ¹ßµ¿
 		if (NowUseCount != 0) {
 			EquipEffect(Player);
 		}
 	}
 }
 
-//ë¬´ê¸° í•´ì œ
+//¹«±â ÇØÁ¦
 void AWeapon::UnEquip(APlayer_Character* Player) {
 	if (!HasAuthority()) return;
 	AdditionalUnEquipWeaponFunction();
-	//ë¬´ê¸° í•´ì œ íš¨ê³¼ ë°œë™
+	//¹«±â ÇØÁ¦ È¿°ú ¹ßµ¿
 	if (NowUseCount != 0) {
 		UnEquipEffect(EquippedPlayer);
 	}
@@ -177,7 +177,7 @@ void AWeapon::UnEquip(APlayer_Character* Player) {
 		EquippedPlayer->GetCapsuleComponent()->IgnoreActorWhenMoving(this, false);
 	}
 	SetWorldState();
-	//ì¥ì°© í•´ì œ ì‹œ LifeTimeì´ 10ì´ˆ ë¯¸ë§Œì´ë©´ 10ì´ˆë¡œ ì—°ì¥
+	//ÀåÂø ÇØÁ¦ ½Ã LifeTimeÀÌ 10ÃÊ ¹Ì¸¸ÀÌ¸é 10ÃÊ·Î ¿¬Àå
 	if (LifeTime < 10.f) {
 		LifeTime = 10.f;
 	}
@@ -185,7 +185,7 @@ void AWeapon::UnEquip(APlayer_Character* Player) {
 }
 
 
-//ë¬´ê¸° ë˜ì§€ê¸° ì‹œì‘ ìƒíƒœ ì ìš©
+//¹«±â ´øÁö±â ½ÃÀÛ »óÅÂ Àû¿ë
 void AWeapon::BeginWeaponThrow(APlayer_Character* Player, float damage)
 {
 	if (!HasAuthority()) return;
@@ -197,7 +197,7 @@ void AWeapon::BeginWeaponThrow(APlayer_Character* Player, float damage)
 	bHaveThrowDamage = true;
 
 }
-//ë¬´ê¸° ë˜ì§€ê¸° ìƒíƒœ ë¹„í™œì„±í™”
+//¹«±â ´øÁö±â »óÅÂ ºñÈ°¼ºÈ­
 void AWeapon::EndWeaponThrow() {
 	if (!HasAuthority()) return;
 	PhysicsCollider->SetCollisionObjectType(ECC_GameTraceChannel5);
@@ -206,39 +206,39 @@ void AWeapon::EndWeaponThrow() {
 	bHaveThrowDamage = false;
 }
 
-//ë¬´ê¸° ì ì¤‘ íš¨ê³¼ ë°œë™ ì²˜ë¦¬
+//¹«±â ÀûÁß È¿°ú ¹ßµ¿ Ã³¸®
 void AWeapon::ApplyHitEffect(AActor* Target) {
 	if (!HasAuthority()) return;
 	HitEffect(EquippedPlayer, Target);
 }
 
-//ë¬´ê¸° ì‚¬ìš© íš¨ê³¼ ë°œë™ ì²˜ë¦¬
+//¹«±â »ç¿ë È¿°ú ¹ßµ¿ Ã³¸®
 bool AWeapon::ApplyUseEffect() {
 	return UseEffect(EquippedPlayer);
 }
 
-//ë¬´ê¸° ì‚¬ìš©íšŸìˆ˜ ê²€ì‚¬
+//¹«±â »ç¿ëÈ½¼ö °Ë»ç
 bool AWeapon::CheckUseCounting() {
 	if (!WeaponData) return false;
 	if (NowUseCount <= 0) return false;
 	return true;
 }
 
-//ë¬´ê¸° ì‚¬ìš©
+//¹«±â »ç¿ë
 void AWeapon::UseWeapon() {
 	if (!HasAuthority()) return;
 	if (!WeaponData) return;
-	//NowUseCountì˜ ìµœì†Œê°’ì„ -1ë¡œ ì§€ì • (-2ëŠ” ì´ˆê¸°í™” ì „ ìµœì´ˆ ìƒì„±ê°’)
+	//NowUseCountÀÇ ÃÖ¼Ò°ªÀ» -1·Î ÁöÁ¤ (-2´Â ÃÊ±âÈ­ Àü ÃÖÃÊ »ı¼º°ª)
 	if (NowUseCount > -1) {
 		NowUseCount -= 1;
 		OnWeaponUseCountChanged.Broadcast();
 		ForceNetUpdate();
 	}
-	//ì‚¬ìš© íšŸìˆ˜ ì°¨ê°
+	//»ç¿ë È½¼ö Â÷°¨
 	if (NowUseCount == 0) {
 		AllUseEffect(EquippedPlayer);
 	}
-	//ì›ê±°ë¦¬ ë¬´ê¸°ë¥¼ ì œì™¸í•œ ë¬´ê¸°ëŠ” UseCountê°€ 0ì´ ë˜ë©´ ì¦‰ì‹œ íŒŒê´´ (íŒŒê´´ ì „ í›„ì²˜ë¦¬ ì§„í–‰ í›„ íŒŒê´´)
+	//¿ø°Å¸® ¹«±â¸¦ Á¦¿ÜÇÑ ¹«±â´Â UseCount°¡ 0ÀÌ µÇ¸é Áï½Ã ÆÄ±« (ÆÄ±« Àü ÈÄÃ³¸® ÁøÇà ÈÄ ÆÄ±«)
 	if (NowUseCount <= 0 && (WeaponData->Stats.AttackType != EAttackType::Shoot && WeaponData->Stats.AttackType != EAttackType::Shoot_HS)) {
 		if (EquippedPlayer) {
 			EquippedPlayer->NowWeapon = NULL;
@@ -255,11 +255,11 @@ void AWeapon::UseWeapon() {
 	}
 }
 
-//ë¬´ê¸° ë°œì‚¬
+//¹«±â ¹ß»ç
 void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	if (!HasAuthority()) return;
 	if (!Player || !WeaponData || !CheckUseCounting()) return;
-	//íˆ¬ì²™/ë°œì‚¬ ë¬¼ì²´ê°€ ìˆëŠ” ê²½ìš°ì—ë§Œ í•¨ìˆ˜ ê¸°ëŠ¥ ì ìš© (Meleeì™€ HitScanì€ ì—†ìŒ)
+	//ÅõÃ´/¹ß»ç ¹°Ã¼°¡ ÀÖ´Â °æ¿ì¿¡¸¸ ÇÔ¼ö ±â´É Àû¿ë (Melee¿Í HitScanÀº ¾øÀ½)
 	if (!WeaponData->Bullet) return;
 	
 	FObjectLaunchData LaunchData;
@@ -274,7 +274,7 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	SpawnParams.Instigator = Player;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	//ë¬´ê¸°ê°€ ShootTypeì´ë©´ Bullet ë°©í–¥ì„ í”Œë ˆì´ì–´ ë°œì‚¬ ë°©í–¥ì— ë§ì¶”ê¸° (ThrowTypeì´ë©´ ê·¸ëƒ¥ ëœë¤ ë°©í–¥ìœ¼ë¡œ ë§ì¶¤)
+	//¹«±â°¡ ShootTypeÀÌ¸é Bullet ¹æÇâÀ» ÇÃ·¹ÀÌ¾î ¹ß»ç ¹æÇâ¿¡ ¸ÂÃß±â (ThrowTypeÀÌ¸é ±×³É ·£´ı ¹æÇâÀ¸·Î ¸ÂÃã)
 	FVector SpawnDir = LaunchData.LaunchVelocity;
 	SpawnDir.Z = 0;
 
@@ -301,56 +301,56 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	if (!Bullet) return;
 
 	
-	//ìŠ¤í°ëœ ë¬¼ì²´ì™€ ìŠ¤í° ë¬´ê¸° ê°„ì˜ ì¶©ëŒ ë¬´ì‹œ
+	//½ºÆùµÈ ¹°Ã¼¿Í ½ºÆù ¹«±â °£ÀÇ Ãæµ¹ ¹«½Ã
 	if (Bullet->GetObjectPhysicsCollider()) {
 		Bullet->GetObjectPhysicsCollider()->IgnoreActorWhenMoving(this, true);
 	}
-	//ìŠ¤í°ëœ ë¬¼ì²´ì™€ ì†Œìœ  í”Œë ˆì´ì–´ì˜ ì¶©ëŒ ë¬´ì‹œ
+	//½ºÆùµÈ ¹°Ã¼¿Í ¼ÒÀ¯ ÇÃ·¹ÀÌ¾îÀÇ Ãæµ¹ ¹«½Ã
 	if (Player->GetCapsuleComponent()) {
 		Player->GetCapsuleComponent()->IgnoreActorWhenMoving(Bullet, true);
 	}
 
 	Bullet->OwnPlayer = EquippedPlayer;
-	//ìŠ¤í°ëœ ë¬¼ì²´ ì •ë³´ ì´ˆê¸°í™” ë° ìƒíƒœ ì ìš©
+	//½ºÆùµÈ ¹°Ã¼ Á¤º¸ ÃÊ±âÈ­ ¹× »óÅÂ Àû¿ë
 	Bullet->ShootOrThrowWithLaunchData(Player, LaunchData.StartLocation, LaunchData.TargetLocation, LaunchData.LaunchVelocity, LaunchData.bUseGravity);
-	//ìŠ¤í°ëœ ë¬¼ì²´ì˜ íˆ¬ì²™ íš¨ê³¼ ë°œë™
+	//½ºÆùµÈ ¹°Ã¼ÀÇ ÅõÃ´ È¿°ú ¹ßµ¿
 	Bullet->Func_Throw(Player);
 
 	UseWeapon();
 	ApplyUseEffect();
 }
 
-//ë¬´ê¸° ì´ë¦„ ë°˜í™˜ (ë‹¤ë¥¸ cpp íŒŒì¼ì—ì„œ ì´ë¦„ ì‚¬ìš©ì‹œ)
+//¹«±â ÀÌ¸§ ¹İÈ¯ (´Ù¸¥ cpp ÆÄÀÏ¿¡¼­ ÀÌ¸§ »ç¿ë½Ã)
 FName AWeapon::WeaponName() {
 	return this->WeaponData->Stats.AttackName;
 }
 
-//ë¬´ê¸° ë¬¼ë¦¬ Collider ë°˜í™˜ (ë‹¤ë¥¸ cpp íŒŒì¼ì—ì„œ ì‚¬ìš©ì‹œ)
+//¹«±â ¹°¸® Collider ¹İÈ¯ (´Ù¸¥ cpp ÆÄÀÏ¿¡¼­ »ç¿ë½Ã)
 UPrimitiveComponent* AWeapon::GetweaponCollider()
 {
 	return WeaponCollider;
 }
-//Weapon Collider í¬ê¸°ë¥¼ ê³„ì‚°
+//Weapon Collider Å©±â¸¦ °è»ê
 void AWeapon::SetSizeofWeaponColliderwithMesh(UBoxComponent* Box)
 {
 	if (!Mesh || !Mesh->GetStaticMesh() || !Box) return;
 	FBoxSphereBounds MeshBounds = Mesh->GetStaticMesh()->GetBounds();
 	FVector MeshSize = MeshPivot->GetRelativeScale3D().GetAbs();
-	//Meshì˜ ê° í¬ê¸°ê°’ì„ íšë“
+	//MeshÀÇ °¢ Å©±â°ªÀ» È¹µæ
 	FVector BaseSize = MeshBounds.BoxExtent;
 	BaseSize.X *= MeshSize.X;
 	BaseSize.Y *= MeshSize.Y;
 	BaseSize.Z *= MeshSize.Z;
-	//ìµœì¢… Collider í¬ê¸° ê³„ì‚°
+	//ÃÖÁ¾ Collider Å©±â °è»ê
 	FVector ColliderSize;
 	ColliderSize.X = BaseSize.X * SizeMagnification.X + ColliderOffset.X;
 	ColliderSize.Y = BaseSize.Y * SizeMagnification.Y + ColliderOffset.Y;
 	ColliderSize.Z = BaseSize.Z * SizeMagnification.Z + ColliderOffset.Z;
-	//ìµœì†Ÿê°’ ì„¤ì •(ìŒìˆ˜ ë°©ì§€)
+	//ÃÖ¼Ú°ª ¼³Á¤(À½¼ö ¹æÁö)
 	ColliderSize.X = FMath::Max(ColliderSize.X, 0.01f);
 	ColliderSize.Y = FMath::Max(ColliderSize.Y, 0.01f);
 	ColliderSize.Z = FMath::Max(ColliderSize.Z, 0.01f);
-	//ìµœì¢… Collider í¬ê¸° ì ìš©
+	//ÃÖÁ¾ Collider Å©±â Àû¿ë
 	Box->SetBoxExtent(ColliderSize);
 }
 
@@ -446,12 +446,14 @@ void AWeapon::ApplyWorldState()
 
 FVector AWeapon::GetBulletSpawnLocation(APlayer_Character* Player)
 {
-	if (!Player)
-	{
-		return FVector::ZeroVector;
-	}
+	if (!Player) return FVector::ZeroVector;
 
-	return Player->GetActorLocation() + Player->GetActorForwardVector() * 50.f + Player->GetActorRightVector() * 40.f;
+	if (WeaponData && WeaponData->Stats.AttackType == EAttackType::Throw) {
+		return Player->GetActorLocation() + Player->GetActorForwardVector() * 50.f + Player->GetActorRightVector() * 40.f;
+	}
+	else {
+		return Player->GetActorLocation() + Player->GetActorForwardVector() * 50.f;
+	}
 }
 
 bool AWeapon::BuildBulletLaunchData(APlayer_Character* Player, const FVector& TheTargetLocation, FObjectLaunchData& OutLaunchData)
@@ -625,7 +627,7 @@ bool AWeapon::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualDa
 
 	PreviewData.bOnlySameHeight = true;
 
-	//ë‚¨ì€ ì‚¬ìš© íšŸìˆ˜ê°€ ì—†ìœ¼ë©´ Preview ì‚¬ìš© X
+	//³²Àº »ç¿ë È½¼ö°¡ ¾øÀ¸¸é Preview »ç¿ë X
 	if (!CheckUseCounting()) {
 		PreviewData.Reset();
 		return false;
@@ -653,7 +655,7 @@ bool AWeapon::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualDa
 		PreviewData.bOnlySameHeight = true;
 		PreviewData.PathRadius = GetBulletMeshRadius(WeaponData->ShootPathPreviewRadius);
 
-		//PathRadiusê°€ AttackDegreeë¡œ ìƒê¸´ ì˜ì—­ì„ ë®ì„ ê²½ìš° Sector ë¹„í‘œì‹œ
+		//PathRadius°¡ AttackDegree·Î »ı±ä ¿µ¿ªÀ» µ¤À» °æ¿ì Sector ºñÇ¥½Ã
 		float HalfRad = FMath::DegreesToRadians(PreviewData.HalfAngleDegree);
 		float DegreeHalfWidthAtMaxRange = PreviewData.PreviewRange * FMath::Sin(HalfRad);
 
@@ -675,7 +677,7 @@ bool AWeapon::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualDa
 	return PreviewData.CheckUsingAnyVisual();
 }
 
-//ìì‹ í´ë˜ìŠ¤ì˜ AdditionalCollider ë¬¼ë¦¬ ì„¤ì •ì„ WeaponColliderì™€ ë™ì¼í•˜ê²Œ ì„¤ì •
+//ÀÚ½Ä Å¬·¡½ºÀÇ AdditionalCollider ¹°¸® ¼³Á¤À» WeaponCollider¿Í µ¿ÀÏÇÏ°Ô ¼³Á¤
 void AWeapon::CopyCollisionSetting(UPrimitiveComponent* AdditionalCollider)
 {
 	if (!AdditionalCollider || !WeaponCollider) return;
@@ -684,7 +686,7 @@ void AWeapon::CopyCollisionSetting(UPrimitiveComponent* AdditionalCollider)
 	AdditionalCollider->SetCollisionObjectType(WeaponCollider->GetCollisionObjectType());
 	AdditionalCollider->SetGenerateOverlapEvents(WeaponCollider->GetGenerateOverlapEvents());
 
-	//AdditionalColliderì˜ ì±„ë„ ì„¤ì •ì„ WeaponColliderê³¼ ë™ì¼í•˜ê²Œ ì„¤ì •
+	//AdditionalColliderÀÇ Ã¤³Î ¼³Á¤À» WeaponCollider°ú µ¿ÀÏÇÏ°Ô ¼³Á¤
 	for (int32 ChannelIndex = 0; ChannelIndex < ECC_MAX; ++ChannelIndex) {
 		const ECollisionChannel Channel = static_cast<ECollisionChannel>(ChannelIndex);
 
@@ -697,7 +699,7 @@ void AWeapon::CopyCollisionSetting(UPrimitiveComponent* AdditionalCollider)
 	AdditionalCollider->SetNotifyRigidBodyCollision(true);
 	AdditionalCollider->SetAllUseCCD(true);
 
-	//ë¬´ê¸°ê°€ ì¥ì°© ìƒíƒœì´ë©´ ì¥ì°© ì¤‘ì¸ í”Œë ˆì´ì–´ì™€ëŠ” ì¶©ëŒí•˜ì§€ ì•Šë„ë¡ ì„¤ì •
+	//¹«±â°¡ ÀåÂø »óÅÂÀÌ¸é ÀåÂø ÁßÀÎ ÇÃ·¹ÀÌ¾î¿Í´Â Ãæµ¹ÇÏÁö ¾Êµµ·Ï ¼³Á¤
 	if (EquippedPlayer) {
 		bool bIgnorePlayer = WeaponCollider->GetCollisionEnabled() == ECollisionEnabled::NoCollision;
 		AdditionalCollider->IgnoreActorWhenMoving(EquippedPlayer, bIgnorePlayer);
@@ -716,16 +718,16 @@ bool AWeapon::CheckCustomAdditionalAnimation(EFunctionInterActionReason Reason, 
 	return true;
 }
 
-//ë¬´ê¸°ê°€ ê°€ì§„ ìì²´ ê³µê²© ì „ì²˜ë¦¬ ë©”ì»¤ë‹ˆì¦˜ í•¨ìˆ˜
+//¹«±â°¡ °¡Áø ÀÚÃ¼ °ø°İ ÀüÃ³¸® ¸ŞÄ¿´ÏÁò ÇÔ¼ö
 bool AWeapon::BeforeAttackWeaponFunction()
 {
-	//UE_LOG(LogTemp, Warning, TEXT("weapon before attack Function!"));
+	UE_LOG(LogTemp, Warning, TEXT("weapon before attack Function!"));
 	return true;
 }
 
 bool AWeapon::InteractionWeaponFunction(EFunctionInterActionReason Reason)
 {
-	//UE_LOG(LogTemp, Warning, TEXT("weapon interaction Function!"));
+	UE_LOG(LogTemp, Warning, TEXT("weapon interaction Function!"));
 	return true;
 }
 
@@ -734,7 +736,7 @@ void AWeapon::ReleaseAttackWeaponFunction()
 	if (!HasAuthority()) return;
 	if (!EquippedPlayer) return;
 
-	//UE_LOG(LogTemp, Warning, TEXT("Attack Released with weapon own Function!"));
+	UE_LOG(LogTemp, Warning, TEXT("Attack Released with weapon own Function!"));
 
 	if (EquippedPlayer->bNowHoldingAttack) {
 		EquippedPlayer->bNowHoldingAttack = false;
@@ -744,5 +746,5 @@ void AWeapon::ReleaseAttackWeaponFunction()
 
 void AWeapon::AdditionalUnEquipWeaponFunction()
 {
-	//UE_LOG(LogTemp, Warning, TEXT("Weapon UnEquip Function!"));
+	UE_LOG(LogTemp, Warning, TEXT("Weapon UnEquip Function!"));
 }

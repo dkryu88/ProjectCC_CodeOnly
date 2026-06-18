@@ -21,10 +21,18 @@ bool AWeapon_BaseBallBat::UseEffect_Implementation(APlayer_Character* Player)
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_PhysicsBody));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel3));
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel4));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel5));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel6));
 
-	UKismetSystemLibrary::SphereOverlapActors(this, Player->GetActorLocation(), WeaponData->Stats.AttackRange * Player->NowMap->BlockSize, ObjectTypes, nullptr, { Player }, OverlapActors);
+	FVector Forward = Player->GetActorForwardVector();
+	Forward.Z = 0.f;
+	Forward = Forward.GetSafeNormal();
+
+	FVector StartLocation = Player->GetActorLocation() + (Forward * (WeaponData->Stats.AttackRange * 0.5f * Player->NowMap->BlockSize));
+	float AdjustRadius = (WeaponData->Stats.AttackRange - WeaponData->Stats.AttackRange * 0.4f) * Player->NowMap->BlockSize;
+
+	UKismetSystemLibrary::SphereOverlapActors(this, StartLocation, AdjustRadius, ObjectTypes, nullptr, { Player }, OverlapActors);
 	bool bHitAnything = false;
 
 	for (AActor* Actor : OverlapActors) {
@@ -77,16 +85,24 @@ void AWeapon_BaseBallBat::HitEffect_Implementation(APlayer_Character* Player, AA
 	if (!WeaponData) return;
 
 	TArray<AActor*> OverlapActors;
+	
+	FVector Forward = Player->GetActorForwardVector();
+	Forward.Z = 0.f;
+	Forward = Forward.GetSafeNormal();
+
+	FVector StartLocation = Player->GetActorLocation() + (Forward * (WeaponData->Stats.AttackRange * 0.5f * Player->NowMap->BlockSize));
+	float AdjustRadius = (WeaponData->Stats.AttackRange - WeaponData->Stats.AttackRange * 0.4f) * Player->NowMap->BlockSize;
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_PhysicsBody));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel3));
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel4));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel5));
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel6));
 
-	UKismetSystemLibrary::SphereOverlapActors(this, Player->GetActorLocation(), WeaponData->Stats.AttackRange * Player->NowMap->BlockSize, ObjectTypes, nullptr, { Player }, OverlapActors);
+	UKismetSystemLibrary::SphereOverlapActors(this, StartLocation, AdjustRadius, ObjectTypes, nullptr, { Player }, OverlapActors);
 
 	for (AActor* Actor : OverlapActors) {
 		if (!Actor) continue;

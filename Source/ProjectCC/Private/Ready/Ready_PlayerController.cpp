@@ -6,6 +6,9 @@
 #include "AllPlayMode_GameInstance.h"
 #include "Player_State.h"
 #include "Ready/PlayMode_Ready.h"
+//[사운드] 추가
+#include "Effect/AudioManagerSubsystem.h"
+#include "Effect/GameAudioDataAsset.h"
 
 void AReady_PlayerController::BeginPlay()
 {
@@ -31,6 +34,14 @@ void AReady_PlayerController::BeginPlay()
 	if (!bReadyScreenLoadedSent) {
 		Server_NotifyReadyScreenLoaded();
 		bReadyScreenLoadedSent = true;
+	}
+	// [사운드] Ready BGM 재생
+	if (IsLocalController()) {
+		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
+			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->ReadyBGM) {
+				AudioSub->PlayBGM(AudioSub->GetAudioData()->ReadyBGM, 0.5f);
+			}
+		}
 	}
 
 	//준비가 완료되었는지 0.1초 단위로 계속 확인

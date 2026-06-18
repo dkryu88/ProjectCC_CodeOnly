@@ -3,7 +3,7 @@
 
 #include "MagnetCoin.h"
 #include "Player_Character.h"
-#include "EffectManagerComponent.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Player_State.h"
 
 // Sets default values
@@ -17,7 +17,7 @@ AMagnetCoin::AMagnetCoin()
 
 	MagnetCoinMesh->SetCollisionProfileName(TEXT("NoCollision"));
 
-	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
+	EffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 //Magnet Coin 최초 설정
@@ -55,9 +55,6 @@ void AMagnetCoin::Tick(float DeltaTime)
 		if (FVector::Dist(CurrentLocation, TargetLocation) < 60.f) {
 			if (HasAuthority() && TargetPlayer->GetThePlayerState()) {
 				TargetPlayer->GetThePlayerState()->AddCoin(MagnetCoinValue);
-
-				// [사운드]
-				TargetPlayer->Client_PlaySound2D(TargetPlayer->CoinPickupSound);
 			}
 			Destroy();
 		}

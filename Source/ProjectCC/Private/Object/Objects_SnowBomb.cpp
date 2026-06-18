@@ -6,7 +6,6 @@
 #include "MapConstructor.h"
 #include "PlayerTransformationComponent.h"
 #include "Engine/OverlapResult.h"
-#include "Kismet/GameplayStatics.h"	// [사운드]플레이
 
 
 AObjects_SnowBomb::AObjects_SnowBomb(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
@@ -49,10 +48,6 @@ void AObjects_SnowBomb::SnowExplode()
 	}
 	if (!map) return;
 
-	if (HasAuthority() && OwnPlayer) {	// [사운드]멀티캐스트 함수를 실행하기 위해 소유자 설정
-		SetOwner(OwnPlayer);
-	}
-
 	bExploded = true;
 
 	FVector ExplosionOrigin = GetActorLocation();
@@ -81,27 +76,21 @@ void AObjects_SnowBomb::SnowExplode()
 				UPlayerTransformationComponent* TransComp = Victim->FindComponentByClass<UPlayerTransformationComponent>();
 				if (TransComp) {
 					TransComp->StartTransformation(SnowManTransformationData, OwnPlayer, -1.f);
-
-					// [사운드]
-					Multicast_PlayFreezeSound(Victim->GetActorLocation());
 				}
 			}
 		}
 	}
 
-	//Destroy();
-	// 네트워크 패킷 배달을 위한 0.5초 수명 연장
-	SetActorHiddenInGame(true);
-	SetActorEnableCollision(false);
-	SetActorTickEnabled(false);
-	SetLifeSpan(0.5f);
+	//이펙트 파라미터 설정 및 재생
+	FGameEffectContext EffectContext;
+	EffectContext.SourceActor = this;
+	EffectContext.SourceComponent = GetRootComponent();
+	EffectContext.WorldLocation = ExplosionOrigin;
+	EffectContext.WorldRotation = FRotator::ZeroRotator;
+	EffectContext.HitPoint = ExplosionOrigin;
+	EffectContext.HitNormal = FVector::UpVector;
 
-}
+	PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
-// [사운드] 멀티캐스트 재생
-void AObjects_SnowBomb::Multicast_PlayFreezeSound_Implementation(FVector PlayLocation)
-{
-	if (FreezeSound) {
-		UGameplayStatics::PlaySoundAtLocation(this, FreezeSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
-	}
+	Destroy();
 }

@@ -8,6 +8,7 @@
 
 class AMapConstructor;
 class APlayMode_Match;
+class UGameAudioDataAsset;
 
 UCLASS()
 class PROJECTCC_API AMatch_Event : public AActor
@@ -47,4 +48,8 @@ protected:
 	float EventDuration = 30.f;
 
 	FTimerHandle EventDurationTimerHandle;
+
+	// 사운드 데이터 에셋
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
+	UGameAudioDataAsset* AudioData;
 };

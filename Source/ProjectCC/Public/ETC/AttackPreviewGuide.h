@@ -43,9 +43,14 @@ struct FAimPreviewVisualData
 	//발사/ShootHS 공격의 실제 발사 경로
 	UPROPERTY()
 	bool bShowAttackPath = false;
+	//발사/ShootHS 공격의 실제 발사 경로가 공격 중 달라지는 경우 2개 이상 사용 여부
+	UPROPERTY()
+	bool bShowAttackSecondPath = false;
 	//UnrealUnit 기준 사거리
 	UPROPERTY()
 	float PreviewRange = 0.f;
+	UPROPERTY()
+	float SecondPreviewRange = 0.f;
 	//Preview에 사용할 AttackRadius
 	UPROPERTY()
 	float PreviewRadius = 0.f;
@@ -55,6 +60,8 @@ struct FAimPreviewVisualData
 	//발사 경로 폭의 절반 (발사/ShootHS)
 	UPROPERTY()
 	float PathRadius = 10.f;
+	UPROPERTY()
+	float SecondPathRadius = 0.f;
 	//같은 높이에만 표시할 것인지 여부
 	UPROPERTY()
 	bool bOnlySameHeight = true;
@@ -96,18 +103,22 @@ struct FAimPreviewVisualData
 	//무기 공격 방향
 	UPROPERTY()
 	EWeaponAttackDirection AttackDirection = EWeaponAttackDirection::Horizontal;
+
 	//Preview 데이터 초기화
 	void Reset() {
 		bVisible = false;
 		bShowAttackSector = false;
 		bShowAttackRangeCircle = false;
 		bShowAttackPath = false;
+		bShowAttackSecondPath = false;
 		bBlockByWall = true;
 
 		PreviewRange = 0.f;
+		SecondPreviewRange = 0.f;
 		PreviewRadius = 0.f;
 		HalfAngleDegree = 0.f;
 		PathRadius = 10.f;
+		SecondPathRadius = 10.f;
 
 		bOnlySameHeight = true;
 		BaseGridZ = 0;
@@ -129,13 +140,14 @@ struct FAimPreviewVisualData
 
 	bool CheckUsingAnyVisual() const
 	{
-		return bVisible && PreviewRange > 0.f && (bShowAttackSector || bShowAttackRangeCircle || bShowAttackPath);
+		return bVisible && ((PreviewRange > 0.f && (bShowAttackSector || bShowAttackRangeCircle || bShowAttackPath)) || (bShowAttackSecondPath && SecondPreviewRange > 0.f));
 	}
 
 	float GetMeshBuildRange() const
 	{
 		//테두리/Glow가 범위 밖으로 살짝 퍼져도 잘리지 않도록 여유를 둠
-		return PreviewRange + EdgeWidth + EdgeSoftness + 20.f;
+		float MaxRange = FMath::Max(PreviewRange, SecondPreviewRange);
+		return MaxRange + EdgeWidth + EdgeSoftness + 20.f;
 	}
 };
 
@@ -156,6 +168,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "AttackPreview")
 	TObjectPtr<UProceduralMeshComponent> PathMesh;
 
+	UPROPERTY(VisibleAnywhere, Category = "AttackPreview")
+	TObjectPtr<UProceduralMeshComponent> SecondPathMesh;
+
 	UPROPERTY(EditAnywhere, Category = "AttackPreview")
 	TObjectPtr<UMaterialInterface> SectorMaterial;
 
@@ -171,19 +186,25 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PathMID;
 
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SecondPathMID;
+
 private:
 	FIntPoint CachedOriginCell = FIntPoint(100, 100);
 
 	bool bCachedShowAttackSector = false;
 	bool bCachedShowAttackRangeCircle = false;
 	bool bCachedShowAttackPath = false;
+	bool bCachedShowAttackSecondPath = false;
 	bool bCachedOnlySameHeight = true;
 
 	int32 CachedBaseGridZ = -1;
 
 	float CachedPreviewRange = -1.f;
+	float CachedSecondPreviewRange = -1.f;
 	float CachedHalfAngleDegree = -1.f;
 	float CachedPathRadius = -1.f;
+	float CachedSecondPathRadius = -1.f;
 	FVector CachedForward2D = FVector::ZeroVector;
 
 	bool bCachedBlockByWall = true;

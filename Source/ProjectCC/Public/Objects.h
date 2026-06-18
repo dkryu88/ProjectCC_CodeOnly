@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Effect/FGameEffectData.h"
 #include "Player_FunctionInterActionReason.h"
 #include "Animation/EquipmentAnimation.h"
 #include "Objects.generated.h"
 
+class UGameEffectManagerComponent;
 class AMapConstructor;
 class AArea;
 
@@ -44,6 +46,7 @@ class UPrimitiveComponent;
 class UObjectsDataAsset;
 class UObjectsFunction;
 class APlayer_Character;
+class UNiagaraComponent;
 class AMatch_PlayerController;
 class UEffectManagerComponent;
 
@@ -78,25 +81,29 @@ public:
 	TObjectPtr<UPrimitiveComponent> PhysicsCollider;
 	UPROPERTY(VisibleAnywhere)
 	UBoxComponent* InterActionCollider;
-	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
+	//물체 Mesh의 Grip Socket 이름
+	UPROPERTY(EditDefaultsOnly, Category = "Objects")
+	FName GripSocketName = FName("SK_ObjectsGripPoint");
+	//상시 이펙트 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Effect")
+	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
 	//물체 Mesh의 기준점
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Objects")
 	USceneComponent* MeshPivot;
 	//Mesh의 위치 기준
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Objects")
 	FVector MeshLocation = FVector::ZeroVector;
 	//Mesh의 회전 기준
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Objects")
 	FRotator MeshRotation = FRotator::ZeroRotator;
 	//Mesh의 크기 기준
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Objects")
 	FVector MeshScale = FVector(1.f, 1.f, 1.f);
 	//물체 물리 Collider 크기 배율
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Objects")
 	FVector SizeMagnification = FVector(1.f, 1.f, 1.f);
 	//물체 물리 Collider 크기 보정값
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Objects")
 	FVector ColliderOffset = FVector(0.f, 0.f, 0.f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shield")
@@ -228,7 +235,7 @@ public:
 	//물체 Mesh 크기를 SphereCollider에 반영
 	void SetSizeofSphereColliderwithMesh(USphereComponent* Collider);
 	//클라이언트가 물체 데미지 적용
-	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage);
+	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack = -1.f);
 	//물체 넉백 적용
 	void ApplyKnockBack(FVector& AttackDir, float Strength, float UpStrength);
 	//플레이어가 물체 획득 시 확인
@@ -336,6 +343,25 @@ public:
 	UFUNCTION(BlueprintNativeEvent)
 	void Func_AttackedByPlayer(APlayer_Character* AttackPlayer);
 
+//이펙트/사운드 관련
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effect")
+	TObjectPtr<UGameEffectManagerComponent> ObjectsEffectManagerComp;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effect")
+	FGameEffectData SpawnEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData HitEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData DestroyEffect;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	TMap<FName, FGameEffectData> CustomEffects;
+
+	FGameEffectData* GetObjectsEffectData(EEffectType EffectType, FName CustomEffectName = NAME_None);
+	void PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams());
 };
 
 //고유 기능 구현은 여기에 있는 기능 함수를 Override 하여 사용

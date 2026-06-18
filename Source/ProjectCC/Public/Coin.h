@@ -10,7 +10,8 @@ class USphereComponent;
 class UStaticMeshComponent;
 class AMapConstructor;
 class APlayer_Character;
-class UEffectManagerComponent;
+class UNiagaraComponent;
+class UGameEffectManagerComponent;
 
 UCLASS()
 class PROJECTCC_API ACoin : public AActor
@@ -38,7 +39,10 @@ protected:
 	USphereComponent* Detect;
 	//이펙트 담당 컴포넌트
 	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
+	UGameEffectManagerComponent* EffectManagerComp;
+	//상시 이펙트 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Effect")
+	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
 	//현재 매치에서 사용 중인 맵
 	UPROPERTY()
 	TObjectPtr<AMapConstructor> NowMap = nullptr;
@@ -62,11 +66,6 @@ protected:
 	//로컬에 생성된 코인을 서버 코인 발사에 동기화
 	UFUNCTION(NetMulticast, Reliable)
 	void Mulitcast_StartCoinLaunch(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& TargetLocation);
-
-	//// [사운드] 코인 픽업 사운드
-	//UPROPERTY(EditDefaultsOnly, Category="Sound")
-	//TObjectPtr<class USoundBase> CoinPickupSound;
-
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

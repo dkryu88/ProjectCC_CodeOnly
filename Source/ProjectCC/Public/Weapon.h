@@ -42,7 +42,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
 	TSubclassOf<AWeapon> Weapon;
 	//각 무기 데이터
-	UPROPERTY(EditDefaultsOnly, Category = "WeaponData")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WeaponData")
 	TObjectPtr<UWeaponDataAsset> WeaponData;
 	//남은 사용 횟수 (서버에서 관리)
 	UPROPERTY(ReplicatedUsing = OnRep_NowUseCount)

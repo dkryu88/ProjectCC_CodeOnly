@@ -39,7 +39,7 @@ public:
 	int32 RowCount = 7;
 
 	UPROPERTY(EditDefaultsOnly, Category = "AirRaid|Flare")
-	float FlareSpawnZOffset = 100.f;
+	float FlareSpawnZOffset = 120.f;
 
 protected:
 	FTimerHandle ExplosionTimerHandle;

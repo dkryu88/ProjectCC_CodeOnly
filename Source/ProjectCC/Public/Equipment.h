@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -12,7 +12,7 @@ class UBoxComponent;
 class APlayer_Character;
 class AObjects;
 class UPrimitiveComponent;
-class UEffectManagerComponent;
+class UGameEffectManagerComponent;
 
 UENUM(BlueprintType)
 enum class EEquipmentType : uint8 {
@@ -50,34 +50,34 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment")
 	TObjectPtr<UBoxComponent> PickupCollider;
 	UPROPERTY()
-	UEffectManagerComponent* EffectManagerComp;
+	UGameEffectManagerComponent* EffectManagerComp;
 	UPROPERTY(EditDefaultsOnly, Category = "Equipment")
 	EEquipmentType EquipmentType = EEquipmentType::Weapon;
-	//ì´ë¯¸ ì¥ì°© ì¤‘ì¸ Equipmentì¸ì§€ í™•ì¸ (ì„œë²„ì—ì„œ ê´€ë¦¬)
+	//ÀÌ¹Ì ÀåÂø ÁßÀÎ EquipmentÀÎÁö È®ÀÎ (¼­¹ö¿¡¼­ °ü¸®)
 	UPROPERTY(ReplicatedUsing = OnRep_IsEquipped)
 	bool bIsEquipped = false;
-	//Equipmentì˜ ë§µì— ì¡´ì¬í•  ìˆ˜ ìˆëŠ” ì‹œê°„
+	//EquipmentÀÇ ¸Ê¿¡ Á¸ÀçÇÒ ¼ö ÀÖ´Â ½Ã°£
 	UPROPERTY(Replicated)
-	float LifeTime = 3000.f;
-	//Equipmentê°€ ì¥ì°©/ì¥ì°©í•´ì œ ë˜ë©´ ì¦‰ì‹œ í˜¸ì¶œíšŒë“  í•¨ìˆ˜(OnRep)
+	float LifeTime = 30.f;
+	//Equipment°¡ ÀåÂø/ÀåÂøÇØÁ¦ µÇ¸é Áï½Ã È£ÃâÈ¸µç ÇÔ¼ö(OnRep)
 	UFUNCTION()
 	virtual void OnRep_IsEquipped();
-	//ì¥ì°© ì¤‘ì¸ í”Œë ˆì´ì–´ ë°ì´í„°
+	//ÀåÂø ÁßÀÎ ÇÃ·¹ÀÌ¾î µ¥ÀÌÅÍ
 	UPROPERTY(Replicated)
 	TObjectPtr<APlayer_Character> EquippedPlayer;
-	//í”Œë ˆì´ì–´ê°€ Equipment íšë“ì‹œ ê²€ì‚¬
+	//ÇÃ·¹ÀÌ¾î°¡ Equipment È¹µæ½Ã °Ë»ç
 	virtual bool PickedByPlayer(APlayer_Character* Player);
-	//í”Œë ˆì´ì–´ê°€ ì¥ì°© ì‹œ ì„¤ì •
+	//ÇÃ·¹ÀÌ¾î°¡ ÀåÂø ½Ã ¼³Á¤
 	void SetWorldState();
 	virtual void ApplyWorldState();
-	//í”Œë ˆì´ì–´ê°€ í•´ì œ ì‹œ ì„¤ì •
+	//ÇÃ·¹ÀÌ¾î°¡ ÇØÁ¦ ½Ã ¼³Á¤
 	void SetEquipState(APlayer_Character* Player);
 	virtual void ApplyEquipState();
-	//Equipmentì˜ ì´ˆê¸° ë¬¼ë¦¬ ì„¤ì •
+	//EquipmentÀÇ ÃÊ±â ¹°¸® ¼³Á¤
 	void SetPhysicsCollider(UPrimitiveComponent* Collider);
-	//ë‹¤ë¥¸ ê³³ì—ì„œ ë¬¼ë¦¬ Collider ì ‘ê·¼ìš©
+	//´Ù¸¥ °÷¿¡¼­ ¹°¸® Collider Á¢±Ù¿ë
 	UPrimitiveComponent* GetPhysicsCollider() { return PhysicsCollider; }
-	//ë‹¤ë¥¸ ê³³ì—ì„œ ë§¤ì‰¬ ì ‘ê·¼ìš©
+	//´Ù¸¥ °÷¿¡¼­ ¸Å½¬ Á¢±Ù¿ë
 	UStaticMeshComponent* GetMesh() { return Mesh; }
 
 public:
@@ -85,19 +85,19 @@ public:
 	float CurrentTick = 0.f;
 
 public:
-	//ì¥ì°© íš¨ê³¼
+	//ÀåÂø È¿°ú
 	UFUNCTION(BlueprintNativeEvent)
 	void EquipEffect(APlayer_Character* Player);
-	//ì¥ì°© í•´ì œ íš¨ê³¼
+	//ÀåÂø ÇØÁ¦ È¿°ú
 	UFUNCTION(BlueprintNativeEvent)
 	void UnEquipEffect(APlayer_Character* Player);
-	//ê³µê²© ì ì¤‘ íš¨ê³¼ (Castë¡œ APlayer_Characterì¸ì§€ AObjectsì¸ì§€ íŒë³„ í›„ ì‚¬ìš©)
+	//°ø°İ ÀûÁß È¿°ú (Cast·Î APlayer_CharacterÀÎÁö AObjectsÀÎÁö ÆÇº° ÈÄ »ç¿ë)
 	UFUNCTION(BlueprintNativeEvent)
 	void HitEffect(APlayer_Character* Player, AActor* Target);
-	//ë‹¨ìˆœ ê³µê²© íš¨ê³¼ (ë¹„ì ì¤‘ì‹œì—ë„ ë°œë™)
+	//´Ü¼ø °ø°İ È¿°ú (ºñÀûÁß½Ã¿¡µµ ¹ßµ¿)
 	UFUNCTION(BlueprintNativeEvent)
 	bool UseEffect(APlayer_Character* Player);
-	//ì‚¬ìš© íšŸìˆ˜ ì†Œì§„ íš¨ê³¼ (ì¥ì°© í•´ì œë‘ ë³„ë„)
+	//»ç¿ë È½¼ö ¼ÒÁø È¿°ú (ÀåÂø ÇØÁ¦¶û º°µµ)
 	UFUNCTION(BlueprintNativeEvent)
 	void AllUseEffect(APlayer_Character* Player);
 };

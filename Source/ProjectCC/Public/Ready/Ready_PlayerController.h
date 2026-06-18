@@ -45,4 +45,5 @@ protected:
 	bool bReadyToTravelSent = false;
 
 	FTimerHandle TravelCheckTimerHandle;
+
 };

@@ -26,13 +26,6 @@ public:
 	virtual void Func_BecomeNormalType_Implementation(const FHitResult& Hit) override;
 	virtual void Func_Destroy_Implementation() override;
 
-	// [사운드]
-	UPROPERTY(EditDefaultsOnly, Category = "Sound")
-	TObjectPtr<class USoundBase> BombExplosionSound;
-
-	/*UFUNCTION(NetMulticast, Unreliable)	//플레이어로 사운드 재상함수 이관
-	void Multicast_PlayBombExplosionSound(FVector PlayLocation);*/
-
 private:
 	//폭발 딜레이 타이머
 	FTimerHandle ExplodeTimerHandle;

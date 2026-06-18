@@ -3,8 +3,12 @@
 
 #include "Weapon/Weapon_RailGun.h"
 #include "Player_Character.h"
+#include "Net/UnrealNetwork.h"
 #include "MapConstructor.h"
 #include "ObjectsDataAsset.h"
+#include "CollisionQueryParams.h"
+#include "Engine/World.h"
+#include "Engine/EngineTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
@@ -56,8 +60,39 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 		float MaxHoldTime = CurrentTime - MaxChargeStartTime;
 
 		if (MaxHoldTime >= MaxChargeHoldDuration) {
-			bMaxChargeFired = true;
+			LastChargeTime = -1.f;
+			MaxChargeStartTime = -1.f;
+
 			ResetRailGunMoveSpeed();
+
+			bRailGunCharging = false;
+			bWaitingRepress = true;
+			bMaxChargeFired = true;
+			
+			ChargeGauge = 0.f;
+			PendingDamage = 0.f;
+			PendingRadius = 0.f;
+
+			RailGunAnimState = ERailGunAnimState::None;
+
+			float CompleteAnimDuration = 0.25f;
+
+			if (RailGunCompleteAnimation)
+			{
+				CompleteAnimDuration = RailGunCompleteAnimation->GetPlayLength();
+				PlayRailGunDynamicAnimation(RailGunCompleteAnimation, 1);
+			}
+			else
+			{
+				StopRailGunAnimation();
+			}
+
+			UseWeapon();
+
+			if (!CheckUseCounting()) bWaitingRepress = true;
+
+			InstantHideRailGunPreview(CompleteAnimDuration);
+			ForceNetUpdate();
 
 			return;
 		}
@@ -66,6 +101,12 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 	ApplyRailGunMoveSpeed();
 
 	if (ChargeGauge < MinGauge) return;
+
+	//레일건 공격이 시작되면 공격 애니메이션 재생 (공격 끝까지 무한반복)
+	if (RailGunAnimState != ERailGunAnimState::Firing) {
+		RailGunAnimState = ERailGunAnimState::Firing;
+		PlayRailGunDynamicAnimation(RailGunAttackAnimation, 999999);
+	}
 
 	float Damage = GetDamageByGauge(ChargeGauge, WeaponData->Stats.Attack);
 	float Radius = GetRadiusByGauge(ChargeGauge);
@@ -81,6 +122,7 @@ void AWeapon_RailGun::CancelRailGunAttack()
 	LastChargeTime = -1.f;
 	MaxChargeStartTime = -1.f;
 
+	StopRailGunAnimation();
 	ResetRailGunMoveSpeed();
 
 	float SavedGauge = ChargeGauge;
@@ -88,8 +130,11 @@ void AWeapon_RailGun::CancelRailGunAttack()
 
 	ChargeGauge = 0.f;
 	bMaxChargeFired = false;
-	bWaitingRepress = true;
+	bWaitingRepress = false;
 	bRailGunCharging = false;
+	bNoShowingRailGunPreview = false;
+
+	GetWorldTimerManager().ClearTimer(InstantHideRailGunPreviewTimerHandle);
 
 	if (bWasMax || SavedGauge >= MinGauge) {
 		UseWeapon();
@@ -98,6 +143,65 @@ void AWeapon_RailGun::CancelRailGunAttack()
 	PendingDamage = 0.f;
 	PendingRadius = 0.f;
 
+}
+
+void AWeapon_RailGun::InstantHideRailGunPreview(float Duration)
+{
+	if (!HasAuthority()) return;
+	bNoShowingRailGunPreview = true;
+
+	if (EquippedPlayer && EquippedPlayer->IsLocallyControlled()) EquippedPlayer->HideAimPreview();
+	ForceNetUpdate();
+
+	GetWorldTimerManager().ClearTimer(InstantHideRailGunPreviewTimerHandle);
+	GetWorldTimerManager().SetTimer(InstantHideRailGunPreviewTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+		bNoShowingRailGunPreview = false;
+		ForceNetUpdate();
+	}), FMath::Max(0.05f, Duration), false);
+}
+
+void AWeapon_RailGun::PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32 LoopCount)
+{
+	if (!HasAuthority()) return;
+	if (!EquippedPlayer) return;
+	if (!Sequence) return;
+
+	FName RailGunSlotName = FName(TEXT("UpperBody"));
+
+	EquippedPlayer->Multicast_StopSlotAnimation(RailGunSlotName, 0.01f);
+	EquippedPlayer->Multicast_PlayAnimationDynamic(Sequence, RailGunSlotName, 0.1f, 0.1f, 1.f, LoopCount, 0);
+}
+
+void AWeapon_RailGun::StopRailGunAnimation()
+{
+	if (!HasAuthority()) return;
+	if (!EquippedPlayer) return;
+
+	FName RailGunSlotName = FName(TEXT("UpperBody"));
+
+	EquippedPlayer->Multicast_StopSlotAnimation(RailGunSlotName, 0.15f);
+	RailGunAnimState = ERailGunAnimState::None;
+}
+
+void AWeapon_RailGun::OnRep_RailGunCharging()
+{
+	if(bRailGunCharging){
+		bLocalNoShowingRailGunPreview = true;
+
+		if (bRailGunCharging && EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
+			EquippedPlayer->HideAimPreview();
+		}
+	}
+	else {
+		bLocalNoShowingRailGunPreview = false;
+	}
+}
+
+void AWeapon_RailGun::OnRep_NoShowingRailGunPreview()
+{
+	if (bNoShowingRailGunPreview && EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
+		EquippedPlayer->HideAimPreview();
+	}
 }
 
 void AWeapon_RailGun::ReleaseRailGunAttack()
@@ -115,6 +219,24 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 
 	bool bWasMax = bMaxChargeFired;
 	bMaxChargeFired = false;
+
+	bool bPlayFireEnd = bWasMax || SavedGauge >= 60.f;
+
+	if (bPlayFireEnd) {
+		RailGunAnimState = ERailGunAnimState::None;
+		float CompleteAnimDuration = 0.25f;
+
+		if (RailGunCompleteAnimation) {
+			CompleteAnimDuration = RailGunCompleteAnimation->GetPlayLength();
+			PlayRailGunDynamicAnimation(RailGunCompleteAnimation, 1);
+		}
+
+		InstantHideRailGunPreview(CompleteAnimDuration);
+	}
+	else {
+		StopRailGunAnimation();
+		InstantHideRailGunPreview(0.25f);
+	}
 
 	if (bWasMax) {
 		UseWeapon();
@@ -144,18 +266,37 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 	if (!CheckUseCounting()) bWaitingRepress = true;
 }
 
+void AWeapon_RailGun::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AWeapon_RailGun, ChargeGauge);
+	DOREPLIFETIME(AWeapon_RailGun, bRailGunCharging);
+	DOREPLIFETIME(AWeapon_RailGun, bNoShowingRailGunPreview);
+}
+
 bool AWeapon_RailGun::BeforeAttackWeaponFunction()
 {
 	if (!EquippedPlayer) return false;
-	if (!HasAuthority()) return true;
 	if (bRailGunCharging) return true;
 	if (bWaitingRepress) return false;
+	if (!HasAuthority()) {
+		//공격 버튼을 누르는 순간 차징중으로 판단 (Preview가 보이지 않음)
+		bLocalNoShowingRailGunPreview = true;
+		bRailGunCharging = true;
+		EquippedPlayer->HideAimPreview();
+		return true;
+	}
 	if (!CheckUseCounting()) {
 		bWaitingRepress = true;
 		return false;
 	}
 
 	bRailGunCharging = true;
+	RailGunAnimState = ERailGunAnimState::Charging;
+
+	//레일건 차징 애니메이션 재생(무한 루프)
+	PlayRailGunDynamicAnimation(RailGunChargeAnimation, 999999);
 
 	ResetRailGunMoveSpeed();
 
@@ -204,6 +345,7 @@ void AWeapon_RailGun::ReleaseAttackWeaponFunction()
 	//충전 중이 아닌, 단순히 다시 누르기 대기 상태에서 Release 입력을 받았다면 대기상태 해제
 	if (!bRailGunCharging && bWaitingRepress) {
 		bWaitingRepress = false;
+		bMaxChargeFired = false;
 		return;
 	}
 
@@ -228,6 +370,53 @@ void AWeapon_RailGun::AdditionalUnEquipWeaponFunction()
 	}
 }
 
+bool AWeapon_RailGun::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualData& PreviewData)
+{
+	PreviewData.Reset();
+
+	if (!Player) return false;
+	if (!Player->NowMap) return false;
+	if (!WeaponData) return false;
+	if (!CheckUseCounting()) {
+		PreviewData.Reset();
+		return true;
+	}
+
+	if (bLocalNoShowingRailGunPreview || bNoShowingRailGunPreview || bWaitingRepress || bRailGunCharging || bMaxChargeFired) {
+		PreviewData.Reset();
+		return true;
+	}
+
+	float TheBlockSize = Player->NowMap->BlockSize;
+	float AttackRealRange = (WeaponData->Stats.AttackRange) * TheBlockSize;
+	float GaugePercent = FMath::Clamp(ChargeGauge / 100.f, 0.f, 1.f);
+	float RailGunAttackRealRange = FMath::Lerp(AttackRealRange * 0.25f, AttackRealRange, GaugePercent);
+	float Radius = ChargeGauge >= MinGauge ? GetRadiusByGauge(ChargeGauge) : MinBeamRadius;
+	float MaxRange = WeaponData->Stats.AttackRange * TheBlockSize;
+	float MinRange = FMath::Lerp(MaxRange * 0.25f, MaxRange, FMath::Clamp(MinGauge / 100.f, 0.f, 1.f));
+
+	PreviewData.bVisible = true;
+
+	PreviewData.bShowAttackSector = false;
+	PreviewData.bShowAttackPath = true;
+	PreviewData.bShowAttackSecondPath = true;
+	PreviewData.bShowAttackRangeCircle = false;
+
+	PreviewData.PreviewRange = MaxRange;
+	PreviewData.SecondPreviewRange = MinRange;
+	PreviewData.PathRadius = MaxBeamRadius;
+	PreviewData.SecondPathRadius = MinBeamRadius;
+	PreviewData.PreviewRadius = MaxBeamRadius;
+
+	PreviewData.HalfAngleDegree = 0.f;
+	PreviewData.AttackDirection = EWeaponAttackDirection::Horizontal;
+
+	PreviewData.bOnlySameHeight = true;
+	PreviewData.bBlockByWall = true;
+
+	return PreviewData.CheckUsingAnyVisual();
+}
+
 void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePercent)
 {
 	if (!HasAuthority() || !EquippedPlayer || !EquippedPlayer->NowMap) return;
@@ -239,6 +428,30 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 
 	TArray<AActor*> ActorsToIgnore;
 	ActorsToIgnore.Add(EquippedPlayer);
+
+	//벽에 막히는 지 검사-----------------------------
+	FHitResult WallHit;
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = false;
+	Params.AddIgnoredActor(EquippedPlayer);
+	if (EquippedPlayer->NowWeapon) {
+		Params.AddIgnoredActor(EquippedPlayer->NowWeapon);
+	}
+	if (EquippedPlayer->NowObjects) {
+		Params.AddIgnoredActor(EquippedPlayer->NowObjects);
+	}
+	if (EquippedPlayer->NowSupport) {
+		Params.AddIgnoredActor(EquippedPlayer->NowSupport);
+	}
+	FCollisionObjectQueryParams WallObjectParams;
+	WallObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+
+	bool bWallHit = GetWorld()->LineTraceSingleByObjectType(WallHit, TraceStart + FVector(0.f, 0.f, 80.f), TraceEnd + FVector(0.f, 0.f, 80.f), WallObjectParams, Params);
+	if (bWallHit) {
+		TraceEnd = WallHit.ImpactPoint;
+	}
+
+	//--------------------------------------------------
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
@@ -268,6 +481,9 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 
 		if (!HitActor) continue;
 		if (HitActors.Contains(HitActor)) continue;
+
+		//벽 뒤의 적은 무시
+		if (EquippedPlayer && !EquippedPlayer->AttackLineOfSight(HitActor)) continue;
 
 		HitActors.Add(HitActor);
 

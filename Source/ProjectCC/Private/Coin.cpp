@@ -6,11 +6,12 @@
 #include "GameFramework/Character.h"
 #include "PlayMode_Match.h"
 #include "MapConstructor.h"
-#include "EffectManagerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+#include "NiagaraComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -46,7 +47,13 @@ ACoin::ACoin()
 	Mesh->SetupAttachment(Detect);
 
 	//이펙트 담당 컴포넌트 부착
-	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
+	EffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
+
+	//상시 이펙트 담당 컴포넌트
+	LifeTimeEffectComp = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Effect"));
+	LifeTimeEffectComp->SetupAttachment(Mesh);
+	LifeTimeEffectComp->bAutoActivate = true;
+	LifeTimeEffectComp->SetAutoDestroy(false);
 }
 
 // Called when the game starts or when spawned
@@ -333,10 +340,6 @@ void ACoin::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* O
 	if (PlayerState && Player != LastOwnerPlayer) {
 		bIsTaken = true;
 		PlayerState->AddCoin(CoinValue);
-
-		// [사운드] 코인 습득 사운드 재생
-		Player->Client_PlaySound2D(Player->CoinPickupSound);
-
 		if (APlayMode_Match* Match = GetWorld()->GetAuthGameMode<APlayMode_Match>()) {
 			Match->UpdatePlayersRank();
 		}

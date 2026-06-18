@@ -22,6 +22,7 @@
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
 #include "ETC/AttackPreviewGuide.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "InputActionValue.h"
 #include "AllPlayMode_GameInstance.h"
 #include "PlayerConditionDataAsset.h"
@@ -33,7 +34,6 @@
 #include "Player_CharacterWidget.h"
 #include "Player_AdditionalWidget.h"
 #include "PlayMode_Match.h"
-#include "EffectManagerComponent.h"
 #include "MapConstructor.h"
 #include "BlockType.h"
 #include "PlayerStats.h"
@@ -50,7 +50,7 @@
 // Sets default values
 APlayer_Character::APlayer_Character()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
 	bReplicates = true;
@@ -118,9 +118,6 @@ APlayer_Character::APlayer_Character()
 	//아이템 슬롯 컴포넌트 부착
 	ItemSlot = CreateDefaultSubobject<USceneComponent>(TEXT("ItemSlot"));
 	ItemSlot->SetupAttachment(GetRootComponent());
-	//물체 슬롯 컴포넌트 부착
-	ObjectsSlot = CreateDefaultSubobject<USceneComponent>(TEXT("ObjectsSlot"));
-	ObjectsSlot->SetupAttachment(GetRootComponent());
 	//서포트 슬롯 컴포넌트 부착
 	SupportSlot = CreateDefaultSubobject<USceneComponent>(TEXT("SupportSlot"));
 	SupportSlot->SetupAttachment(GetRootComponent());
@@ -140,7 +137,7 @@ APlayer_Character::APlayer_Character()
 	WidgetComponent->SetManuallyRedraw(false);
 	WidgetComponent->SetRedrawTime(0.03f);
 	//플레이어 이펙트 컴포넌트 부착
-	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
+	EffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
 
 	//플레이어 스탯 초기값 설정
 	AStat = GetWeaponStat();
@@ -159,6 +156,7 @@ void APlayer_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(APlayer_Character, bIsAiming);
 	DOREPLIFETIME(APlayer_Character, bIsDodging);
 	DOREPLIFETIME(APlayer_Character, bIsHitted);
+	DOREPLIFETIME(APlayer_Character, bIsAttacking);
 	DOREPLIFETIME(APlayer_Character, bEndMatchState);
 	DOREPLIFETIME(APlayer_Character, bCanControl);
 	DOREPLIFETIME(APlayer_Character, bCanCamControl);
@@ -192,11 +190,6 @@ void APlayer_Character::PossessedBy(AController* NewController)
 void APlayer_Character::PawnClientRestart() {
 	Super::PawnClientRestart();
 	InitPlayerWidget();
-
-	// [사운드] 카메라에 붙어있던 귀(이어폰)를 플레이어 위치로 옮김(사운드 보간의 거리를 알맞게 설정하기 위한 기준)
-	if (APlayerController* PC = Cast<APlayerController>(GetController())) {
-		PC->SetAudioListenerOverride(GetCapsuleComponent(), FVector::ZeroVector, FRotator::ZeroRotator);
-	}
 }
 
 void APlayer_Character::OnRep_MoveSpeed()
@@ -210,7 +203,7 @@ void APlayer_Character::OnRep_MoveSpeed()
 void APlayer_Character::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	InitPlayerWidget();
 	BindPlayer_State();
 
@@ -231,7 +224,7 @@ void APlayer_Character::BeginPlay()
 		if (APlayMode_Match* GM = GetWorld()->GetAuthGameMode<APlayMode_Match>()) {
 			NowMap = GM->GetCurrentMap();
 		}
-	}	
+	}
 }
 
 // Called every frame
@@ -246,13 +239,13 @@ void APlayer_Character::Tick(float DeltaTime)
 		if (GetMesh()) {
 			VisualMeshLocation -= ActorLocationChange * 1.f;
 			VisualMeshLocation = FMath::VInterpTo(VisualMeshLocation, FVector::ZeroVector, DeltaTime, OutVisualSmoothSpeed);
-			
+
 		}
 		GetMesh()->SetRelativeLocation(DefaultMeshLocation + VisualMeshLocation);
 		if (springArmComp) {
 			VisualCamLocation -= ActorLocationChange * 1.f;
 			VisualCamLocation = FMath::VInterpTo(VisualCamLocation, FVector::ZeroVector, DeltaTime, OutVisualSmoothSpeed);
-			
+
 		}
 		springArmComp->SetRelativeLocation(DefaultCamLocation + VisualCamLocation);
 		LastActorLocation = CurrentActorLocation;
@@ -264,14 +257,14 @@ void APlayer_Character::Tick(float DeltaTime)
 		UpdateAimTargetPoint();
 		TrySendtoServerAimPoint();
 		ApplyAimRotation(DeltaTime);
-		UpdateAimPoint();
 		UpdateAimPreview(DeltaTime);
+		UpdateAimPoint();
 	}
 	if (HasAuthority()) {
 
 		if (!bIsAiming && !bIsDodging) {
 			//로컬 플레이어는 이미 Move에서 회전했으므로 중복 방지
-			if(!IsLocallyControlled()){
+			if (!IsLocallyControlled()) {
 				if (bHavingServerMoveFacingYaw) {
 					ApplyPlayerRotation(ServerMoveFacingYaw, DeltaTime);
 				}
@@ -284,10 +277,11 @@ void APlayer_Character::Tick(float DeltaTime)
 			ApplyAimRotation(DeltaTime);
 		}
 	}
-	
+
 	if (HasAuthority()) {
 		UpdateBigHitReaction(DeltaTime);
 		UpdateKnockBackAirDamping(DeltaTime);
+		UpdateAimAnimationSlot();
 	}
 
 	UpdateMaintainMoveOnNotInput(DeltaTime);
@@ -328,7 +322,7 @@ void APlayer_Character::AddInputBlockController(FName ControllerName, bool bBloc
 {
 	if (!HasAuthority()) return;
 	if (ControllerName.IsNone()) return;
-	
+
 	//같은 이름의 컨트롤러는 갱신
 	RemoveInputBlockController(ControllerName);
 
@@ -459,7 +453,7 @@ void APlayer_Character::ApplyPlayerRotation(float TargetYaw, float DeltaTime)
 			ForceNetUpdate();
 		}
 	}
-	
+
 }
 
 void APlayer_Character::UpdateAnimationMoveDirectionValues(float DeltaTime)
@@ -559,7 +553,7 @@ bool APlayer_Character::IsCurrentWeaponHoldLikeAttack()
 void APlayer_Character::CamTurn(const struct FInputActionValue& inputValue) {
 
 	float Value = inputValue.Get<float>();
-	
+
 	if (!bCanCamControl) return;
 	if (!bIsAiming) {
 		float value = inputValue.Get<float>();
@@ -604,9 +598,12 @@ void APlayer_Character::SetPlayerEndMatchState()
 	bIsAiming = false;
 	bIsHitted = false;
 	bIsDodging = false;
+	bIsAttacking = false;
 	bNowHoldingAttack = false;
 	bHavingCurrentAimTargetPoint = false;
 	CurrentAimTargetPoint = FVector::ZeroVector;
+
+	GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
 
 	if (AimPoint) AimPoint->SetVisibility(ESlateVisibility::Hidden);
 
@@ -652,7 +649,7 @@ void APlayer_Character::Move(const struct FInputActionValue& inputValue) {
 	if (bIsDodging) return;
 	if (move_Speed <= 0.f) return;
 	if (TransformationComp && !TransformationComp->CanMoveDuringTransfomation()) return;
-	
+
 	if (NowWeapon && !NowWeapon->InteractionWeaponFunction(EFunctionInterActionReason::Move)) return;
 
 	FVector2D value = inputValue.Get<FVector2D>();
@@ -744,7 +741,7 @@ void APlayer_Character::MoveStop(const FInputActionValue& inputValue) {
 //서버에 캐릭터 회전값 전송
 void APlayer_Character::TrySendToServerControlYaw() {
 	if (!IsLocallyControlled()) return;
-	
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
@@ -828,43 +825,17 @@ void APlayer_Character::Player_Jump(const struct FInputActionValue& inputValue) 
 	UWorld* World = GetWorld();
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	if (!Movement) return;
-
-	if (Movement->IsFalling()) return;	// [추가] 점프키 중복입력 방지
-
 	float CurrentTime = World->GetTimeSeconds();
 	//쿨타임이 남았다면 종료
 	if (CurrentTime - LastJumpTime < JumpCoolTime) return;
 	LastJumpTime = CurrentTime;
 	Jump();
 
-	// [사운드]
-	if (JumpSound) {
-		UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
-	}
-	if (!HasAuthority()) {
-		Server_PlayJumpSound();
-	}
-	else {
-		Multicast_PlayJumpSound();
-	}
-
 	//점프 시 변경되는 Condition 상태 제어
 	if (HasAuthority()) {
 		NotifyConditionEvent(EPlayerConditionEvent::Jump, true);
 	}
 }
-
-void APlayer_Character::Server_PlayJumpSound_Implementation(){
-	Multicast_PlayJumpSound();
-}
-
-void APlayer_Character::Multicast_PlayJumpSound_Implementation(){
-	if (IsLocallyControlled())return;
-	if (JumpSound) {
-		UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
-	}
-}
-
 
 
 bool APlayer_Character::BuildCurrentAttackPreviewData(FAimPreviewVisualData& OutData)
@@ -938,7 +909,7 @@ void APlayer_Character::Dodge(const struct FInputActionValue& inputValue) {
 	}
 }
 //플레이어 회피 처리
-void APlayer_Character::DodgeInternal(FVector DodgeDir){
+void APlayer_Character::DodgeInternal(FVector DodgeDir) {
 	if (!bCanControl) return;
 	UWorld* World = GetWorld();
 	UCharacterMovementComponent* Move = GetCharacterMovement();
@@ -948,9 +919,20 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir){
 	if (CurrentTime - LastDodgeTime < DodgeCoolTime) return;
 
 	if (NowWeapon && !NowWeapon->InteractionWeaponFunction(EFunctionInterActionReason::Dodge)) return;
-	
+
+	CancelAimState();
+
 	LastDodgeTime = CurrentTime;
+	bIsAttacking = false;
+	GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
 	bIsDodging = true;
+
+	//회피시 Holding 공격은 즉시 끊어짐
+	if (NowWeapon && NowWeapon->WeaponData && NowWeapon->WeaponData->Stats.AttackInputType == EWeaponAttackInputType::Continuous && bNowHoldingAttack) {
+		NowWeapon->ReleaseAttackWeaponFunction();
+		bNowHoldingAttack = false;
+		OnWeaponChanged.Broadcast();
+	}
 
 	//공격 후 Aim애니메이션 복구 타이머가 있다면, 회피 중에는 끄기
 	GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
@@ -1011,7 +993,7 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir){
 				FVector V = MoveComp->Velocity;
 				V.X = SavedVel.X;
 				V.Y = SavedVel.Y;
-				MoveComp->Velocity = V;			
+				MoveComp->Velocity = V;
 				//지상 마찰 복구
 				MoveComp->GroundFriction = SavedGroundFriction;
 				MoveComp->BrakingFrictionFactor = SavedBrakingFrictionFactor;
@@ -1089,7 +1071,7 @@ void APlayer_Character::Interaction(const FInputActionValue& Value) {
 	if (bIsOut) return;
 	if (TransformationComp && !TransformationComp->CanInteractionDuringTransformation()) return;
 	if (!CheckWeaponInteraction(EFunctionInterActionReason::InterAction)) return;
-	
+
 	if (!HasAuthority()) {
 		Server_Interaction();
 		return;
@@ -1302,7 +1284,7 @@ void APlayer_Character::UseItemInternal() {
 	if (!NowMap) {
 		UWorld* World = GetWorld();
 		if (!World) return;
-		
+
 		APlayMode_Match* GM = Cast<APlayMode_Match>(UGameplayStatics::GetGameMode(World));
 		if (!GM) return;
 
@@ -1354,9 +1336,13 @@ void APlayer_Character::DropInternal() {
 		Strength = MoveStrength;
 	}
 	if (NowWeapon) {
+		//무기 드롭 시 조준 해제
+		CancelAimState();
 		DropWeapon(Strength, false);
 	}
 	else if (NowObjects) {
+		//물체 드롭 시 조준 해제
+		CancelAimState();
 		DropObjects(Strength, false);
 	}
 	else if (NowItem) {
@@ -1410,7 +1396,7 @@ void APlayer_Character::ApplyThrow(AEquipment* equipment, float BaseStrength, fl
 			if (Equipment) {
 				Equipment->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 			}
-		}, IgnorePawnSeconds, false);
+			}, IgnorePawnSeconds, false);
 	}
 }
 
@@ -1448,14 +1434,14 @@ void APlayer_Character::ApplyThrowOb(AObjects* object, float BaseStrength, float
 //무기 드롭
 void APlayer_Character::DropWeapon(float Strength, bool bIsThrowing) {
 	if (!NowWeapon) return;
-	if(!HasAuthority()) return;
+	if (!HasAuthority()) return;
 
 	GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
 
 	NowWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	NowWeapon->UnEquip(this);
 	NowWeapon->SetActorTransform(DropTransform());
-	
+
 	if (VisualManagerComp) {
 		VisualManagerComp->Multi_RestoreActorVisuals(NowWeapon);
 		VisualManagerComp->Multi_RefreshVisuals();
@@ -1633,7 +1619,18 @@ void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
 	if (!HasAuthority()) {
 		Server_Aim(false);
 	}
+	
+	CancelAimState();
+}
+
+void APlayer_Character::CancelAimState()
+{
+	if (!bIsAiming) return;
+
 	SetAimInternal(false);
+
+	bHavingCurrentAimTargetPoint = false;
+	CurrentAimTargetPoint = FVector::ZeroVector;
 
 	if (IsLocallyControlled()) {
 		HideAimPoint();
@@ -1647,10 +1644,6 @@ void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
 			PC->SetInputMode(InputMode);
 		}
 	}
-
-	bHavingCurrentAimTargetPoint = false;
-	CurrentAimTargetPoint = FVector::ZeroVector;
-
 }
 
 //조준 시작/해제 처리
@@ -1660,10 +1653,14 @@ void APlayer_Character::SetAimInternal(bool bAiming) {
 
 	//무기가 조준 애니메이션이 따로 있는 경우 그 애니메이션을 재생 (중복 재생을 방지하기 위해 비조준->조준일 때만 재생)
 	if (HasAuthority() && bIsAiming && !bWasAiming) {
+		FVector Velocity = GetVelocity();
+		Velocity.Z = 0.f;
+		bUsingFullBodyAimAnimation = Velocity.Size() > 1.f;
 		PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
 	}
 	else if (!bIsAiming && bWasAiming) {
 		GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+		bUsingFullBodyAimAnimation = false;
 		Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.15f);
 		Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.15f);
 	}
@@ -1718,37 +1715,26 @@ void APlayer_Character::UpdateAimTargetPoint()
 	FHitResult AimHit;
 	bool bHavingAimHit = PC->GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(AimTraceChannel), true, AimHit);
 
-	//CurrentAimTargetPoint = bHavingAimHit ? AimHit.ImpactPoint : FallbackPoint;
-	// 조준포인터 용암위 버그 수정
+	//블록체널이라면 그 위치 가져옴
 	if (bHavingAimHit) {
-			// 블록체널이라면 그 위치 가져옴
 		CurrentAimTargetPoint = AimHit.ImpactPoint;
 	}
 	else {
-		// 킬존 용암의 콜리전에서 마우스포인트를 오버랩으로 바꿨음
-		// 마우스포인터는 용암위로 올라가나
-		// 캐릭터 회전과 공격범위가 따라가지 못해
-		// else에서 따라가도록 설정
+		// 마우스포인터는 용암위로 올라가나 캐릭터 회전과 공격범위가 따라가지 못하기에 else에서 따라가도록 설정
 		FVector WorldLocation, WorldDirection;
 
 		// 마우스 커서 화면 위치에서 3D로 광선 발사
 		if (PC->DeprojectMousePositionToWorld(WorldLocation, WorldDirection)) {
-			FVector PlaneNormal(0.f, 0.f, 1.f);	//케릭터 발바닥 높이
+			FVector PlaneNormal(0.f, 0.f, 1.f);
 			FVector PlanePoint = GetActorLocation();
 
 			// 마우스광선과 캐릭터 발바닥 높이의 교차점 찾기
-			FVector Intersection = FMath::LinePlaneIntersection(
-				WorldLocation,	// 선분 시작점
-				WorldLocation + WorldDirection * 1000.f,	// 선분 끝점 (10m로 설정)
-				PlanePoint,	//평면 위 한점
-				PlaneNormal	//평면 바닥 방향
-			);
-			// 마우스 방향 위치로 초기화
+			FVector Intersection = FMath::LinePlaneIntersection(WorldLocation, WorldLocation + WorldDirection * 1000.f, PlanePoint, PlaneNormal);
 			FallbackPoint = Intersection;
 		}
+
 		CurrentAimTargetPoint = FallbackPoint;
 	}
-
 	bHavingCurrentAimTargetPoint = true;
 }
 
@@ -1765,7 +1751,7 @@ void APlayer_Character::UpdateAimPoint()
 
 		AimPoint = CreateWidget<UUserWidget>(PC, Player_AimPointWidget);
 		if (!AimPoint) return;
-		
+
 		AimPoint->AddToViewport(100);
 		AimPoint->SetVisibility(ESlateVisibility::HitTestInvisible);
 		AimPoint->SetDesiredSizeInViewport(AimPointWidgetSize);
@@ -1838,14 +1824,13 @@ void APlayer_Character::UpdateAimPreview(float DeltaTime)
 	}
 	if (!AttackPreviewGuide) return;
 
-	FVector AimDir = CurrentAimTargetPoint - GetActorLocation();
+	FVector AimDir = GetActorForwardVector();
 	AimDir.Z = 0.f;
 
 	if (AimDir.IsNearlyZero()) {
-		AimDir = GetActorForwardVector();
-		AimDir.Z = 0.f;
+		AimDir = FVector::ForwardVector;
 	}
-	
+
 	AimDir = AimDir.GetSafeNormal();
 	AimPreview->UpdatePreview(NowMap, Origin, AimDir, PreviewData);
 }
@@ -1880,7 +1865,7 @@ void APlayer_Character::Attack(const struct FInputActionValue& inputValue) {
 		Server_Attack(false, AimPointToUse);
 		return;
 	}
-	
+
 	Server_Attack_Implementation(false, AimPointToUse);
 }
 
@@ -1921,7 +1906,7 @@ void APlayer_Character::AttackRelease(const struct FInputActionValue& inputValue
 	FWeaponStats* Stat = NowWeapon->GetWeaponStats();
 	if (!Stat) return;
 	if (Stat->AttackInputType != EWeaponAttackInputType::Continuous && Stat->AttackInputType != EWeaponAttackInputType::Repeat) return;
-	
+
 	if (!HasAuthority()) {
 		Server_AttackRelease();
 		return;
@@ -1964,6 +1949,15 @@ bool APlayer_Character::AttackLineOfSight(AActor* TargetActor)
 
 	FHitResult Hit;
 	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params);
+
+	if (bBlocked) {
+		// 뭔가에 막혔다면 붉은색 선을 그립니다. (ImpactPoint까지만)
+		DrawDebugLine(GetWorld(), Start, Hit.ImpactPoint, FColor::Red, false, 3.f, 0, 2.f);
+	}
+	else {
+		// 뻥 뚫려있다면 초록색 선을 그립니다. (끝까지)
+		DrawDebugLine(GetWorld(), Start, End, FColor::Green, false, 3.f, 0, 2.f);
+	}
 
 	return !bBlocked;
 }
@@ -2024,7 +2018,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		if (!NowMap) return;
 	}
 	float AttackRealRange = AStat.AttackRange * NowMap->BlockSize;
-	
+
 	//물체를 장착 중이면 물체를 던짐
 	if (NowObjects) {
 		if (bPlayAnimation) {
@@ -2067,7 +2061,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 			OnWeaponChanged.Broadcast();
 			return;
 		}
-	} 
+	}
 
 	//무기별 공격 애니메이션 재생
 	if (bPlayAnimation) {
@@ -2089,7 +2083,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 	ARangeStart = GetActorLocation() + (Forward * ARadius);
 	float AdjustedRange = FMath::Max(0.f, AttackRealRange - (ARadius * 2));
 	ARangeEnd = ARangeStart + Forward * AdjustedRange;
-	
+
 	TArray<FHitResult> Hits;
 
 	//디버그 용
@@ -2109,7 +2103,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		float DegreeLineTotalLength = 2 * Range * FMath::Sin(AHalfAngleRadius);
 		//전체 Trace 개수는 현의 길이 / 지름의 길이 (소수점 올림, 최소 1개 보장)
 		return FMath::Max(1, FMath::CeilToInt(DegreeLineTotalLength / (TraceRadius * 2)));
-	}; 
+		};
 	/*람다 함수는 실제로 int32값으로 사용할 수 없으므로 auto로 선언 후 리턴 타입을 <- 로 지정*/
 	/* 굳이 auto를 안쓰겠다면 TFunction<int32(매개변수들)> 함수 이름 <-- 이렇게도 쓸 수 있음*/
 
@@ -2220,7 +2214,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 				}
 			}
 		}
-		
+
 	}
 
 	//원거리 히트스캔 공격 범위 생성
@@ -2229,7 +2223,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		//기본은 가로방향으로 AttackDegree만큼 탄퍼짐 영역 생성
 		FVector ShotDir = Forward.RotateAngleAxis(RandomAngle, FVector::UpVector).GetSafeNormal();
 		//만약 무기가 세로방향 공격을 사용한다면 AttackDegree만큼 세로로 탄퍼짐 영역 생성 <있을지는 모르겠지만...>
-		if (NowWeapon && NowWeapon->WeaponData->AttackDirection == EWeaponAttackDirection::Vertical){
+		if (NowWeapon && NowWeapon->WeaponData->AttackDirection == EWeaponAttackDirection::Vertical) {
 			ShotDir = Forward.RotateAngleAxis(RandomAngle, FVector::RightVector).GetSafeNormal();
 		}
 		//만약 무기가 랜덤방향 공격을 사용한다면 가로범위 * 세로범위/2 만큼의 영역중 한곳을 랜덤으로 공격 범위로 지정
@@ -2348,6 +2342,10 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 
 	for (FHitResult H : Hits) {
 		AActor* Hitted = H.GetActor();
+		if (!Hitted) continue;
+		//벽 뒤 대상은 후보에서 제외
+		if (!AttackLineOfSight(Hitted)) continue;
+
 		//타격 대상이 플레이어인 경우
 		if (APlayer_Character* HittedPlayers = Cast<APlayer_Character>(Hitted)) {
 			//본인 타격 방지
@@ -2406,7 +2404,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		if (NowWeapon) {
 			NowWeapon->ApplyHitEffect(HittedPlayer);
 		}
-	};
+		};
 	auto ApplyToObject = [&](AObjects* HittedObject, float Damage) {
 		if (!HittedObject) return;
 		//벽너머 공격 시 Return
@@ -2424,7 +2422,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		if (NowWeapon) {
 			NowWeapon->ApplyHitEffect(HittedObject);
 		}
-	};
+		};
 
 	switch (AStat.AttackTargetType) {
 	case EAttackTargetType::SingleTarget:
@@ -2457,7 +2455,7 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		}
 		//가장 가까운 대상을 선별 후 그 대상에게 공격 적용 (bIsPlayer로 캐릭터인지 물체인지 판단)
 		if (!ClosestTargetObject && !ClosestTargetPlayer) return;
-		if ((ClosestObDistance < ClosestDistance || ClosestDistance == -1) && ClosestObDistance != -1){
+		if ((ClosestObDistance < ClosestDistance || ClosestDistance == -1) && ClosestObDistance != -1) {
 			ApplyToObject(ClosestTargetObject, AStat.Attack);
 		}
 		else if ((ClosestObDistance >= ClosestDistance || ClosestObDistance == -1) && ClosestDistance != -1) {
@@ -2504,7 +2502,7 @@ float APlayer_Character::TakeDamage(float damage, struct FDamageEvent const& Dam
 }
 
 //플레이어 데미지 적용 처리
-float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bApplyRotation, bool bForceDamage)
+float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bApplyRotation, bool bForceDamage, float OverrideKnockBackStrength)
 {
 	if (!HasAuthority()) return 0.f;
 	if (bIsOut) return 0.f;
@@ -2521,7 +2519,7 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 			return 0.f;
 		}
 	}
-	
+
 	FVector AttackDir = FVector::ZeroVector;
 	GetWorldTimerManager().ClearTimer(HoldLastAttackPlayer);
 	float KnockBackStrength = 0.f;
@@ -2537,7 +2535,7 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	if (TransformationComp) {
 		TransformationComp->NotifyHittedDuringTransformation(AttackPlayer);
 	}
-	
+
 	bool bSkipHitReaction = bIsDodging;
 	bool bSkipRotation = !bApplyRotation;
 	bIsHitted = true;
@@ -2573,7 +2571,16 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	
 	AttackDir.Z = 0.f;
 	AttackDir = AttackDir.GetSafeNormal();
-	float TotalKnockBackStrength = bApplyKnockBack ? KnockBackStrength * KnockBackScale : 0.f;
+	float TotalKnockBackStrength = 0.f;
+	if (bApplyKnockBack) {
+		if (OverrideKnockBackStrength >= 0.f) {
+			TotalKnockBackStrength = OverrideKnockBackStrength;
+		}
+		else {
+			TotalKnockBackStrength = KnockBackStrength * KnockBackScale;
+		}
+	}
+	
 	bool bBigHit = TotalKnockBackStrength >= BigHitKnockBackRule;
 
 	//피격 시 변경되는 Condition 상태 제어
@@ -2601,8 +2608,16 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 		}
 	}
 
+	UE_LOG(LogTemp, Warning,
+		TEXT("KnockBackStrength: %.1f, Scale: %.1f, Override: %.1f, Total: %.1f"),
+		KnockBackStrength,
+		KnockBackScale,
+		OverrideKnockBackStrength,
+		TotalKnockBackStrength
+	);
+
 	//플레이어 넉백 적용
-	if(AttackDir != FVector::ZeroVector && bApplyKnockBack) ApplyKnockBack(AttackDir, TotalKnockBackStrength, 0.f);
+	if (AttackDir != FVector::ZeroVector && bApplyKnockBack) ApplyKnockBack(AttackDir, TotalKnockBackStrength, 0.f);
 
 	//코인 손실 체력 계산
 	if (LastLoseCoinHP - HP >= CoinLoseHpInterval && CurrentCoin > 0 && HP > 0) {
@@ -2718,13 +2733,13 @@ bool APlayer_Character::CollectNearbySafeBlocksFromMap(TArray<FVector>& SafeBloc
 	if (!bGridFound) {
 		FVector FallbackLocation = GetActorLocation();
 		FallbackLocation.Z += Map->BlockSize * 2.f;
-		if (!bGridFound) { 
+		if (!bGridFound) {
 			return false;
 		}
 	}
 	FVector StartLocation = GetActorLocation() + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 10.f);
 
-	for (int32 ZOffset = instanceSearchHeight; ZOffset >= -instanceSearchHeight; -- ZOffset) {
+	for (int32 ZOffset = instanceSearchHeight; ZOffset >= -instanceSearchHeight; --ZOffset) {
 		for (int32 XOffset = -instanceSearchRadius; XOffset <= instanceSearchRadius; ++XOffset) {
 			for (int32 YOffset = -instanceSearchRadius; YOffset <= instanceSearchRadius; ++YOffset) {
 				int32 CheckX = CenterX + XOffset;
@@ -2758,7 +2773,7 @@ bool APlayer_Character::CollectNearbySafeBlocksFromMap(TArray<FVector>& SafeBloc
 	FVector PlayerLocation = GetActorLocation();
 	SafeBlockLocations.Sort([PlayerLocation](const FVector& A, const FVector& B) {
 		return FVector::DistSquared2D(PlayerLocation, A) < FVector::DistSquared2D(PlayerLocation, B);
-	});
+		});
 
 	return SafeBlockLocations.Num() > 0;
 }
@@ -2784,8 +2799,8 @@ void APlayer_Character::BuildCoinTargetLocations(int32 RequiredTargetCount, AMap
 			if (UsedTargetKeys.Contains(Key)) continue;
 			UsedTargetKeys.Add(Key);
 			TargetLocations.Add(Candidate);
-			if (TargetLocations.Num() >= RequiredTargetCount) { 
-				return; 
+			if (TargetLocations.Num() >= RequiredTargetCount) {
+				return;
 			}
 			NowRadius += 2.f;
 		}
@@ -2888,7 +2903,7 @@ void APlayer_Character::Out(APlayer_Character* winnerplayer)
 	if (TransformationComp && TransformationComp->IsTransformed()) {
 		TransformationComp->StopTransformation(true);
 	}
-	
+
 	//탈락시킨 플레이어와 탈락한 플레이어의 Score 변경
 	WinnerPlayer = winnerplayer;
 	if (WinnerPlayer && !bEndMatchState) {
@@ -2910,8 +2925,8 @@ void APlayer_Character::Out(APlayer_Character* winnerplayer)
 		}
 	}
 
-	if(!bEndMatchState) GetThePlayerState()->AddPlayerOut();
-	
+	if (!bEndMatchState) GetThePlayerState()->AddPlayerOut();
+
 	if (NowWeapon) DropWeapon(MoveStrength, false);
 	if (NowObjects) DropObjects(MoveStrength, false);
 	if (NowSupport) {
@@ -2958,7 +2973,7 @@ void APlayer_Character::DestroyPlayer() {
 		Match_PC->SetCurrentSpectatingTarget(nullptr);
 		Match_PC->Client_StartSpectatingDefaultCamera();
 	}
-	
+
 	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
 		AMatch_PlayerController* OtherPC = Cast<AMatch_PlayerController>(IT->Get());
 		if (!OtherPC) continue;
@@ -2978,7 +2993,7 @@ void APlayer_Character::DestroyPlayer() {
 			OtherPC->Client_StartSpectatingDefaultCamera();
 		}
 	}
-	
+
 	FTimerHandle DeadTimeHandle;
 	GetWorldTimerManager().SetTimer(DeadTimeHandle, FTimerDelegate::CreateWeakLambda(this, [this, Match_PC, Match]() {
 		if (Match_PC)
@@ -3015,8 +3030,8 @@ void APlayer_Character::DestroyPlayer() {
 		}
 		//Respawn 후 제거 (이미 카메라는 Respawn한 곳으로 옮겼으므로 상관 x)
 		SetLifeSpan(Match->GetRespawnTime() + 0.5f);
-	}), 0.1f, false);
-	
+		}), 0.1f, false);
+
 }
 
 //공격 받은 방향으로 캐릭터 방향 변경
@@ -3100,7 +3115,7 @@ void APlayer_Character::UpdateMoveSpeed()
 	}
 }
 
-void APlayer_Character::AddSpeedController(FName ControllerName, float Magnification, float offset, bool bConstantSpeed ,int32 Priority)
+void APlayer_Character::AddSpeedController(FName ControllerName, float Magnification, float offset, bool bConstantSpeed, int32 Priority)
 {
 	if (ControllerName.IsNone()) return;
 
@@ -3167,7 +3182,7 @@ void APlayer_Character::AddSpeedController(FName ControllerName, float Magnifica
 		else {
 			bFinalConstantSpeed = false;
 		}
-		
+
 		FSpeedController NewController;
 		NewController.SpeedControllerName = ControllerName;
 		NewController.SpeedMagnification = Magnification;
@@ -3179,7 +3194,7 @@ void APlayer_Character::AddSpeedController(FName ControllerName, float Magnifica
 
 		UpdateMoveSpeed();
 	}
-	
+
 }
 
 void APlayer_Character::RemoveSpeedControllerByName(FName ControllerName)
@@ -3191,7 +3206,7 @@ void APlayer_Character::RemoveSpeedControllerByName(FName ControllerName)
 			IT.RemoveCurrent();
 		}
 	}
-	
+
 	UpdateMoveSpeed();
 }
 
@@ -3256,6 +3271,49 @@ UAnimSequence* APlayer_Character::GetNormalAttackSequence()
 	return NormalAttackAnimIndex == 2 ? SecondNormalAttack : FirstNormalAttack;
 }
 
+bool APlayer_Character::ApplyAnimationIntercept(EFunctionInterActionReason InterceptorReason, EFunctionInterActionReason TargetReason, const FEquipmentActionAnimation& TargetAnimation, FName TargetSlotName, int32& InOutStartFrame)
+{
+	if (TargetAnimation.InterceptStartFrame < 0) return false;
+
+	bool bCanIntercept = false;
+	bool bShouldStopCurrentSlotAnimation = false;
+
+	switch (InterceptorReason) {
+	case EFunctionInterActionReason::Aim:
+	{
+		if (bIsAiming) {
+			FEquipmentActionAnimation AimAnimation;
+			bool bHasAimAnimation = GetCurrentEquipmentActionAnimation(EFunctionInterActionReason::Aim, AimAnimation);
+			if (bHasAimAnimation) {
+				if (TargetReason == EFunctionInterActionReason::Attack) {
+					bCanIntercept = true;
+				}
+			}
+		}
+		break;
+	}
+	case EFunctionInterActionReason::Attack:
+	{
+		if (bIsAttacking) {
+			if (TargetReason == EFunctionInterActionReason::Attack) {
+				bCanIntercept = true;
+				bShouldStopCurrentSlotAnimation = true;
+			}
+		}
+		break;
+	}
+	default:
+		break;
+	}
+
+	//인터셉스 불가능이면 리턴
+	if (!bCanIntercept) return false;
+	if (bShouldStopCurrentSlotAnimation) Multicast_StopSlotAnimation(TargetSlotName, 0.05f);
+
+	InOutStartFrame = TargetAnimation.InterceptStartFrame;
+	return true;
+}
+
 void APlayer_Character::StartBigHitReaction()
 {
 	if (!HasAuthority()) return;
@@ -3305,18 +3363,18 @@ void APlayer_Character::StartBigHitReaction()
 
 		FVector HorizontalVelocity = MoveComp->Velocity;
 		HorizontalVelocity.Z = 0.f;
-		
+
 		float HorizontalSpeed = HorizontalVelocity.Size();
 		if (HorizontalSpeed <= RecoverVelocityRule) {
 			StartRecoverReaction();
 			return;
 		}
-		
+
 		//플레이어가 아직 날아가는 중이면 DuringSection 재생, 재생 후에도 여전히 날아가는 도중이면 해당 포즈에서 정지
 		Multicast_PlayOverrideMontage(BigHittedMontage, FName("During"), false, bHoldBigHittingPose);
 
 		BigHitStopTime = 0.f;
-	}), StartDuration, false);
+		}), StartDuration, false);
 
 	ForceNetUpdate();
 }
@@ -3386,7 +3444,7 @@ void APlayer_Character::StartRecoverReaction()
 		if (!bIsBigHitReaction) return;
 		if (!bIsRecoverReaction) return;
 		if (bIsOut || bEndMatchState) return;
-		
+
 		Multicast_PlayRecoverReaction();
 		float RecoverDuration = 0.3f;
 		if (RecoverMontage) {
@@ -3396,7 +3454,7 @@ void APlayer_Character::StartRecoverReaction()
 		GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);
 		GetWorldTimerManager().SetTimer(BigHitRecoverTimerHandle, this, &APlayer_Character::EndBigHitReaction, RecoverDuration, false);
 
-	}), EndDuration, false);
+		}), EndDuration, false);
 
 	ForceNetUpdate();
 }
@@ -3422,6 +3480,23 @@ void APlayer_Character::EndBigHitReaction()
 	}
 
 	ForceNetUpdate();
+}
+
+bool APlayer_Character::GetCurrentEquipmentActionAnimation(EFunctionInterActionReason Reason, FEquipmentActionAnimation& Animation)
+{
+	FEquipmentActionAnimation* FoundAnimation = nullptr;
+
+	if (NowWeapon && NowWeapon->WeaponData) {
+		FoundAnimation = NowWeapon->WeaponData->AdditionalAnimation.Find(Reason);
+	}
+	else if (NowObjects && NowObjects->ObjectsData) {
+		FoundAnimation = NowObjects->ObjectsData->AdditionalAnimation.Find(Reason);
+	}
+
+	if(!FoundAnimation || !FoundAnimation->IsValid()) return false;
+
+	Animation = *FoundAnimation;
+	return true;
 }
 
 void APlayer_Character::BindPlayer_State()
@@ -3488,7 +3563,7 @@ void APlayer_Character::UpdateMaintainMoveOnNotInput(float DeltaTime)
 	if (bIsDodging) return;
 	if (move_Speed <= 0.f) return;
 	if (TransformationComp && !TransformationComp->CanMoveDuringTransfomation()) return;
-	
+
 	FVector MoveDir = LastPlayerdir;
 	MoveDir.Z = 0.f;
 
@@ -3522,10 +3597,10 @@ void APlayer_Character::UpdateMaintainMoveOnNotInput(float DeltaTime)
 //캐릭터 피격 몽타주 재생
 void APlayer_Character::PlayDamageAnimation(float Damage, bool bBigHit) {
 	if (bBigHit) return;
-	
+
 	UAnimMontage* TargetMontage = nullptr;
 	TargetMontage = HittedMontage;
-	
+
 	float ReleaseDelay = 0.15f;
 
 	if (TargetMontage) {
@@ -3545,7 +3620,7 @@ void APlayer_Character::PlayDamageAnimation(float Damage, bool bBigHit) {
 
 			ForceNetUpdate();
 		}
-	}), ReleaseDelay, false);
+		}), ReleaseDelay, false);
 }
 
 void APlayer_Character::PlayAnimationDynamic(UAnimSequence* Sequence, FName SlotName, float BlendInTime, float BlendOutTime, float PlayRate, int32 LoopCount, int32 StartFrame)
@@ -3571,6 +3646,35 @@ void APlayer_Character::PlayAnimationDynamic(UAnimSequence* Sequence, FName Slot
 	AnimInstance->PlaySlotAnimationAsDynamicMontage(Sequence, SlotName, BlendInTime, BlendOutTime, PlayRate, LoopCount, -1.f, StartTime);
 }
 
+void APlayer_Character::UpdateAimAnimationSlot()
+{
+	if (!HasAuthority()) return;
+	if (!bIsAiming) return;
+	if (bIsOut || bIsDodging || bIsHitted) return;
+
+	if (GetWorldTimerManager().IsTimerActive(ResumeAimAnimationTimerHandle)) return;
+
+	FVector Velocity = GetVelocity();
+	Velocity.Z = 0.f;
+
+	float Speed = Velocity.Size();
+
+	if (!bUsingFullBodyAimAnimation && Speed > 1.f) {
+		bUsingFullBodyAimAnimation = true;
+		Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.15f);
+		PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
+
+		return;
+	}
+	else if (bUsingFullBodyAimAnimation && Speed < 1.f) {
+		bUsingFullBodyAimAnimation = false;
+		Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.15f);
+		PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
+
+		return;
+	}
+}
+
 bool APlayer_Character::NeedToPlayAllBodyAnimation()
 {
 	FVector Velocity2D = GetVelocity();
@@ -3592,30 +3696,14 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 
 	//조준 애니메이션은 조준 해제까지 무한 루프
 	if (Reason == EFunctionInterActionReason::Aim) {
+		//무기의 남은 사용 횟수가 없으면 조준 모션 재생 x
+		if (NowWeapon && !NowWeapon->CheckUseCounting()) {
+			return false;
+		}
 		LoopCount = 999999;
 	}
 
-	if (NowWeapon && NowWeapon->WeaponData) {
-		FEquipmentActionAnimation* FoundAnimation = NowWeapon->WeaponData->AdditionalAnimation.Find(Reason);
-
-		if (FoundAnimation && FoundAnimation->IsValid()) {
-			TargetAnimation = *FoundAnimation;
-			bFoundAnimation = true;
-		}
-	}
-
-	else if (NowObjects && NowObjects->ObjectsData) {
-		FEquipmentActionAnimation* FoundAnimation = NowObjects->ObjectsData->AdditionalAnimation.Find(Reason);
-
-		if (FoundAnimation && FoundAnimation->IsValid()) {
-			TargetAnimation = *FoundAnimation;
-			bFoundAnimation = true;
-		}
-	}
-
-	if (!bFoundAnimation) return false;
-
-	StartFrame = TargetAnimation.StartFrame;
+	bFoundAnimation = GetCurrentEquipmentActionAnimation(Reason, TargetAnimation);
 
 	//장착된 무기/물체가 없는 경우 일반공격 모션 재생
 	if (!NowWeapon && !NowObjects && Reason == EFunctionInterActionReason::Attack) {
@@ -3629,24 +3717,9 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 		return true;
 	}
 
-	//조준 중 공격 하여 공격 모션 재생 시 시작 프레임을 일부 건너뜀
-	if (bIsAiming && Reason == EFunctionInterActionReason::Attack) {
-		bool bHasAimAnimation = false;
+	if (!bFoundAnimation) return false;
 
-		if (NowWeapon && NowWeapon->WeaponData) {
-			FEquipmentActionAnimation* AimAnim = NowWeapon->WeaponData->AdditionalAnimation.Find(EFunctionInterActionReason::Aim);
-			if(AimAnim) bHasAimAnimation = AimAnim->IsValid();
-			
-		}
-		else if (NowObjects && NowObjects->ObjectsData) {
-			FEquipmentActionAnimation* AimAnim = NowObjects->ObjectsData->AdditionalAnimation.Find(EFunctionInterActionReason::Aim);
-			if(AimAnim) bHasAimAnimation = AimAnim->IsValid();
-		}
-
-		if (bHasAimAnimation && TargetAnimation.InterceptStartFrame >= 0) {
-			StartFrame = TargetAnimation.InterceptStartFrame;
-		}
-	}
+	StartFrame = TargetAnimation.StartFrame;
 
 	//Override할 몽타주가 있는 경우 몽타주 재생
 	if (TargetAnimation.MontageOverride) {
@@ -3657,9 +3730,9 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 	if (TargetAnimation.Sequence) {
 		FName SlotName;
 
-		//조준은 상체만 사용하므로 UpperBody로 고정
+		//조준은 이동 중에는 상체만 사용하도록 UpperBody로, 정지 중에는 전신을 사용하도록 DefaultSlot으로 고정
 		if (Reason == EFunctionInterActionReason::Aim) {
-			SlotName = FName(TEXT("UpperBody"));
+			SlotName = bUsingFullBodyAimAnimation ? FName(TEXT("UpperBody")) : FName(TEXT("DefaultSlot"));
 		}
 		//회피는 전신을 사용하므로 DefaultSlot으로 고정
 		else if (Reason == EFunctionInterActionReason::Dodge) {
@@ -3669,7 +3742,33 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 			SlotName = GetActionSlotName(TargetAnimation.bForceFullBody);
 		}
 
+		ApplyAnimationIntercept(EFunctionInterActionReason::Aim, Reason, TargetAnimation, SlotName, StartFrame);
+		ApplyAnimationIntercept(EFunctionInterActionReason::Attack, Reason, TargetAnimation, SlotName, StartFrame);
 		Multicast_PlayAnimationDynamic(TargetAnimation.Sequence, SlotName, TargetAnimation.BlendInTime, TargetAnimation.BlendOutTime, TargetAnimation.PlayRate, LoopCount, StartFrame);
+
+		if (Reason == EFunctionInterActionReason::Attack) {
+			float AnimLength = TargetAnimation.Sequence->GetPlayLength();
+			float StartTime = 0.f;
+
+			if (StartFrame > 0) {
+				int32 NumKeys = TargetAnimation.Sequence->GetNumberOfSampledKeys();
+				if (AnimLength > 0.01f && NumKeys > 1) {
+					float FPS = (NumKeys - 1) / AnimLength;
+					StartTime = StartFrame / FPS;
+					StartTime = FMath::Clamp(StartTime, 0.f, FMath::Max(0.f, AnimLength));
+				}
+			}
+
+			float RemainTime = (AnimLength - StartTime) / FMath::Max(TargetAnimation.PlayRate, 0.01f);
+			RemainTime = FMath::Max(0.01f, RemainTime - TargetAnimation.BlendOutTime);
+
+			bIsAttacking = true;
+
+			GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
+			GetWorldTimerManager().SetTimer(EndAttackStateTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+				bIsAttacking = false;
+			}), RemainTime, false);
+		}
 
 		//조준 중 공격 애니메이션이 끝나면 조준 애니메이션 복구
 		if (Reason == EFunctionInterActionReason::Attack && bIsAiming) {
@@ -3693,7 +3792,7 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 				if (bIsOut || bIsDodging || bIsHitted) return;
 
 				PlayEquipmentAnimation(EFunctionInterActionReason::Aim);
-			}), RemainTime, false);
+				}), RemainTime, false);
 		}
 		return true;
 	}
@@ -3778,6 +3877,23 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 		GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
 		if (CurrentTime - LastAttackTime < 0.25f) return;
 		LastAttackTime = CurrentTime;
+
+		//물체 던지기 선딜레이 적용
+		float Delay = NowObjects->ObjectsData ? NowObjects->ObjectsData->ThrowEarlyDelay : 0.f;
+		if (Delay > 0.f) {
+			PlayEquipmentAnimation(EFunctionInterActionReason::Attack);
+			GetWorldTimerManager().SetTimer(AttackEarlierDelayTimerHanlde, FTimerDelegate::CreateWeakLambda(this, [this, ClientAimPoint]() {
+				if (!bCanControl) return;
+				if (bIsOut || bIsDodging || !NowObjects) return;
+				if (TransformationComp && !TransformationComp->CanAttackDuringTransformation()) return;
+
+				//애니메이션은 이미 재생했으므로 false
+				AttackInternal(false);
+				}), Delay, false);
+
+			return;
+		}
+
 		AttackInternal(true);
 		return;
 	}
@@ -3821,7 +3937,7 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 	}
 
 	LastAttackTime = CurrentTime;
-	
+
 	float Delay = AStat.AttackEarlierDelay;
 
 	if (Delay > 0.f) {
@@ -3829,23 +3945,23 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 		PlayEquipmentAnimation(EFunctionInterActionReason::Attack);
 		//선딜레이 타이머 초기화 및 실행
 		GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
-		
+
 		//공격 입력 시점의 TargetPoint를 고정 (투척 타입, Delay 영향 X)
 		bool bFixThrowTarget = AStat.AttackType == EAttackType::Throw;
-		FVector FixedAimPoint = ClientAimPoint; 
+		FVector FixedAimPoint = ClientAimPoint;
 
-		GetWorldTimerManager().SetTimer(AttackEarlierDelayTimerHanlde, FTimerDelegate::CreateWeakLambda(this, [this, bFixThrowTarget, FixedAimPoint]() { 
+		GetWorldTimerManager().SetTimer(AttackEarlierDelayTimerHanlde, FTimerDelegate::CreateWeakLambda(this, [this, bFixThrowTarget, FixedAimPoint]() {
 			if (!bCanControl) return;
 			if (bIsOut) return;
 			if (bIsDodging) return;
 			if (TransformationComp && !TransformationComp->CanAttackDuringTransformation()) return;
-			if(bFixThrowTarget) ServerAimPoint = FixedAimPoint;
-			
-			AttackInternal(false); 
-		}), Delay, false);
+			if (bFixThrowTarget) ServerAimPoint = FixedAimPoint;
+
+			AttackInternal(false);
+			}), Delay, false);
 		return;
 	}
-	
+
 	AttackInternal();
 }
 
@@ -3859,7 +3975,7 @@ void APlayer_Character::Server_AttackRelease_Implementation()
 	if (Stat->AttackInputType == EWeaponAttackInputType::Continuous) {
 		//홀딩 여부와 관계없이 Release입력을 무기에 전달
 		NowWeapon->ReleaseAttackWeaponFunction();
-		
+
 		//홀딩 중이 아니면 Release를 검사할 필요가 없으므로 Return
 		if (!bNowHoldingAttack) return;
 		bNowHoldingAttack = false;
@@ -3954,7 +4070,7 @@ void APlayer_Character::Multicast_PlayRecoverReaction_Implementation()
 
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	if (!AnimInstance) return;
-	
+
 	AnimInstance->Montage_Play(RecoverMontage, 1.f);
 }
 
@@ -3995,12 +4111,6 @@ void APlayer_Character::Client_Out_Implementation()
 			springArmComp->CameraLagSpeed = 3.f;
 			springArmComp->CameraLagMaxDistance = 100.f;
 		}
-
-		// [사운드] 사망시
-		// 캐릭터에 붙였던 귀(이어폰)를 다시 카메라로 원복
-		if (APlayerController* PC = Cast<APlayerController>(GetController())) {
-			PC->ClearAudioListenerOverride();
-		}
 	}
 }
 
@@ -4008,7 +4118,7 @@ void APlayer_Character::Client_Out_Implementation()
 void APlayer_Character::Client_StartAdditionalImage_Implementation(int32 ImageID)
 {
 	if (!AdditionalImageWidgetClass) return;
-	
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC || !PC->IsLocalController()) return;
 
@@ -4030,37 +4140,6 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 		AdditionalImageWidget = nullptr;
 	}
 }
-
-// [사운드]====================================================================
-// [사운드] Type1 : 내 몸에서 재생되는 사운드(3D)
-// 적용하는 곳 : [아이템] 사용시 효과음 재생	// 사운드는 각 아이템의 블루프린트에서 참조설정(Item.h에서 선언됨)
-void APlayer_Character::Multicast_PlaySoundAttached_Implementation(USoundBase* SoundToPlay)
-{
-	if (SoundToPlay) {
-		// 아이템 사용 사운드는 본인 몸에서 나오도록 붙임
-		UGameplayStatics::SpawnSoundAttached(SoundToPlay, GetMesh(), NAME_None, FVector::ZeroVector, EAttachLocation::SnapToTarget, false, 1.f, 1.f, 0.f, nullptr);
-	}
-}
-
-// [사운드] Type2 : 특정 위치에서 재생되는 사운드(3D)
-// 적용하는 곳 : [오브젝트] 폭발음 등 재생시(오브젝트가 파괴될 때 사운드)
-void APlayer_Character::Multicast_PlaySoundAtLocation_Implementation(USoundBase* ObjectDestroySound, FVector PlayLocation)
-{
-	if (ObjectDestroySound) {
-		UGameplayStatics::PlaySoundAtLocation(this, ObjectDestroySound, PlayLocation, 1.f, 1.f, 0.f, nullptr);
-	}
-}
-
-// [사운드] Type3 : 나 혼자 듣는 사운드(2D)
-// 적용하는 곳 : [코인] 습득 사운드 재생 함수(클라이언트:본인만 들림)
-void APlayer_Character::Client_PlaySound2D_Implementation(USoundBase* SoundToPlay)
-{
-	if (SoundToPlay && IsLocallyControlled()) {
-		UGameplayStatics::PlaySound2D(this, SoundToPlay);
-	}
-}
-
-
 
 /*체크해보기*/
 //FMath::Max(A, B) -> A와 B 중 큰 쪽을 반환하는 함수

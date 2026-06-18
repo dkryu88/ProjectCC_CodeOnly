@@ -3,9 +3,9 @@
 
 #include "Equipment.h"
 #include "Net/UnrealNetwork.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
-#include "EffectManagerComponent.h"
 #include "Components/BoxComponent.h"
 
 // Sets default values
@@ -32,7 +32,7 @@ AEquipment::AEquipment(const FObjectInitializer& ObjectInitializer) : Super(Obje
 	PickupCollider->SetGenerateOverlapEvents(true);
 
 	//ÀÌÆåÆ® ´ã´ç ÄÄÆ÷³ÍÆ®
-	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
+	EffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
 }
 
 // Called when the game starts or when spawned

@@ -5,10 +5,10 @@
 #include "Player_Character.h"
 #include "ItemDataAsset.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
-#include "Kismet/GameplayStatics.h"	// [사운드]
 
 AItem::AItem() {
 	bReplicates = true;
@@ -24,11 +24,11 @@ AItem::AItem() {
 	PickupCollider->SetupAttachment(ItemCollider);
 	Mesh->SetupAttachment(MeshPivot);
 
-	// [사운드] 아이템 픽업 공통 사운드
-	static ConstructorHelpers::FObjectFinder<USoundBase> SoundAsset(TEXT("/Script/Engine.SoundCue'/Game/Resources/Sound/Item/PickupSound/Itme_Pickup_Cue.Itme_Pickup_Cue'"));
-	if (SoundAsset.Succeeded()) {
-		ItemPickupSound = SoundAsset.Object;
-	}
+	//상시 이펙트 담당 컴포넌트
+	LifeTimeEffectComp = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Effect"));
+	LifeTimeEffectComp->SetupAttachment(MeshPivot);
+	LifeTimeEffectComp->bAutoActivate = true;
+	LifeTimeEffectComp->SetAutoDestroy(false);
 }
 
 void AItem::OnConstruction(const FTransform& Transform) {
@@ -172,6 +172,10 @@ void AItem::ApplyEquipState()
 {
 	Super::ApplyEquipState();
 
+	if (LifeTimeEffectComp) {
+		LifeTimeEffectComp->Deactivate();
+	}
+
 	//아이템 매쉬와 물리 설정 변경
 	if (Mesh) {
 		Mesh->SetHiddenInGame(true);
@@ -192,14 +196,6 @@ void AItem::ApplyEquipState()
 		UE_LOG(LogTemp, Error, TEXT("No Detected EquippedPlayer"));
 		return; 
 	}
-
-	// [사운드] 아이템 습득시
-	if (EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
-		if (ItemPickupSound) {
-			UGameplayStatics::PlaySound2D(this, ItemPickupSound);
-		}
-	}
-
 	//아이템을 슬롯에 장착
 	AttachToComponent(EquippedPlayer->ItemSlot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 }
@@ -207,6 +203,10 @@ void AItem::ApplyEquipState()
 void AItem::ApplyWorldState()
 {
 	Super::ApplyWorldState();
+
+	if (LifeTimeEffectComp) {
+		LifeTimeEffectComp->Activate(true);
+	}
 
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	if (Mesh) {

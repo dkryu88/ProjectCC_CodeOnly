@@ -35,4 +35,5 @@ protected:
 	bool bCanExitMatch = false;
 
 	FTimerHandle EnableExitTimerHandle;
+
 };

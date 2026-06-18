@@ -59,9 +59,14 @@ public:
 	// 서브클래스 - BP에서 드롭다운으로 WBP를 선택입력하는 칸의 이름 = Ui
 	UPROPERTY(EditDefaultsOnly, Category = "Sniper|UI")
 	TSubclassOf<UUserWidget> ScopeWidgetClass;
-
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ScopeWidget = nullptr;
+	//스나이퍼 줌 애니메이션
+	UPROPERTY(EditDefaultsOnly, Category="Sniper|Animation")
+	UAnimSequence* SniperAimAnimation;
+	//스나이퍼 줌 공격 애니메이션
+	UPROPERTY(EditDefaultsOnly, Category = "Sniper|Animation")
+	UAnimSequence* SniperAttackAnimation;
 	// 카메라의 머리 위 높이
 	UPROPERTY(EditDefaultsOnly, Category="Sniper|Camera")
 	float ScopeCameraHeight = 700.f;
@@ -103,6 +108,9 @@ public:
 
 private:
 	FTimerHandle ScopeLogicTimerHandle;
+
+	//스나이퍼 줌 애니메이션 복구 타이머 핸들
+	FTimerHandle ResumeAimAnimationTimerHandle;
 
 	FRotator ScopeEntryRotation = FRotator::ZeroRotator;
 	FVector2D VirtualCursorOffset = FVector2D::ZeroVector;

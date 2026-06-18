@@ -41,12 +41,6 @@ void AMatch_Event_RandomTeleport::TeleportAllPlayers()
 		FVector NewLocation;
 		if (FindRandomLocation(NewLocation)) {
 			Player->SetActorLocation(NewLocation);
-
-			// [사운드] 텔리포드 효과음
-			if (TeleportSound) {
-				Player->Multicast_PlaySoundAttached(TeleportSound);
-			}
-
 			//텔레포트 후 일시적으로 입력 방지
 			Player->AddInputBlockController(FName("SpeedUpEvent"), true, false, true, false);
 			FTimerHandle BlockTimerHandle;

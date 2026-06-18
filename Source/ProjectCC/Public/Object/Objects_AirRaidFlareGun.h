@@ -20,6 +20,7 @@ class PROJECTCC_API AObjects_AirRaidFlareGun : public AObjects
 public:
 	AObjects_AirRaidFlareGun(const FObjectInitializer& ObjectInitializer);
 	virtual void ApplyAdditionalSetting() override;
+	virtual void BeginPlay() override;
 
 	void InitAirRaid(APlayer_Character* ownPlayer, const FVector& AttackForward);
 

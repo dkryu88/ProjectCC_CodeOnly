@@ -6,6 +6,9 @@
 #include "AllPlayMode_GameInstance.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+//[사운드] 추가
+#include "Effect/AudioManagerSubsystem.h"
+#include "Effect/GameAudioDataAsset.h"
 
 void AResult_PlayerController::BeginPlay() {
 	Super::BeginPlay();
@@ -26,6 +29,15 @@ void AResult_PlayerController::BeginPlay() {
 
 			if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 				ResultWidget->InitWidget(GameInstance->GetMatchResult(), GameInstance->GetMatchResults());
+			}
+		}
+	}
+
+	// [사운드] Ready BGM 재생
+	if (IsLocalController()) {
+		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
+			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->ResultBGM) {
+				AudioSub->PlayBGM(AudioSub->GetAudioData()->ResultBGM, 0.5f);
 			}
 		}
 	}

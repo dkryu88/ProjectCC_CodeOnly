@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -6,9 +6,11 @@
 #include "Engine/GameInstance.h"
 #include "AllPlayMode_GameInstance.generated.h"
 
+class UGameAudioDataAsset;	//[»ç¿îµå] Ãß°¡
+
 /**
- * ê²Œì„ì´ ì‹¤í–‰ë˜ëŠ” ë™ì•ˆ ê³„ì† ì‚´ì•„ìˆëŠ” í´ë˜ìŠ¤
- * ê²Œì„ ì „ì²´ì— ì˜í–¥ì„ ë¯¸ì¹  ê²ƒë“¤ì„ ì €ì¥
+ * °ÔÀÓÀÌ ½ÇÇàµÇ´Â µ¿¾È °è¼Ó »ì¾ÆÀÖ´Â Å¬·¡½º
+ * °ÔÀÓ ÀüÃ¼¿¡ ¿µÇâÀ» ¹ÌÄ¥ °ÍµéÀ» ÀúÀå
  */
 
 USTRUCT(BlueprintType)
@@ -49,22 +51,22 @@ UCLASS()
 class PROJECTCC_API UAllPlayMode_GameInstance : public UGameInstance
 {
 	GENERATED_BODY()
-	
+
 
 public:
-	//ê° í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•  ë‹‰ë„¤ì„ ì„¤ì •
+	//°¢ ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÒ ´Ğ³×ÀÓ ¼³Á¤
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void SetLocalPlayerNickname(const FString& NewNickName);
 
-	//ê° í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•˜ëŠ” ë‹‰ë„¤ì„ íšë“
+	//°¢ ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÏ´Â ´Ğ³×ÀÓ È¹µæ
 	UFUNCTION(BlueprintPure, Category = "Title")
 	FString GetPlayerLocalNickname();
-	//ê° í”Œë ˆì´ì–´ì˜ ì´ˆìƒí™” ë²ˆí˜¸ íšë“/ì„¤ì •
+	//°¢ ÇÃ·¹ÀÌ¾îÀÇ ÃÊ»óÈ­ ¹øÈ£ È¹µæ/¼³Á¤
 	UFUNCTION(BlueprintCallable)
 	void SetLocalPortraitId(int32 PortraitId) { LocalPortraitId = PortraitId; }
 	UFUNCTION(BlueprintPure)
 	int32 GetLocalPortraitId() { return LocalPortraitId; }
-	//í”Œë ˆì´ì–´ì˜ í˜„ì¬ ê²Œì„ íë¦„ ìƒíƒœ íšë“/ì„¤ì •
+	//ÇÃ·¹ÀÌ¾îÀÇ ÇöÀç °ÔÀÓ Èå¸§ »óÅÂ È¹µæ/¼³Á¤
 	UFUNCTION(BlueprintCallable)
 	void SetMatchFlowState(EMatchFlowState State) { MatchFlowState = State; }
 	UFUNCTION(BlueprintPure)
@@ -78,36 +80,21 @@ public:
 	UPROPERTY()
 	bool bPendingCreateLANSession = false;
 
-	// [ì‚¬ìš´ë“œ] BGM ì¬ìƒ ê´€ë ¨ í•¨ìˆ˜============================================================
-	// BGM ì¬ìƒ
-	UFUNCTION(BlueprintCallable, Category="Sound")
-	void PlayBgm(USoundBase* NewBgm);
+	//[»ç¿îµå] ¿£Áø ÃÊ±âÈ­ ÇÔ¼ö ¿À¹ö¶óÀÌµå
+	virtual void Init() override;
 
-	// í˜„ì¬ ì¬ìƒì¤‘ì¸ BGM ì •ì§€
-	UFUNCTION(BlueprintCallable, Category="Sound")
-	void StopBgm();
-
-	// BGM ì¬ìƒê¸¸ì´ ì´ˆ ë‹¨ìœ„ë¡œ ë³€í™˜
-	UFUNCTION(BlueprintPure,Category="Sound")
-	float GetCurrnetBgmDuration() const;
-
-	// ì§€ì •í•œ ë³€í™”ì‹œê°„ë™ì•ˆ ë³¼ë¥¨ ì¡°ì ˆì‹œí‚´(ìœ ì§€ì‹œê°„ì´ ì•„ë‹ˆë¼ ë³€í™”ë˜ëŠ” ì‹œê°„, íƒ€ì¼“ë³¼ë¥¨ : 20%ë¡œ ì¤„ì´ê³  ì‹¶ë‹¤ë©´ 0.2f ì…ë ¥)
-	UFUNCTION(BlueprintCallable, Category="Sound")
-	void AdjustBgmVolume(float FadeTime, float TargetVolum);
-
-	// bgm ì¬ìƒì†ë„(pitch)ë¥¼ ë³€ê²½
-	UFUNCTION(BlueprintCallable, Category = "Sound")
-	void SetBgmPitch(float NewPitch);
-
+	//[»ç¿îµå] µ¥ÀÌÅÍ¿¡¼Â ÂüÁ¶
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
+	UGameAudioDataAsset* AllAudioData;
 
 protected:
-	//ê° í”Œë ˆì´ì–´ë“¤ì˜ ë‹‰ë„¤ì„
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Title")
+	//°¢ ÇÃ·¹ÀÌ¾îµéÀÇ ´Ğ³×ÀÓ
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Title")
 	FString LocalPlayerNickName;
-	//ê° í”Œë ˆì´ì–´ì˜ ì´ˆìƒí™” ë²ˆí˜¸
+	//°¢ ÇÃ·¹ÀÌ¾îÀÇ ÃÊ»óÈ­ ¹øÈ£
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	int32 LocalPortraitId = 0;
-	//í”Œë ˆì´ì–´ì˜ í˜„ì¬ ê²Œì„ íë¦„ ìƒíƒœ
+	//ÇÃ·¹ÀÌ¾îÀÇ ÇöÀç °ÔÀÓ Èå¸§ »óÅÂ
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	EMatchFlowState MatchFlowState = EMatchFlowState::Idle;
 
@@ -116,27 +103,6 @@ protected:
 
 	UPROPERTY()
 	TArray<FMatchResultData> MatchResults;
-
-	// [ì‚¬ìš´ë“œ] =============================================================================
-	// í˜„ì¬ ì¬ìƒì¤‘ì¸ ì˜¤ë””ì˜¤ ê¸°ì–µí•˜ê³  ì œì–´í•˜ê¸° ìœ„í•œ ì»´í¬ë„ŒíŠ¸ í¬ì¸í„°
-	UPROPERTY(BlueprintReadOnly, Category = "Sound", meta = (AllowPrivateAccess = "true"))
-	class UAudioComponent* CurrentBgmComponent;
-
-	// ë‹¤ìŒ ì¬ìƒí•  BGMì„ ì„ì‹œë¡œ ê¸°ì–µí•  ë³€ìˆ˜
-	UPROPERTY()
-	USoundBase* NextBgm;
-
-	// Fade Out ëŒ€ê¸°ë¥¼ ìœ„í•œ íƒ€ì´ë¨¸ í•¸ë“¤
-	FTimerHandle BgmTransitionTimer;
-
-	// 1ì´ˆ ë’¤ ì‹¤ì œë¡œ Fade Inì„ ì‹œì‘í•  ë‚´ë¶€ í•¨ìˆ˜
-	void PlayNextBgm();
-
-	// BGM ì „í™˜ ì‹œ ì‚¬ìš©í•  í˜ì´ë“œ ë° íƒ€ì´ë¨¸ ì‹œê°„ (ê¸°ë³¸ê°’ 1ì´ˆ)
-	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (AllowPrivateAccess = "true"))
-	float BgmFadeDuration = 1.f;
-
 };
 
-//BlueprintPure : ì‹¤í–‰ í•€ ì—†ì´ ë‹¨ìˆœíˆ ê°’ë§Œ Returní•˜ëŠ” í•¨ìˆ˜
-//meta = (AllowPrivateAccess = "true" : protected ë³€ìˆ˜ë¥¼ ìì‹ ë¸”ë£¨í”„ë¦°íŠ¸ê°€ êº¼ë‚´ ì“¸ ìˆ˜ ìˆê²Œ ê°•ì œí•˜ëŠ” ì–¸ë¦¬ì–¼ ê·œì¹™
+//BlueprintPure : ½ÇÇà ÇÉ ¾øÀÌ ´Ü¼øÈ÷ °ª¸¸ ReturnÇÏ´Â ÇÔ¼ö

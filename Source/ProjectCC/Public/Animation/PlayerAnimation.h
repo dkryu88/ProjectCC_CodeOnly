@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
+#include "WeaponDataAsset.h"
 #include "PlayerAnimation.generated.h"
 
 /**

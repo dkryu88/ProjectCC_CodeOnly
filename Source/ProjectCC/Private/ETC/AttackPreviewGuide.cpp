@@ -17,17 +17,24 @@ AAttackPreviewGuide::AAttackPreviewGuide()
 	PathMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("PathMesh"));
 	PathMesh->SetupAttachment(RangeMesh);
 
+	SecondPathMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("SecondPathMesh"));
+	SecondPathMesh->SetupAttachment(RangeMesh);
+
 	RangeMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PathMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SecondPathMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	RangeMesh->SetGenerateOverlapEvents(false);
 	PathMesh->SetGenerateOverlapEvents(false);
+	SecondPathMesh->SetGenerateOverlapEvents(false);
 
 	RangeMesh->SetCastShadow(false);
 	PathMesh->SetCastShadow(false);
+	SecondPathMesh->SetCastShadow(false);
 
 	RangeMesh->TranslucencySortPriority = 0;
 	PathMesh->TranslucencySortPriority = 10;
+	SecondPathMesh->TranslucencySortPriority = 12;
 
 	SetActorHiddenInGame(true);
 }
@@ -55,17 +62,49 @@ void AAttackPreviewGuide::UpdatePreview(AMapConstructor* Map, const FVector& Ori
 		bCachedShowAttackSector = PreviewData.bShowAttackSector;
 		bCachedShowAttackRangeCircle = PreviewData.bShowAttackRangeCircle;
 		bCachedShowAttackPath = PreviewData.bShowAttackPath;
+		bCachedShowAttackSecondPath = PreviewData.bShowAttackSecondPath;
 		bCachedBlockByWall = PreviewData.bBlockByWall;
 
 		bCachedOnlySameHeight = PreviewData.bOnlySameHeight;
 		CachedBaseGridZ = PreviewData.BaseGridZ;
-	
+
 		CachedPreviewRange = PreviewData.PreviewRange;
+		CachedSecondPreviewRange = PreviewData.SecondPreviewRange;
 		CachedHalfAngleDegree = PreviewData.HalfAngleDegree;
 		CachedPathRadius = PreviewData.PathRadius;
+		CachedSecondPathRadius = PreviewData.SecondPathRadius;
 	}
 
 	float PathRangeOverride = -1.f;
+	float SecondPathRangeOverride = -1.f;
+
+	FAimPreviewVisualData SecondPathData = PreviewData;
+	if (PreviewData.bShowAttackSecondPath) {
+		SecondPathData.bShowAttackPath = true;
+		SecondPathData.PreviewRange = PreviewData.SecondPreviewRange;
+		SecondPathData.PreviewRadius = PreviewData.SecondPathRadius;
+		SecondPathData.PathRadius = PreviewData.SecondPathRadius;
+		SecondPathData.PathZOffset = PreviewData.PathZOffset + 1.0f;
+
+		if (PreviewData.bBlockByWall) {
+			FVector TheForward2D = Forward;
+			TheForward2D.Z = 0.f;
+
+			if (TheForward2D.IsNearlyZero()) TheForward2D = FVector::ForwardVector;
+			else TheForward2D = TheForward2D.GetSafeNormal();
+
+			FVector SecondPathEnd = Origin + TheForward2D * SecondPathData.PreviewRange;
+
+			float HitDistance = -1.f;
+			bool bLineOfSight = HavingPreviewLineOfSight(Origin, SecondPathEnd, SecondPathData, &HitDistance, true);
+
+			if (!bLineOfSight && HitDistance >= 0.f)
+			{
+				float BlockedOverPath = 15.f;
+				SecondPathRangeOverride = FMath::Clamp(HitDistance + BlockedOverPath, 0.f, SecondPathData.PreviewRange);
+			}
+		}
+	}
 
 	if (PreviewData.bShowAttackPath && PreviewData.bBlockByWall) {
 		FVector PathEnd = Origin + Forward2D * PreviewData.PreviewRange;
@@ -80,6 +119,7 @@ void AAttackPreviewGuide::UpdatePreview(AMapConstructor* Map, const FVector& Ori
 	}
 	if (RangeMID) UpdateMaterialParams(RangeMID, Origin, Forward, PreviewData);
 	if (PathMID) UpdateMaterialParams(PathMID, Origin, Forward, PreviewData, PathRangeOverride);
+	if (SecondPathMID) UpdateMaterialParams(SecondPathMID, Origin, Forward, SecondPathData, SecondPathRangeOverride);
 }
 
 void AAttackPreviewGuide::HidePreview()
@@ -94,9 +134,14 @@ void AAttackPreviewGuide::HidePreview()
 		PathMesh->SetVisibility(false);
 		PathMesh->ClearAllMeshSections();
 	}
+	if (SecondPathMesh) {
+		SecondPathMesh->SetVisibility(false);
+		SecondPathMesh->ClearAllMeshSections();
+	}
 
 	RangeMID = nullptr;
 	PathMID = nullptr;
+	SecondPathMID = nullptr;
 
 	CachedOriginCell = FIntPoint(100, 100);
 	CachedForward2D = FVector::ZeroVector;
@@ -104,14 +149,17 @@ void AAttackPreviewGuide::HidePreview()
 	bCachedShowAttackSector = false;
 	bCachedShowAttackRangeCircle = false;
 	bCachedShowAttackPath = false;
+	bCachedShowAttackSecondPath = false;
 	bCachedBlockByWall = false;
 
 	bCachedOnlySameHeight = true;
 	CachedBaseGridZ = -1;
 
 	CachedPreviewRange = -1.f;
+	CachedSecondPreviewRange = -1.f;
 	CachedHalfAngleDegree = -1.f;
 	CachedPathRadius = -1.f;
+	CachedSecondPathRadius = -1.f;
 }
 
 FIntPoint AAttackPreviewGuide::GetOriginCell(AMapConstructor* Map, const FVector& Origin)
@@ -142,13 +190,16 @@ bool AAttackPreviewGuide::ShouldRebuild(AMapConstructor* Map, const FVector& Ori
 	if (bCachedShowAttackRangeCircle != PreviewData.bShowAttackRangeCircle) return true;
 	if (bCachedShowAttackPath != PreviewData.bShowAttackPath) return true;
 	if (bCachedBlockByWall != PreviewData.bBlockByWall) return true;
+	if (bCachedShowAttackSecondPath != PreviewData.bShowAttackSecondPath) return true;
 
 	if (bCachedOnlySameHeight != PreviewData.bOnlySameHeight) return true;
 	if (CachedBaseGridZ != PreviewData.BaseGridZ) return true;
 
 	if (!FMath::IsNearlyEqual(CachedPreviewRange, PreviewData.PreviewRange, 1.f)) return true;
+	if (!FMath::IsNearlyEqual(CachedSecondPreviewRange, PreviewData.SecondPreviewRange, 1.f)) return true;
 	if (!FMath::IsNearlyEqual(CachedHalfAngleDegree, PreviewData.HalfAngleDegree, 0.1f)) return true;
 	if (!FMath::IsNearlyEqual(CachedPathRadius, PreviewData.PathRadius, 0.1f)) return true;
+	if (!FMath::IsNearlyEqual(CachedSecondPathRadius, PreviewData.SecondPathRadius, 0.1f)) return true;
 
 	return false;
 }
@@ -159,12 +210,15 @@ void AAttackPreviewGuide::RebuildMeshes(AMapConstructor* Map, const FVector& Ori
 
 	RangeMesh->ClearAllMeshSections();
 	PathMesh->ClearAllMeshSections();
+	SecondPathMesh->ClearAllMeshSections();
 
 	RangeMesh->SetVisibility(false);
 	PathMesh->SetVisibility(false);
+	SecondPathMesh->SetVisibility(false);
 
 	RangeMID = nullptr;
 	PathMID = nullptr;
+	SecondPathMID = nullptr;
 
 	if (PreviewData.bShowAttackSector || PreviewData.bShowAttackRangeCircle) {
 		RangeMesh->SetVisibility(true);
@@ -188,6 +242,24 @@ void AAttackPreviewGuide::RebuildMeshes(AMapConstructor* Map, const FVector& Ori
 		}
 
 		PathMesh->TranslucencySortPriority = 10;
+	}
+
+	if (PreviewData.bShowAttackSecondPath) {
+		SecondPathMesh->SetVisibility(true);
+		FAimPreviewVisualData SecondPathData = PreviewData;
+		SecondPathData.bShowAttackPath = true;
+		SecondPathData.PreviewRange = PreviewData.SecondPreviewRange;
+		SecondPathData.PreviewRadius = PreviewData.SecondPathRadius;
+		SecondPathData.PathRadius = PreviewData.SecondPathRadius;
+		SecondPathData.PathZOffset = PreviewData.PathZOffset + 1.f;
+
+		BuildTopFaceMesh(Map, Origin, Forward, SecondPathData, SecondPathData.PathZOffset, SecondPathMesh);
+		if (PathMaterial) {
+			SecondPathMID = UMaterialInstanceDynamic::Create(PathMaterial, this);
+			SecondPathMesh->SetMaterial(0, SecondPathMID);
+		}
+
+		SecondPathMesh->TranslucencySortPriority = 12;
 	}
 }
 
@@ -215,7 +287,7 @@ bool AAttackPreviewGuide::HavingPreviewLineOfSight(const FVector& Origin, const 
 		ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
 		ObjectParams.AddObjectTypesToQuery(ECC_GameTraceChannel4);
 	}
-	
+
 	FHitResult Hit;
 	bool bBlocked = GetWorld()->LineTraceSingleByObjectType(Hit, Start, End, ObjectParams, Params);
 
@@ -248,7 +320,7 @@ void AAttackPreviewGuide::BuildTopFaceMesh(AMapConstructor* Map, const FVector& 
 {
 	if (!Map || !TargetMesh) return;
 
-	bool bIsPathMesh = (TargetMesh == PathMesh);
+	bool bIsPathMesh = (TargetMesh == PathMesh || TargetMesh == SecondPathMesh);
 
 	FVector Forward2D = Forward;
 	Forward2D.Z = 0.f;

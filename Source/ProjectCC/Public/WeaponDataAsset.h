@@ -7,6 +7,7 @@
 #include "Animation/EquipmentAnimation.h"
 #include "Objects.h"
 #include "WeaponStats.h"
+#include "Effect/FGameEffectData.h"
 #include "Player_FunctionInterActionReason.h"
 #include "WeaponDataAsset.generated.h"
 
@@ -132,4 +133,21 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Preview")
 	float AimFlowSpeed = 0.2f;
+	
+	//무기 이펙트--------------------------------------------------------
+	//공격 이펙트 (근접/ShootHS)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData AttackEffect;
+	//발사 이펙트 (Shoot/ShootHS)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ShootEffect;
+	//타격 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData HitEffect;
+	//소멸 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData DestroyEffect;
+	//타격 이펙트 (무기 던지기)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ThrowHitEffect;
 };

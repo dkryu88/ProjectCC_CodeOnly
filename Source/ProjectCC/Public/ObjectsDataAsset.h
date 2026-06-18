@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Objects.h"
+#include "Effect/FGameEffectData.h"
 #include "Engine/DataAsset.h"
 #include "Animation/EquipmentAnimation.h"
 #include "Player_FunctionInterActionReason.h"
@@ -60,6 +61,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	bool bCanEquip = false;
 	
+	//장착 후 던질 때 선딜레이
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (EditCondition = "bCanEquip", EditCondtitionHide))
+	float ThrowEarlyDelay = 0.15f;
+
 	//움직임 가능 여부
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	bool bCanMove = false;
@@ -108,6 +113,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<UTexture2D> ObjectsIcon = nullptr;
 
+	//애니메이션----------------------------------------------------------------------
 	//물체 기본 애니메이션
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Grip")
 	TObjectPtr<UAnimSequence> ObjectsGripSequence;
@@ -119,5 +125,16 @@ public:
 	//물체 행동별 애니메이션
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Throw")
 	TMap<EFunctionInterActionReason, FEquipmentActionAnimation> AdditionalAnimation;
+
+	//이펙트--------------------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
+	FGameEffectData HitEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData DestroyEffect;
+
+	//타격 이펙트 (물체 던지기)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ThrowHitEffect;
 };
 

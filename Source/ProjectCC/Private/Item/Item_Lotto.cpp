@@ -16,10 +16,6 @@ bool AItem_Lotto::UseEffect_Implementation(APlayer_Character* Player)
 
 		PS->AddCoin(RewardCoin);
 		UE_LOG(LogTemp, Warning, TEXT("[Server] Lotto Success! Coin: %d"), RewardCoin);
-
-		// [»ç¿îµå]
-		Player->Client_PlaySound2D(ItemUseSound);
-
 		return true;
 	}
 

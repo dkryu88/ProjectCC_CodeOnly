@@ -5,7 +5,6 @@
 #include "Player_Character.h"
 #include "MapConstructor.h"
 #include "Engine/OverlapResult.h"
-#include "Kismet/GameplayStatics.h"	// [사운드]
 
 AObjects_Bomb::AObjects_Bomb(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -14,9 +13,9 @@ AObjects_Bomb::AObjects_Bomb(const FObjectInitializer& ObjectInitializer) : Supe
 void AObjects_Bomb::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	map = NowMap;
-
+	
 	if (!map && OwnPlayer) {
 		map = OwnPlayer->NowMap;
 	}
@@ -47,17 +46,6 @@ void AObjects_Bomb::Explode()
 	}
 	if (!map) return;
 
-	// [사운드]
-	if (HasAuthority()) {
-		if (OwnPlayer) {
-			SetOwner(OwnPlayer);
-
-			if (BombExplosionSound) {
-				OwnPlayer->Multicast_PlaySoundAtLocation(BombExplosionSound, GetActorLocation());
-			}
-		}
-	}
-
 	bExploded = true;
 
 	FVector ExplosionOrigin = GetActorLocation();
@@ -82,27 +70,25 @@ void AObjects_Bomb::Explode()
 			APlayer_Character* Victim = Cast<APlayer_Character>(Result.GetActor());
 			AObjects* TargetObjects = Cast<AObjects>(Result.GetActor());
 			if (Victim) {
-				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false);
+				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false, 750.f * 4.f);
 			}
 			if (TargetObjects) {
-				TargetObjects->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, false);
+				TargetObjects->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, false, 750.f * 2.f);
 			}
 		}
 	}
 
-	//Destroy();
-	// 네트워크 패킷 배달을 위한 0.5초 수명 연장
-	SetActorHiddenInGame(true);
-	SetActorEnableCollision(false);
-	SetActorTickEnabled(false);
-	SetLifeSpan(0.5f);
+	//이펙트 파라미터 설정 및 재생
+	FGameEffectContext EffectContext;
+	EffectContext.SourceActor = this;
+	EffectContext.SourceComponent = GetRootComponent();
+	EffectContext.WorldLocation = ExplosionOrigin;
+	EffectContext.WorldRotation = FRotator::ZeroRotator;
+	EffectContext.HitPoint = ExplosionOrigin;
+	EffectContext.HitNormal = FVector::UpVector;
+	
+	PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
+	Destroy();
 }
 
-// [사운드] 
-//void AObjects_Bomb::Multicast_PlayBombExplosionSound_Implementation(FVector PlayLocation)
-//{
-//	if (BombExplosionSound) {						
-//		UGameplayStatics::PlaySoundAtLocation(this, BombExplosionSound, PlayLocation, FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr);
-//	}
-//}

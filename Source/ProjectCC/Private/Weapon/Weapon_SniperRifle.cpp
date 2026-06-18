@@ -175,9 +175,10 @@ void AWeapon_SniperRifle::ApplyScopeModeEffects(bool bEnabled)
 	EquippedPlayer->bIsDodgeLocked = bEnabled;
 	EquippedPlayer->bIsInteractionLocked = bEnabled;
 	EquippedPlayer->bCanCamControl = !bEnabled;
-
+	
 	if (bEnabled) {
 		EquippedPlayer->AddSpeedController(TEXT("SniperZoom"), 0.f, 0.f);
+		EquippedPlayer->Multicast_PlayAnimationDynamic(SniperAimAnimation, FName(TEXT("DefaultSlot")), 0.15f, 0.05f, 1.f, 999999, 0);
 
 		if (EquippedPlayer->GetCharacterMovement()) {
 			EquippedPlayer->GetCharacterMovement()->StopMovementImmediately();
@@ -185,6 +186,8 @@ void AWeapon_SniperRifle::ApplyScopeModeEffects(bool bEnabled)
 	}
 	else {
 		EquippedPlayer->RemoveSpeedControllerByName(TEXT("SniperZoom"));
+		GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+		EquippedPlayer->Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.15f);
 	}
 
 	APlayerController* PC = Cast<APlayerController>(EquippedPlayer->GetController());
@@ -382,6 +385,20 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 	if (!EquippedPlayer || !EquippedPlayer->IsLocallyControlled()) return;
 	if (!bIsScopeModeActive) return;
 
+	EquippedPlayer->Multicast_PlayAnimationDynamic(SniperAttackAnimation, FName(TEXT("DefaultSlot")), 0.05f, 0.1f, 1.f, 1, 0);
+	float AnimLength = SniperAttackAnimation ? SniperAttackAnimation->GetPlayLength() : 0.f;
+	float StartTime = 0.f;
+	float RemainTime = (AnimLength - StartTime) / 1.f;
+	RemainTime = FMath::Max(0.01f, RemainTime - 0.1f);
+
+	GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
+	GetWorldTimerManager().SetTimer(ResumeAimAnimationTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+		if (!bIsScopeModeActive) return;
+		if (EquippedPlayer->bIsOut || EquippedPlayer->bIsDodging || EquippedPlayer->bIsHitted) return;
+		EquippedPlayer->Multicast_PlayAnimationDynamic(SniperAimAnimation, FName(TEXT("DefaultSlot")), 0.05f, 0.15f, 1.f, 999999, 0);
+	}), RemainTime, false);
+
+
 	APlayerController* PC = Cast<APlayerController>(EquippedPlayer->GetController());
 	if (!PC) return;
 
@@ -413,6 +430,7 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 		Server_ExecuteFireTrace(TraceStart, TraceEnd);
 
 		if (bAutoExitScopeAfterFire) {
+			GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
 			ApplyScopeModeEffects(false);
 		}
 	}
@@ -424,6 +442,7 @@ void AWeapon_SniperRifle::HandleOwnerTakenDamage(AActor* DamagedActor, float Dam
 	// 피격 시 즉시 저격 모드 해제
 	if (bIsScopeModeActive && bAutoExitScopeOnDamage) {
 		bIsScopeModeActive = false;
+		GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
 		ApplyScopeModeEffects(false);
 		Client_ForceExitScope();
 	}

@@ -28,9 +28,17 @@ void AObjects_AirRaidFlareGun::ApplyAdditionalSetting()
 	PhysicsCollider->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PhysicsCollider->SetCollisionResponseToAllChannels(ECR_Ignore);
 
-	PhysicsCollider->SetSimulatePhysics(true);
+	PhysicsCollider->SetSimulatePhysics(false);
 	PhysicsCollider->SetEnableGravity(false);
 	PhysicsCollider->WakeAllRigidBodies();
+
+	
+}
+
+void AObjects_AirRaidFlareGun::BeginPlay()
+{
+	Super::BeginPlay();
+	SetActorRotation(FRotator(0.f, 0.f, -90.f));
 }
 
 void AObjects_AirRaidFlareGun::InitAirRaid(APlayer_Character* ownPlayer, const FVector& AttackForward)

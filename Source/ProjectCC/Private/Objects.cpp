@@ -11,10 +11,11 @@
 #include "Player_State.h"
 #include "PlayerTransformationComponent.h"
 #include "PlayMode_Match.h"
-#include "EffectManagerComponent.h"
 #include "MapConstructor.h"
 #include "Objects_HPWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraComponent.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -65,8 +66,13 @@ AObjects::AObjects(const FObjectInitializer& ObjectInitializer)
 	InterActionCollider->SetGenerateOverlapEvents(true);
 	InterActionCollider->SetupAttachment(PhysicsCollider);
 	//이펙트 담당 컴포넌트 부착
-	EffectManagerComp = CreateDefaultSubobject<UEffectManagerComponent>(TEXT("EffectManager"));
+	ObjectsEffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
 
+	//상시 이펙트 담당 컴포넌트
+	LifeTimeEffectComp = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Effect"));
+	LifeTimeEffectComp->SetupAttachment(MeshPivot);
+	LifeTimeEffectComp->bAutoActivate = true;
+	LifeTimeEffectComp->SetAutoDestroy(false);
 }
 
 /*실제 자식 class PhysicsCollider 생성 예시
@@ -432,7 +438,7 @@ float AObjects::TakeDamage(float damage, struct FDamageEvent const& DamageEvent,
 }
 
 //물체 데미지 적용 처리
-float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage)
+float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack)
 {
 	if (!HasAuthority()) return 0.f;
 	if (Damage < 0) return 0.f;
@@ -448,6 +454,9 @@ float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlaye
 	if (AObjects* Object = Cast<AObjects>(DamageCauser)) {
 		AttackDir = GetActorLocation() - Object->GetActorLocation();
 		KnockBackStrength = Object->ObjectsData->KnockBackStrength;
+	}
+	if (OverrideKnockBack >= 0.f) {
+		KnockBackStrength = OverrideKnockBack;
 	}
 	AttackDir.Z = 0.f;
 	AttackDir = AttackDir.GetSafeNormal();
@@ -573,7 +582,18 @@ void AObjects::ApplyEquipState()
 		}
 
 		if (OwnPlayer && OwnPlayer->GetMesh()) {
-			AttachToComponent(OwnPlayer->ObjectsSlot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			AttachToComponent(OwnPlayer->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("SK_PlayerHand"));
+			if (!GripSocketName.IsNone() && Mesh && Mesh->DoesSocketExist(GripSocketName)) {
+				FTransform HandSocketWorld = OwnPlayer->GetMesh()->GetSocketTransform(TEXT("SK_PlayerHand"), RTS_World);
+
+				FQuat GripSocketWorldRotation = Mesh->GetSocketQuaternion(GripSocketName);
+				FQuat DeltaRotation = HandSocketWorld.GetRotation() * GripSocketWorldRotation.Inverse();
+				AddActorWorldRotation(DeltaRotation);
+
+				FVector GripSocketWorldLocation = Mesh->GetSocketLocation(GripSocketName);
+				FVector Offset = HandSocketWorld.GetLocation() - GripSocketWorldLocation;
+				AddActorWorldOffset(Offset);
+			}
 		}
 
 	}
@@ -1091,3 +1111,32 @@ void AObjects::Func_AttackedByPlayer_Implementation(APlayer_Character* AttackPla
 
 //물체 물리 추가 설정 (상속 받는 클래스에서 지정)
 void AObjects::ApplyAdditionalSetting() {}
+
+FGameEffectData* AObjects::GetObjectsEffectData(EEffectType EffectType, FName CustomEffectName)
+{
+	switch (EffectType) {
+	case EEffectType::Spawn:
+		return &SpawnEffect;
+	case EEffectType::Hit:
+		return &HitEffect;
+	case EEffectType::Destroy:
+		return &DestroyEffect;
+	case EEffectType::Custom:
+		if (!CustomEffectName.IsNone()) {
+			FGameEffectData* CustomEffect = CustomEffects.Find(CustomEffectName);
+			return CustomEffect;	// 누락
+		}
+		else return nullptr;
+	default:
+		return nullptr;
+	}
+}
+
+void AObjects::PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)
+{
+	FGameEffectData* EffectData = GetObjectsEffectData(EffectType);
+	if (!EffectData) return;
+	if (!ObjectsEffectManagerComp) return;
+
+	ObjectsEffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, RuntimeParams);
+}

@@ -536,20 +536,20 @@ void AMapConstructor::GetTopBlocksInRange(const FVector& WorldOrigin, float Rang
 	for (int32 x = CenterX - SearchRadius; x <= CenterX + SearchRadius; x++) {
 		for (int32 y = CenterY - SearchRadius; y <= CenterY + SearchRadius; y++) {
 			if (x < 0 || x >= Max_X || y < 0 || y >= Max_Y) continue;
-			int32 TopZ = -1;
 
-			if (!FindTopBlockZAtXY(x, y, TopZ)) continue;
-			if (!IsValidGrid(x, y, TopZ)) continue;
-			if (IsEmptyBlock(x, y, TopZ)) continue;
-			if (!IsTopBlock(x, y, TopZ)) continue;
+			for (int32 z = 0; z < Max_Z; ++z) {
+				if (!IsValidGrid(x, y, z)) continue;
+				if (IsEmptyBlock(x, y, z)) continue;
+				if (!IsTopBlock(x, y, z)) continue;
+				FVector TopCenter = GridToWorldCenter(x, y, z);
+				FVector Diff = TopCenter - WorldOrigin;
+				Diff.Z = 0.f;
 
-			FVector TopCenter = GridToWorldCenter(x, y, TopZ);
-			FVector Diff = TopCenter - WorldOrigin;
-			Diff.Z = 0.f;
+				if (Diff.SizeSquared() > MaxDistSq) continue;
 
-			if (Diff.SizeSquared() > MaxDistSq) continue;
-
-			OutGrids.Add(FIntVector(x, y, TopZ));
+				OutGrids.Add(FIntVector(x, y, z));
+				
+			}
 		}
 	}
 }
