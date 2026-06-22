@@ -90,7 +90,7 @@ protected:
 
 	//플레이 버튼 입력 시 기능
 	UFUNCTION()
-	void HandlePlayRequested(FString NickName);
+	void HandlePlayRequested(FString NickName, EMatchMode MatchMode);	//[4인]수정-2번째 인자 추가
 	UFUNCTION()
 	void HandleCancelRequested();
 

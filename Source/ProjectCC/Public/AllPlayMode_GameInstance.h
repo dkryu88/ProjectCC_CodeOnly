@@ -47,6 +47,15 @@ enum class EMatchFlowState : uint8 {
 	PreMatch
 };
 
+//[4인]추가
+UENUM(BlueprintType)
+enum class EMatchMode : uint8 {
+	None,
+	TwoPlayers,
+	ThreePlayers,
+	FourPlayers
+};
+
 UCLASS()
 class PROJECTCC_API UAllPlayMode_GameInstance : public UGameInstance
 {
@@ -87,6 +96,22 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
 	UGameAudioDataAsset* AllAudioData;
 
+	//[4인]추가
+	UFUNCTION(BlueprintCallable, Category = "Match")
+	void SetSelectedMatchMode(EMatchMode Mode) { SelectedMatchMode = Mode; }
+	//[4인]추가
+	UFUNCTION(BlueprintCallable, Category = "Match")
+	EMatchMode GetSelectedMatchMode() const { return SelectedMatchMode; }
+	//[4인]추가-매치모드에 따른 최대 인원수 반환하는 헬퍼 함수
+	int32 GetMaxPlayersByMode() const {
+		switch (SelectedMatchMode) {
+		case EMatchMode::TwoPlayers:	return 2;
+		case EMatchMode::ThreePlayers:	return 3;
+		case EMatchMode::FourPlayers:	return 4;
+		default:						return 2;
+		}
+	}
+
 protected:
 	//각 플레이어들의 닉네임
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Title")
@@ -103,6 +128,10 @@ protected:
 
 	UPROPERTY()
 	TArray<FMatchResultData> MatchResults;
+
+	//[4인]추가
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Match")
+	EMatchMode SelectedMatchMode = EMatchMode::TwoPlayers;
 };
 
 //BlueprintPure : 실행 핀 없이 단순히 값만 Return하는 함수

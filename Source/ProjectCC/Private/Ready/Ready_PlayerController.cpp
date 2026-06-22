@@ -16,15 +16,30 @@ void AReady_PlayerController::BeginPlay()
 
 	if (!IsLocalController()) return;
 
-	if (Ready_LoadingWidgetClass && !Ready_LoadingWidget) {
-		Ready_LoadingWidget = CreateWidget<UReady_LoadingWidget>(this, Ready_LoadingWidgetClass);
+	//if (Ready_LoadingWidgetClass && !Ready_LoadingWidget) {
+	//	Ready_LoadingWidget = CreateWidget<UReady_LoadingWidget>(this, Ready_LoadingWidgetClass);
+	//	if (Ready_LoadingWidget) {
+	//		Ready_LoadingWidget->AddToViewport(100);
+	//	}
+	//}
+
+	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	if (!GameInstance) return;
+	//[추가] 매칭상태를 None으로 다시 풀어줌	
+	// //풀어주지 않으면 게임완료 후 result에서 title로 넘어갔을 때, 여전히 Joining상태여서 Start버튼이 나타나지 않음
+	GameInstance->SetMatchFlowState(EMatchFlowState::None);
+
+	//[4인]추가-설정된 인원수에 따라 적합한 위젯 클래스 선택
+	int32 MaxPlayers = GameInstance->GetMaxPlayersByMode();
+	TSubclassOf<UReady_LoadingWidget> SelectedWidgetClass = (MaxPlayers >= 3) ? Ready_LoadingWidgetClass_4P : Ready_LoadingWidgetClass_2P;
+
+	//[4인]수정-위치이동(위에서 아래로)
+	if (SelectedWidgetClass && !Ready_LoadingWidget) {
+		Ready_LoadingWidget = CreateWidget<UReady_LoadingWidget>(this, SelectedWidgetClass);
 		if (Ready_LoadingWidget) {
 			Ready_LoadingWidget->AddToViewport(100);
 		}
 	}
-
-	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
-	if (!GameInstance) return;
 
 	if (!bDataSubmitted) {
 		Server_SubmitData(GameInstance->GetPlayerLocalNickname(), GameInstance->GetLocalPortraitId());

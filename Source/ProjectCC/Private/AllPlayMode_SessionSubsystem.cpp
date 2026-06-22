@@ -66,7 +66,7 @@ void UAllPlayMode_SessionSubsystem::MarkSessionInGame()
 	NewSettings.bAllowJoinInProgress = false;
 	NewSettings.Set(FName(TEXT("SessionPhase")), FString(TEXT("InGame")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	NewSettings.Set(FName(TEXT("CanQuickMatch")), false, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-	
+
 	SessionInterface->UpdateSession(SessionName, NewSettings, true);
 }
 
@@ -124,7 +124,7 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 		return;
 	}
 
-	
+
 	FindLANSessions();
 }
 
@@ -156,7 +156,7 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 		SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteHandle);
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteHandle);
 	}
-	
+
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		LeaveCurrentSession();
 	}
@@ -242,7 +242,9 @@ void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 {
 	if (!EnsureSessionInterface()) return;
 
-	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+	//[4인]수정-아래에서 'GameInstance'를 사용하기 위해
+	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	if (GameInstance) {
 		GameInstance->bPendingCreateLANSession = false;
 	}
 
@@ -257,9 +259,14 @@ void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 
 	LocalHostTicket = FMath::RandRange(1, 10000000);
 
+	//[4인]추가-GameInstance에서 동적으로 인원수 및 모드 정보 획득
+	int32 MaxPlayers = GameInstance ? GameInstance->GetMaxPlayersByMode() : 2;
+	int32 MatchModeInt = GameInstance ? (int32)GameInstance->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
+
+
 	FOnlineSessionSettings Settings;
 	Settings.bIsLANMatch = true;
-	Settings.NumPublicConnections = 2;
+	Settings.NumPublicConnections = MaxPlayers;	//[4인]수정-기존2에서 MaxPlayers 변수로 변경
 	//세션의 검색 허용 유무
 	Settings.bShouldAdvertise = true;
 	//게임 진행 중에도 세션에 빈자리가 있으면 참여 허용 유무
@@ -272,6 +279,9 @@ void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 	Settings.Set(FName(TEXT("HostTicket")), LocalHostTicket, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	Settings.Set(FName(TEXT("SessionPhase")), FString(TEXT("LV_Title")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	Settings.Set(FName(TEXT("CanQuickMatch")), true, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+
+	//[4인]추가-세션 매칭 모드 태그 추가(2,4인 구별용)
+	Settings.Set(FName(TEXT("MatchMode")), MatchModeInt, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	CreateSessionCompleteHandle = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
 
@@ -310,7 +320,7 @@ void UAllPlayMode_SessionSubsystem::JoinLANSession(const FOnlineSessionSearchRes
 	}
 
 	bJoinInProgress = true;
-	
+
 	//Join Delegate 등록
 	BroadcastState(ESessionUIState::Joining, TEXT("Joining Session..."));
 	JoinSessionCompleteHandle = SessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
@@ -337,7 +347,7 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoin()
 
 	bGuestJoinedWhenHost = true;
 	bHostMatchedBroadCasted = true;
-	
+
 	if (UWorld* World = GetWorld()) {
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 		World->GetTimerManager().ClearTimer(ResetBlackListTimerHandle);
@@ -359,8 +369,16 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoining()
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 	}
 
+	//[4인]추가-인원수에 따라 다르게 표시
+	UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
+
+	//[4인]2인이 아닌 경우
+	if (MaxPlayers > 2) {
+		BroadcastState(ESessionUIState::Hosting, TEXT("Player Joind! Wait for More..."));
+	}
 	//2인 멀티의 경우 Join과 동시에 매칭 완료
-	BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
+	else BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));	// [4인]else 추가
 }
 
 //세션 검색에 성공하였을 경우
@@ -423,6 +441,13 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 			Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
 			if (!bCanQuickMatch) continue;
 
+			//[4인]추가-호스트끼리 방을 합치기 위한 티켓 비교 전 인원수 매치모드 검사
+			int32 SessionMatchMode = 0;
+			Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
+			UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+			int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
+			if (SessionMatchMode != MyMatchMode) continue; // 모드가 다르면 합치지 않고 넘어감
+
 			//검색 목록 중 다른 플레이어의 HostTicket 확인
 			int32 OtherHostTicket = 0;
 			Result.Session.SessionSettings.Get(FName(TEXT("HostTicket")), OtherHostTicket);
@@ -474,6 +499,14 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		bool bCanQuickMatch = false;
 		Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
 		if (!bCanQuickMatch) continue;
+
+
+		//[4인]추가-검색된 세션의 매치 모드가 내가 선택한 모드와 일치하는지 검사
+		int32 SessionMatchMode = 0;
+		Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
+		UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+		int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
+		if (SessionMatchMode != MyMatchMode) continue;	//모드가 다르면 패스
 
 		int32 OpenSlots = Result.Session.NumOpenPublicConnections;
 		if (OpenSlots <= 0) continue;
@@ -558,7 +591,7 @@ void UAllPlayMode_SessionSubsystem::HostMergeCheckTick()
 		bFindInProgress = false;
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
 	}
-	
+
 }
 
 //Join 실패 블랙리스트 초기화
@@ -655,7 +688,7 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 		FOnlineSessionSearchResult SavedResult = *PendingJoinResult;
 		PendingJoinResult.Reset();
 		JoinLANSession(SavedResult);
-		
+
 		return;
 	}
 

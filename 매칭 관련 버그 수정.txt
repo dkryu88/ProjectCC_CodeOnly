@@ -1,0 +1,63 @@
+검색어 : [추가]
+대괄호 까지 같이 검색
+
+
+*클라이언트 화면에서 매칭이 완료되어 ESessionUIState::Matched: 상태에서 EMatchFlowState가 None으로 바뀌면서 Play버튼이 다시 나타나는 버그
+
+
+[Title_PlayerController.cpp]
+
+void ATitle_PlayerController::HandleSessionStateChanged 함수 안에서 
+상태를 바꾸지 않는 예외 코드 추가
+case ESessionUIState::Joining:에서 EMatchFlowState::Joining상태로 변경
+case ESessionUIState::Matched:에서 EMatchFlowState::Joining상태로 변경
+
+
+void ATitle_PlayerController::CreateAndShowTitleWidget()함수 안에서
+if (FlowState == EMatchFlowState::Joining)조건문 추가
+
+=====================================================================
+
+[Ready_PlayerController.cpp]
+
+void AReady_PlayerController::BeginPlay() 함수 안에서 
+로딩이 시작되었기때문에
+ Title에서 EMatchFlowState::Joining상태로 변경되었던걸 EMatchFlowState::None으로 변경시킴
+
+
+=====================================================================
+
+[Result_PlayerController.cpp]
+
+#include "AllPlayMode_SessionSubsystem.h"
+
+void AResult_PlayerController::OnPressedExitToTitle() 함수안에서 
+결과창에서 타이틀로 돌아갔을 때 기존 세션을 종료하면서 매칭을 정상종료 하여 초기화 하기 위해 
+CancelQuickMatchLAN(); 추가
+
+
+=====================================================================
+=====================================================================
+
+*매치 종료시 크래쉬 버그 수정
+[Match_PlayerController.cpp]
+
+void AMatch_PlayerController::SetPawn(APawn* InPawn)
+{
+	Super::SetPawn(InPawn);
+
+	if (!IsLocalController()) return;
+
+	//[추가]매치 종료시 크래쉬 방지
+	if (InPawn == nullptr) return;
+
+=====================================================================
+
+*매치 종료시 크래쉬 버그 수정
+[Player_ControllerWidget.cpp]
+
+void UPlayer_ControllerWidget::SwitchLayout()
+{
+	//[추가]매치 종료시 크래쉬 방지
+	APawn* MyPawn = GetOwningPlayerPawn();
+	if (!IsValid(MyPawn)) return;

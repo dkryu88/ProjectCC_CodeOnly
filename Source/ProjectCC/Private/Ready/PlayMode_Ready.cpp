@@ -7,6 +7,8 @@
 #include "Player_State.h"
 #include "AllPlayMode_SessionSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+//[4인]추가
+#include "AllPlayMode_GameInstance.h"
 
 APlayMode_Ready::APlayMode_Ready()
 {
@@ -21,6 +23,12 @@ APlayMode_Ready::APlayMode_Ready()
 
 void APlayMode_Ready::BeginPlay()
 {
+	//[4인]추가-Super::BeginPlay() 전에 MaxPlayers를 먼저 동적으로 초기화
+	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		MaxPlayers = GI->GetMaxPlayersByMode();
+		UE_LOG(LogTemp, Warning, TEXT("[ReadyGameMode] Dynamic MaxPlayers Set to: %d"), MaxPlayers);
+	}
+
 	Super::BeginPlay();
 	ChooseRandomMatchLevel();
 	UpdateConnectedPlayers();

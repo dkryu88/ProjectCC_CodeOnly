@@ -8,13 +8,17 @@
 #include "Components/TextBlock.h"
 #include "Components/Throbber.h"
 #include "Framework/Application/SlateApplication.h"
+#include "AllPlayMode_GameInstance.h"	//[4인]추가
 
 void UTitle_Widget::NativeConstruct() {
 	Super::NativeConstruct();
-
-	if (Button_Play) {
+	//[4인]수정,추가
+	if (Button_Play2P) {
 		//Play버튼에 함수 바인딩
-		Button_Play->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandlePlayButtonClicked);
+		Button_Play2P->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::Handle2PlayButtonClicked);
+	}
+	if (Button_Play4P) {
+		Button_Play4P->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::Handle4PlayButtonClicked);
 	}
 
 	if (Button_Exit) {
@@ -95,10 +99,14 @@ void UTitle_Widget::SetNicknameLocked(bool bLocked)
 }
 
 void UTitle_Widget::SetMatchingMode(bool bMatching)
-{
-	if (Button_Play) {
-		Button_Play->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		Button_Play->SetIsEnabled(!bMatching);
+{	//[4인]수정,추가
+	if (Button_Play2P) {
+		Button_Play2P->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		Button_Play2P->SetIsEnabled(!bMatching);
+	}
+	if (Button_Play4P) {
+		Button_Play4P->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		Button_Play4P->SetIsEnabled(!bMatching);
 	}
 	if (Throbber_Matching) {
 		Throbber_Matching->SetVisibility(bMatching ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -110,10 +118,14 @@ void UTitle_Widget::SetMatchingMode(bool bMatching)
 }
 
 void UTitle_Widget::SetJoinCompleteMode()
-{
-	if (Button_Play) {
-		Button_Play->SetVisibility(ESlateVisibility::Collapsed);
-		Button_Play->SetIsEnabled(false);
+{	//[4인]수정,추가
+	if (Button_Play2P) {
+		Button_Play2P->SetVisibility(ESlateVisibility::Collapsed);
+		Button_Play2P->SetIsEnabled(false);
+	}
+	if (Button_Play4P) {
+		Button_Play4P->SetVisibility(ESlateVisibility::Collapsed);
+		Button_Play4P->SetIsEnabled(false);
 	}
 
 	if (Throbber_Matching) {
@@ -191,9 +203,15 @@ void UTitle_Widget::SetStatusMessageFadeOut(const FText& text, float VisibleTime
 }
 
 //OnTitlePlayRequest 이벤트를 발생시켜 입력받은 닉네임을 PlayerController가 저장하도록 지정
-void UTitle_Widget::HandlePlayButtonClicked()
+void UTitle_Widget::Handle2PlayButtonClicked()
 {
-	OnTitlePlayRequested.Broadcast(GetNicknameString());
+	OnTitlePlayRequested.Broadcast(GetNicknameString(), EMatchMode::TwoPlayers);	//[4인]수정-2번째 인자 추가
+}
+
+//[4인]추가-4인매칭버튼 클릭 시 바인딩 할 함수
+void UTitle_Widget::Handle4PlayButtonClicked()
+{
+	OnTitlePlayRequested.Broadcast(GetNicknameString(), EMatchMode::FourPlayers);
 }
 
 void UTitle_Widget::HandleCancelButtonClicked() {

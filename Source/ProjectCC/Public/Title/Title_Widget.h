@@ -15,7 +15,7 @@ class UTextBlock;
 class UThrobber;
 
 //FOnTitlePlayRequested 이벤트 타입 선언
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTitlePlayRequested, FString, NickName);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTitlePlayRequested, FString, NickName, EMatchMode, MatchMode);	//[4인]수정- OneParam->TwoParams, 인자 추가
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTitleCancelRequested);
 
 UCLASS()
@@ -83,7 +83,12 @@ public:
 	TObjectPtr<UEditableTextBox> EditableTextBox_Nickname;
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Button_Play;
+	TObjectPtr<UButton> Button_Play2P;	//[4인]수정-Button_Play->Button_Play2P
+
+	//[4인]추가-4인플레이 버튼
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Button_Play4P;
+
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Exit;
@@ -99,7 +104,12 @@ public:
 
 	//Play버튼 클릭 시 호출
 	UFUNCTION()
-	void HandlePlayButtonClicked();
+	void Handle2PlayButtonClicked();	//[4인]수정-HandlePlayButtonClicked->Handle2PlayButtonClicked
+
+	//[4인]추가-4인Play버튼 클릭 시 호출
+	UFUNCTION()
+	void Handle4PlayButtonClicked();
+
 	UFUNCTION()
 	void HandleCancelButtonClicked();
 	UFUNCTION()

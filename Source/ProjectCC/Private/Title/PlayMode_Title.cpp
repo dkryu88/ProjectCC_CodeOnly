@@ -27,6 +27,10 @@ void APlayMode_Title::BeginPlay()
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	if (!GameInstance) return;
 
+	//[4ÀÎ]Ãß°¡
+	MaxMatchPlayers = GameInstance->GetMaxPlayersByMode();
+	UE_LOG(LogTemp, Warning, TEXT("[TitleGameMode] Dynamic MaxMatchPlayers Set to: %d"), MaxMatchPlayers);
+
 	if (GameInstance->bPendingCreateLANSession) {
 		GameInstance->bPendingCreateLANSession = false;
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {

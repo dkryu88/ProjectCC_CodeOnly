@@ -91,7 +91,7 @@ void ATitle_PlayerController::SetTitleInputMode()
 	//마우스를 View에 강제로 가두지 않도록 설정
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
-	
+
 }
 //추가 위젯 열기/닫기
 void ATitle_PlayerController::ToggleAdditionalWidget()
@@ -182,6 +182,17 @@ void ATitle_PlayerController::CreateAndShowTitleWidget()
 			TitleWidgetInstance->SetNicknameText(SavedNickname);
 		}
 
+		//[추가] 클라이언트가 호스트의 타이틀레벨로 넘어왔을 때(Joining), 새 위젯을 매칭완료 상태로 덮어씌움
+		// 매칭되었지만 Play버튼이 다시 생성되는 버그 수정
+		EMatchFlowState FlowState = GameInstance->GetMatchFlowState();
+		if (FlowState == EMatchFlowState::Joining) {
+			TitleWidgetInstance->SetNicknameLocked(true);
+			TitleWidgetInstance->SetJoinCompleteMode();
+			TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("As Client, Matching Complete!")));
+			//확인용으로 As Client 추가해서 적었음. 글자 바뀌는게 싫다면 "Matching Complete!"로 동일하게 수정
+			return;
+		}
+
 		//매칭을 진행하다가 Host가 된 경우 UI 유지 
 		bool bKeepLocked = GameInstance->GetMatchFlowState() == EMatchFlowState::Searching || GameInstance->bPendingCreateLANSession;
 		if (bKeepLocked) {
@@ -239,7 +250,7 @@ void ATitle_PlayerController::UpdatePreviewRotation()
 void ATitle_PlayerController::OnLeftMousePressed()
 {
 	bIsPreviewDragging = true;
-	
+
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	if (GetMousePosition(MouseX, MouseY)) {
@@ -262,7 +273,7 @@ void ATitle_PlayerController::OnLeftMouseReleased()
 }
 
 //플레이 버튼 입력 시 기능
-void ATitle_PlayerController::HandlePlayRequested(FString NickName)
+void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode MatchMode)
 {
 	FString SanitizedNickname;
 	FText ErrorText;
@@ -287,6 +298,9 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName)
 		}
 		return;
 	}
+
+	//[4인]추가-매칭 시작 전 선택한 모드(인원수)를 GameInstance에 저장
+	GameInstance->SetSelectedMatchMode(MatchMode);
 
 	//GameInstance에 입력받은 닉네임 저장
 	GameInstance->SetLocalPlayerNickname(SanitizedNickname);
@@ -330,6 +344,16 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 
+	//[추가] Joining중일 때 연결끊김신호(None,Failed)를 차단하여, 참여진행이 잘 되는 중에 화면에서 플레이 버튼이 다시 활성화되는 버그 수정
+	if (GameInstance && GameInstance->GetMatchFlowState() == EMatchFlowState::Joining) {
+		if (State == ESessionUIState::Failed || Message.Contains(TEXT("Cancelled"))) {
+			//Failed나 매칭취소 메시지가 온 경우 통과
+		}
+		else if (State == ESessionUIState::None) {
+			return;
+		}
+	}
+
 	switch (State) {
 	case ESessionUIState::Searching:
 	case ESessionUIState::Hosting:
@@ -342,14 +366,18 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		break;
 	case ESessionUIState::Joining:
 		if (GameInstance) {
-			GameInstance->SetMatchFlowState(EMatchFlowState::Searching);
+			//GameInstance->SetMatchFlowState(EMatchFlowState::Searching);
+			//[추가]기존 Searching -> 변경 Joining
+			GameInstance->SetMatchFlowState(EMatchFlowState::Joining);
 		}
 		TitleWidgetInstance->SetJoinCompleteMode();
 		TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Matching Complete!")));
 		break;
 	case ESessionUIState::Matched:
 		if (GameInstance) {
-			GameInstance->SetMatchFlowState(EMatchFlowState::None);
+			//GameInstance->SetMatchFlowState(EMatchFlowState::None);
+			//[추가]기존 None -> 변경 Joining
+			GameInstance->SetMatchFlowState(EMatchFlowState::Joining);
 		}
 		TitleWidgetInstance->SetJoinCompleteMode();
 		TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Matching Complete!")));

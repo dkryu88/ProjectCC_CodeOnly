@@ -58,10 +58,14 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 	Super::SetPawn(InPawn);
 
 	if (!IsLocalController()) return;
+
+	//[추가]매치 종료시 크래쉬 방지
+	if (InPawn == nullptr) return;
+
 	TryFinishLocalSetup();
 
 	//ScreenWidget이 없으면 새로 생성
-	if (Player_ControllerWidget && !ScreenWidget) {
+	if (Player_ControllerWidget && !ScreenWidget && GetLocalPlayer()) {	//&& GetLocalPlayer() 추가, 에디터플레이 중 강제종료시 에러창 발생 방지
 		ScreenWidget = CreateWidget<UPlayer_ControllerWidget>(this, Player_ControllerWidget);
 		if (ScreenWidget) {
 			ScreenWidget->AddToViewport(0);

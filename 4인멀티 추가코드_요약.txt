@@ -1,0 +1,142 @@
+[AllPlayMode_GameInstance.h] 에 추가
+
+enum class EMatchMode : uint8 
+
+public:
+
+void SetSelectedMatchMode(EMatchMode Mode) { SelectedMatchMode = Mode; }
+
+EMatchMode GetSelectedMatchMode() const { return SelectedMatchMode; }
+
+int32 GetMaxPlayersByMode() const {
+
+protected:
+
+EMatchMode SelectedMatchMode = EMatchMode::TwoPlayers;
+
+============================================================================
+[AllPlayMode_SessionSubsystem.cpp]
+
+void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal() 함수 내 2수정, 2추가
+
+
+void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoining() 함수 내 2추가
+
+
+void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful) 함수 내 2추가
+
+============================================================================
+=====================================Title====================================
+============================================================================
+[PlayMode_Title.cpp]
+
+void APlayMode_Title::BeginPlay() 함수 내 1추가
+	MaxMatchPlayers = GameInstance->GetMaxPlayersByMode();
+
+============================================================================
+[Title_PlayerController.h]
+
+void HandlePlayRequested(FString NickName, EMatchMode MatchMode);	//[4인]수정-2번째 인자 추가
+
+
+============================================================================
+[Title_PlayerController.cpp]
+
+void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode MatchMode) 함수 내 1추가
+	GameInstance->SetSelectedMatchMode(MatchMode);
+
+
+============================================================================
+[Title_Widget.h]
+
+//FOnTitlePlayRequested 이벤트 타입 선언
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTitlePlayRequested, FString, NickName, EMatchMode, MatchMode);	//[4인]수정- OneParam->TwoParams, 인자 추가
+
+//위젯 바인딩
+UPROPERTY(meta = (BindWidget))
+TObjectPtr<UButton> Button_Play2P;	//[4인]수정:Button_Play->Button_Play2P
+
+//[4인]추가-4인플레이 버튼
+UPROPERTY(meta = (BindWidget))
+TObjectPtr<UButton> Button_Play4P;
+
+//Play버튼 클릭 시 호출
+UFUNCTION()
+void Handle2PlayButtonClicked();	//[4인]수정-HandlePlayButtonClicked->Handle2PlayButtonClicked
+
+//[4인]추가-4인Play버튼 클릭 시 호출
+UFUNCTION()
+void Handle4PlayButtonClicked();
+
+============================================================================
+=====================================Ready===================================
+============================================================================
+[PlayMode_Ready.cpp]
+
+#include "AllPlayMode_GameInstance.h"
+
+void APlayMode_Ready::BeginPlay() 함수 내 1추가
+
+============================================================================
+[Ready_PlayerController.h]
+
+protected:
+//[4인]수정
+UPROPERTY(EditDefaultsOnly, Category="UI")
+TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass_2P;	//_2P 텍스트 추가
+
+//[4인]추가-4인용 위젯클래스 참조
+UPROPERTY(EditDefaultsOnly, Category = "UI")
+TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass_4P;
+
+============================================================================
+[Ready_PlayerController.cpp]
+
+void AReady_PlayerController::BeginPlay() 함수 내 1수정,1추가
+
+============================================================================
+[Ready_LoadingWidget.h]
+
+//[4인]추가-기존 Left,Right 변수 대신 1~4번의 변수로 통일, BindWidget->BindWidgetOptional
+
+//[4인]추가-컴포넌트를 담을 배열
+TArray<UTextBlock*> NicknameTexts;
+TArray<UTextBlock*> StateTexts;
+TArray<UProgressBar*> ProgressBars;
+TArray<UImage*> PortraitImages;
+
+//[4인]추가
+virtual void NativeConstruct() override;
+
+============================================================================
+[Ready_LoadingWidget.cpp]
+
+void UReady_LoadingWidget::NativeConstruct() 함수 정의
+
+void UReady_LoadingWidget::RefreshUI() 새롭게 선언한 변수에 맞춰 전체적으로 변경
+
+
+============================================================================
+=====================================Match===================================
+============================================================================
+[PlayMode_Match.cpp]
+
+void APlayMode_Match::BeginPlay() 함수 내 추가1
+	//[4인] 추가 플레이 시간 증가
+	if (MaxPlayers == 4) {
+		MatchDuration = 600;
+		MatchEventTimes = { 525,375,225,75 };
+		CoinWaveTime = { 600, 500, 400, 300, 200, 100 };
+		SupplyWeaponMaxCount = 16;
+		SupplyItemMaxCount = 8;
+	}
+
+
+
+
+
+
+
+
+
+

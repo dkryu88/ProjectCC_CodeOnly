@@ -9,6 +9,8 @@
 //[사운드] 추가
 #include "Effect/AudioManagerSubsystem.h"
 #include "Effect/GameAudioDataAsset.h"
+//[추가]세션종료
+#include "AllPlayMode_SessionSubsystem.h"
 
 void AResult_PlayerController::BeginPlay() {
 	Super::BeginPlay();
@@ -68,6 +70,14 @@ void AResult_PlayerController::EnableEixtToTitle()
 void AResult_PlayerController::OnPressedExitToTitle()
 {
 	if (!bCanExitMatch) return;
+
+	//[추가] 게임이 끝나고 결과창에서 타이틀로 돌아갈 때
+	// 기존 세션을 종료시킴
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
+			SessionSubsystem->CancelQuickMatchLAN();
+		}
+	}
 
 	ClientTravel(TEXT("/Game/Maps/LV_Title"), TRAVEL_Absolute);
 }
