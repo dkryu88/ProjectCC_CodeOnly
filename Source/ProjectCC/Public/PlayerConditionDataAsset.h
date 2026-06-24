@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "PlayerConditions.h"
+#include "Effect/FGameEffectData.h"
 #include "PlayerConditionDataAsset.generated.h"
 
 /**
@@ -44,7 +45,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bCanMultiApply = false;
 	//효과 중첩 최소 간격
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (EditCondition = "bCanMultipApply", ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (EditCondition = "bCanMultiApply", ClampMin = "0.0"))
 	float MultiApplyInterval = 0.5f;
 	//제거 가능 여부
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -55,9 +56,20 @@ public:
 	//Condition 특수 효과
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<UPlayerConditionEffect> ConditionEffect;
-	//Condition 애니메이션
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Animation")
+	//Condition 애니메이션 (필요한 경우만 등록)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UAnimSequence> ConditionAnimation = nullptr;
+	//Condition  몽타주 (필요한 경우만 등록)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UAnimMontage> ConditionMontage = nullptr;
+
+	//이펙트 관련
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ConditionStartEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ConditionPersistEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData ConditionEndEffect;
 
 	//플레이어 행동 별 Condition 진행 Rule---------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Rule")

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Effect/FGameEffectData.h"
 #include "MagnetCoin.generated.h"
 
 UCLASS()
@@ -24,6 +25,9 @@ protected:
 	class UStaticMeshComponent* MagnetCoinMesh;
 	UPROPERTY()
 	class UGameEffectManagerComponent* EffectManagerComp;
+	//ƒ⁄¿Œ »πµÊ Ω√ ¿Ã∆Â∆Æ
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData PickedEffect;
 
 public:
 	// Called every frame

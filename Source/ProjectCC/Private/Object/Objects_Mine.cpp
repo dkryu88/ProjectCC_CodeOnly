@@ -35,6 +35,7 @@ void AObjects_Mine::ApplyAdditionalSetting()
 
 void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool vFromSweep, const FHitResult& SweepResult) {
 	if (!HasAuthority() || bIsExploded) return;
+	if (!NowMap) return;
 
 	APlayer_Character* HittedPlayer = Cast<APlayer_Character>(OtherActor);
 	AMatch_PlayerController* HittedPlayerController;
@@ -56,7 +57,7 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 			ExplosionOrigin += FVector(0.f, 0.f, HalfSize);
 		}
 		float HalfRange = NowMap->BlockSize * 1.5f;
-		FVector BoxExtent = FVector(HalfRange, HalfRange, HalfSize - 5.f);
+		FVector BoxExtent = FVector(HalfRange, HalfRange, (HalfSize * 2.f) - 5.f);
 
 		TArray<FOverlapResult> OverlapResults;
 		FCollisionShape BoxShape = FCollisionShape::MakeBox(BoxExtent);
@@ -65,7 +66,7 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 
 		bool bHasOverlap = GetWorld()->OverlapMultiByChannel(OverlapResults, ExplosionOrigin, FQuat::Identity, ECC_Pawn, BoxShape, Params);
 
-		// 디버그 드로우도 블록 중앙에 맞춰서 그려줍니다.
+		// 디버그 드로우
 		DrawDebugBox(GetWorld(), ExplosionOrigin, BoxExtent, FQuat::Identity, FColor::Red, false, 3.f, 0, 3.f);
 		DrawDebugSphere(GetWorld(), ExplosionOrigin, 20.f, 12, FColor::Green, false, 3.0f);
 
@@ -74,10 +75,21 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 				APlayer_Character* Victim = Cast<APlayer_Character>(Result.GetActor());
 				if (Victim) {
 					APlayer_Character* Attacker = IsValid(OwnPlayer) ? OwnPlayer : nullptr;
-					Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, true, false);
+					Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, true, true, false, 750.f * 3.f);
 				}
 			}
 		}
+
+		//이펙트 파라미터 설정 및 재생
+		FGameEffectContext EffectContext;
+		EffectContext.SourceActor = this;
+		EffectContext.SourceComponent = Mesh;
+		EffectContext.WorldLocation = ExplosionOrigin;
+		EffectContext.WorldRotation = FRotator::ZeroRotator;
+		EffectContext.HitPoint = ExplosionOrigin;
+		EffectContext.HitNormal = FVector::UpVector;
+
+		PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
 		Destroy();
 	}

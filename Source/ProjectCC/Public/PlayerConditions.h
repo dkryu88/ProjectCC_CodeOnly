@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Effect/FGameEffectData.h"
 #include "PlayerConditions.generated.h"
 
 /**
@@ -84,7 +85,17 @@ struct FPlayerCondition {
 	TObjectPtr<UPlayerConditionEffect> ConditionEffect = nullptr;
 	//현재 상태 애니메이션 (필요한 경우만 등록)
 	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> ConditionAnimation = nullptr;
+	//현재 상태 몽타주 (필요한 경우만 등록)
+	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ConditionMontage = nullptr;
+	//이펙트 관련
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData ConditionStartEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData ConditionPersistEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData ConditionEndEffect;
 	//플레이어 행동 별 Condition 진행 Rule---------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Rule")
 	EConditionEventRule JumpRule = EConditionEventRule::Keep;

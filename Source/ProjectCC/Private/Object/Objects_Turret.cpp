@@ -103,13 +103,15 @@ void AObjects_Turret::Tick(float DeltaTime)
 
 	if (!IsValidTurretTarget(CurrentTarget)) {
 		CurrentTarget = nullptr;
+		CurrentTargetHitResult = FHitResult();
+		bSuccessTargetHit = false;
 		TryAttackTarget();
 		return;
 	}
 
 	UpdateHeadAim(DeltaTime);
 
-	if (IsHeadFacingTarget(CurrentTarget)) FireAtTarget(CurrentTarget);
+	if (IsHeadFacingTarget(CurrentTarget)) FireAtTarget(CurrentTarget, CurrentTargetHitResult);
 
 }
 
@@ -160,7 +162,7 @@ bool AObjects_Turret::IsHeadFacingTarget(AActor* Target)
 	return Dot >= CosHalfAngle;
 }
 
-void AObjects_Turret::FireAtTarget(AActor* Target)
+void AObjects_Turret::FireAtTarget(AActor* Target, const FHitResult& Hit)
 {
 	if (!HasAuthority() || !Target) return;
 
@@ -171,8 +173,56 @@ void AObjects_Turret::FireAtTarget(AActor* Target)
 		return;
 	}
 
+	if (ObjectsEffectManagerComp && ObjectsData) {
+		FGameEffectData* ShootEffectData = ObjectsData->CustomEffects.Find(TEXT("TurretAttack"));
+		FGameEffectData* HitEffectData = GetObjectsEffectData(EEffectType::Hit);
+		
+		if (ShootEffectData) {
+			FGameEffectContext Context1;
+			FGameEffectContext Context2;
+			bool bHasTurretAttackPointSocket = TurretHeadMesh && TurretHeadMesh->DoesSocketExist(TEXT("SK_TurretAttackPoint"));
+			bool bHasTurretAttackPoint2Socket = TurretHeadMesh && TurretHeadMesh->DoesSocketExist(TEXT("SK_TurretAttackPoint2"));
+			if (bHasTurretAttackPoint2Socket && bFirstSocketAttacked) {
+				Context2.SourceActor = this;
+				Context2.SourceComponent = TurretHeadMesh;
+				Context2.OverrideSocketName = TEXT("SK_TurretAttackPoint2");
+				Context2.WorldLocation = TurretHeadMesh->GetSocketLocation(TEXT("SK_TurretAttackPoint2"));
+				Context2.WorldRotation = TurretHeadMesh->GetSocketRotation(TEXT("SK_TurretAttackPoint2"));
+
+				ShootEffectData->SpawnLocationType = EGameEffectSpawnLocationType::SocketLocation;
+				ShootEffectData->SpawnRotationType = EGameEffectSpawnRotationType::SocketRotation;
+				ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ShootEffectData, Context2);
+				bFirstSocketAttacked = false;
+			}
+			else if (bHasTurretAttackPointSocket && !bFirstSocketAttacked) {
+				Context1.SourceActor = this;
+				Context1.SourceComponent = TurretHeadMesh;
+				Context1.OverrideSocketName = TEXT("SK_TurretAttackPoint");
+				Context1.WorldLocation = TurretHeadMesh->GetSocketLocation(TEXT("SK_TurretAttackPoint"));
+				Context1.WorldRotation = TurretHeadMesh->GetSocketRotation(TEXT("SK_TurretAttackPoint"));
+
+				ShootEffectData->SpawnLocationType = EGameEffectSpawnLocationType::SocketLocation;
+				ShootEffectData->SpawnRotationType = EGameEffectSpawnRotationType::SocketRotation;
+				ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ShootEffectData, Context1);
+				bFirstSocketAttacked = true;
+			}
+		}
+
+		if (HitEffectData && Target && Hit.bBlockingHit) {
+			FGameEffectContext Context;
+			Context.SourceActor = Target;
+			Context.SourceComponent = Target->GetRootComponent();
+			Context.WorldLocation = Hit.ImpactPoint;
+			Context.WorldRotation = Hit.ImpactNormal.Rotation();
+			Context.HitPoint = Hit.ImpactPoint;
+			Context.HitNormal = Hit.ImpactNormal;
+
+			ObjectsEffectManagerComp->PlayGameEffect_Multicast(*HitEffectData, Context);
+		}
+	}
+
 	if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
-		TargetPlayer->ApplyDamageInternal(Damage, OwnPlayer, this, true, true, false);
+		TargetPlayer->ApplyDamageInternal(Damage, OwnPlayer, this, true, true, true, false);
 		LastPassiveFunctionTime = CurrentTime;
 	}
 	else if (AObjects* TargetObject = Cast<AObjects>(Target)) {
@@ -212,6 +262,63 @@ bool AObjects_Turret::IsValidTurretTarget(AActor* Target)
 	return false;
 }
 
+bool AObjects_Turret::BuildActualHitResultToTarget(AActor* Target, FHitResult& OutHit)
+{
+	if (!Target || !GetWorld()) return false;
+	FVector TheStartLocation = GetTurretTraceStartLocation();
+	FVector TheEndLocation = GetTurretTargetTracePoint(Target);
+
+	FCollisionQueryParams TraceParams;
+	TraceParams.AddIgnoredActor(this);
+
+	if (OwnPlayerController && OwnPlayerController->GetPawn())
+	{
+		TraceParams.AddIgnoredActor(OwnPlayerController->GetPawn());
+	}
+	TraceParams.AddIgnoredActor(OwnPlayer);
+	
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectParams.AddObjectTypesToQuery(ECC_GameTraceChannel4);
+
+	bool bHit = GetWorld()->LineTraceSingleByObjectType(OutHit, TheStartLocation, TheEndLocation, ObjectParams, TraceParams);
+	if (!bHit) return false;
+
+	return OutHit.GetActor() == Target;
+}
+
+FVector AObjects_Turret::GetTurretTraceStartLocation()
+{
+	FName Attack1SocketName = TEXT("SK_TurretAttackPoint");
+	FName Attack2SocketName = TEXT("SK_TurretAttackPoint2");
+
+	if (TurretHeadMesh) {
+		if (TurretHeadMesh->DoesSocketExist(Attack1SocketName) && !bFirstSocketAttacked) return TurretHeadMesh->GetSocketLocation(Attack1SocketName);
+		else if (TurretHeadMesh->DoesSocketExist(Attack2SocketName) && bFirstSocketAttacked) return TurretHeadMesh->GetSocketLocation(Attack2SocketName);
+		return TurretHeadMesh->GetComponentLocation();
+	}
+
+	if (PhysicsCollider) {
+		FVector Start = GetActorLocation();
+		Start.Z += PhysicsCollider->Bounds.BoxExtent.Z;
+		return Start;
+	}
+
+	return GetActorLocation();
+}
+
+FVector AObjects_Turret::GetTurretTargetTracePoint(AActor* Target)
+{
+	if (!Target) return FVector::ZeroVector;
+	FBox Bounds = Target->GetComponentsBoundingBox();
+
+	if (Bounds.IsValid) return Bounds.GetCenter();
+
+	return Target->GetActorLocation();
+}
+
 
 void AObjects_Turret::OnAttackBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
 	if (!HasAuthority())return;
@@ -230,6 +337,9 @@ void AObjects_Turret::TryAttackTarget() {
 
 
 	AActor* BestTarget = nullptr;
+	FHitResult BestTargetHitResult;
+	bool bBestTargetHasHitResult = false;
+
 	float MinDistanceSq = TNumericLimits<float>::Max();
 	FVector TurretLocation = GetActorLocation();
 
@@ -250,29 +360,23 @@ void AObjects_Turret::TryAttackTarget() {
 
 		//대상자 중 가장 가까운 대상을 타겟팅
 		FHitResult HitResult;
-		FCollisionQueryParams TraceParams;
-		TraceParams.AddIgnoredActor(this);
 
-		if (OwnPlayerController && OwnPlayerController->GetPawn()) {
-			TraceParams.AddIgnoredActor(OwnPlayerController->GetPawn());
+		bool bActuallyHitTarget = BuildActualHitResultToTarget(Actor, HitResult);
+		if (bActuallyHitTarget) {
+			MinDistanceSq = DistanceSq;
+			BestTarget = Actor;
+
+			BestTargetHitResult = HitResult;
+			bBestTargetHasHitResult = true;
 		}
-
-		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, TraceParams);
-		bool bCanSeeTarget = false;
-
-		if (!bHit) bCanSeeTarget = true;
-		else {
-			AActor* HitActor = HitResult.GetActor();
-			if (HitActor == Actor) bCanSeeTarget = true;
-		}
-
-		if (!bCanSeeTarget) continue;
-
-		MinDistanceSq = DistanceSq;
-		BestTarget = Actor;
 	}
 
 	CurrentTarget = BestTarget;
+
+	if (BestTarget) {
+		CurrentTargetHitResult = BestTargetHitResult;
+		bSuccessTargetHit = bBestTargetHasHitResult;
+	}
 }
 
 void AObjects_Turret::OnRep_TurretHeadYaw()

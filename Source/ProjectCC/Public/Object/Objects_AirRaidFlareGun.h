@@ -30,8 +30,6 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayExplosionCell(FVector Center, FRotator Rotation);
 private:
-	UPROPERTY()
-	TObjectPtr<UNiagaraSystem> ExplosionFX = nullptr;
 
 	FTimerHandle ExplosionDelayTimerhandle;
 	FTimerHandle ExplosionIntervalTimerHandle;

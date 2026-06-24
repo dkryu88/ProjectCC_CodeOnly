@@ -13,7 +13,7 @@ void AArea_ToyBlocks::ApplyInAreaEffect_Implementation(AActor* OtherActor) {
 	if (!HasAuthority() || !OtherActor) return;
 	if (APlayer_Character* Victim = Cast<APlayer_Character>(OtherActor)) {
 		APlayer_Character* Attacker = OwnPlayer.Get();
-		Victim->ApplyDamageInternal(DamageAmount, Attacker, this, false, false, false);
+		Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, false, true, false, 750.f * 0.6f);
 	}
 }
 
@@ -21,6 +21,6 @@ void AArea_ToyBlocks::ApplyStayAreaEffect_Implementation(AActor* OtherActor) {
 	if (!HasAuthority() || !OtherActor) return;
 	if (APlayer_Character* Victim = Cast<APlayer_Character>(OtherActor)) {
 		APlayer_Character* Attacker = OwnPlayer.Get();
-		Victim->ApplyDamageInternal(DamageAmount, Attacker, this, false, false);
+		Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, false, true, false, 750.f * 0.25f);
 	}
 }

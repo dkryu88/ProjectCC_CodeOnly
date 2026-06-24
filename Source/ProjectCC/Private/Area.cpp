@@ -48,7 +48,7 @@ AArea::AArea()
 	//상시 이펙트 담당 컴포넌트
 	LifeTimeEffectComp = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Effect"));
 	LifeTimeEffectComp->SetupAttachment(MeshPivot);
-	LifeTimeEffectComp->bAutoActivate = true;
+	LifeTimeEffectComp->bAutoActivate = false;
 	LifeTimeEffectComp->SetAutoDestroy(false);
 
 }
@@ -57,19 +57,39 @@ AArea::AArea()
 void AArea::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (LifeTimeEffectComp) {
+		if (AreaDuration >= 0.f) {
+			LifeTimeEffectComp->SetVariableFloat(AreaDurationParamName, AreaDuration);
+		}
+		LifeTimeEffectComp->Activate(true);
+	}
+
 	if (!HasAuthority()) return;
 
-	if (AreaDuration > 0.f) SetLifeSpan(AreaDuration);
+	if (AreaDuration > 0.f) {
+		GetWorldTimerManager().SetTimer(AreaDurationTimerHandle, this, &AArea::BeginSoftDestroyAreaByDuration, AreaDuration, false);
+	}
 	GetWorldTimerManager().SetTimerForNextTick(this, &AArea::RegisterInitialOverlaps);
 
 }
 
 void AArea::EndPlay(const EEndPlayReason::Type EndPlayReason) {
 	if (HasAuthority()) {
-		ClearGroupEffects();
+		if (bApplyOutEffectOnEndPlay) {
+			ClearGroupEffects();
+		}
+		else {
+			GroupActorsInArea.Empty();
+			GroupOverlapAreaSet.Empty();
+			ActorRefreshTimerHandles.Empty();
+		}
 	}
 
 	if (UWorld* World = GetWorld()) {
+		World->GetTimerManager().ClearTimer(AreaDurationTimerHandle);
+		World->GetTimerManager().ClearTimer(DestroyAfterEffectTimerHandle);
+
 		for (TPair<TWeakObjectPtr<AActor>, FTimerHandle>& Pair : ActorRefreshTimerHandles) {
 			World->GetTimerManager().ClearTimer(Pair.Value);
 		}
@@ -141,6 +161,7 @@ void AArea::RegisterInitialOverlaps()
 {
 	if (!HasAuthority()) return;
 	if (!AreaDetectCollider) return;
+	if (bPendingDestroyAfterEffect) return;
 
 	AreaDetectCollider->UpdateOverlaps();
 
@@ -161,6 +182,7 @@ void AArea::RegisterInitialOverlaps()
 void AArea::StartActorRefreshTimer(AActor* OtherActor) {
 	if (!HasAuthority())return;
 	if (!OtherActor) return;
+	if (bPendingDestroyAfterEffect) return;
 	if (AreaEffectInterval <= 0.f) return;
 
 	UWorld* World = GetWorld();
@@ -187,6 +209,7 @@ void AArea::StartActorRefreshTimer(AActor* OtherActor) {
 void AArea::RefreshActorEffect(TWeakObjectPtr<AActor> ActorPtr)
 {
 	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
 
 	//ActorPtr가 비유효시 즉시 목록에서 제거
 	if (!ActorPtr.IsValid()) {
@@ -222,10 +245,12 @@ void AArea::StopActorRefreshTimerByKey(TWeakObjectPtr<AActor> ActorKey)
 	}
 }
 
+
 //각 Area의 Overlap 검사
 void AArea::OnAreaBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
 	if (!OtherActor || OtherActor == this) return;
 
 	AArea* Root = RootArea ? RootArea.Get() : this;
@@ -237,6 +262,7 @@ void AArea::OnAreaBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor*
 void AArea::OnAreaEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
 	if (!OtherActor || OtherActor == this) return;
 
 	AArea* Root = RootArea ? RootArea.Get() : this;
@@ -248,6 +274,7 @@ void AArea::OnAreaEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* O
 //실제 Overlap 처리 (Root Area가 직접 처리)
 void AArea::HandleGroupBeginOverlapFromArea(AArea* area, AActor* OtherActor) {
 	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
 	if (!OtherActor || OtherActor == this) return;
 	APlayer_Character* Player = Cast<APlayer_Character>(OtherActor);
 	if (!Player) return;
@@ -271,6 +298,7 @@ void AArea::HandleGroupBeginOverlapFromArea(AArea* area, AActor* OtherActor) {
 
 void AArea::HandleGroupEndOverlapFromArea(AArea* area, AActor* OtherActor) {
 	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
 	if (!area || !OtherActor || OtherActor == this) return;
 
 	TWeakObjectPtr<AActor> ActorKey = OtherActor;
@@ -299,6 +327,7 @@ void AArea::ClearGroupEffects() {
 	}
 
 	GroupActorsInArea.Empty();
+	GroupOverlapAreaSet.Empty();
 	ActorRefreshTimerHandles.Empty();
 }
 
@@ -323,13 +352,13 @@ void AArea::DestroyOnlySameGridArea()
 
 	//Root가 자신이 아니라면 그냥 자신을 제거
 	if (Root && Root != this) {
-		Destroy();
+		BeginSoftDestroyArea(false);
 		return;
 	}
 	//Root가 자신이라면 Root를 같은 그룹 Area에 넘겨주고 제거
 	UWorld* World = GetWorld();
 	if (!World) {
-		Destroy();
+		BeginSoftDestroyArea(true);
 		return;
 	}
 
@@ -349,9 +378,12 @@ void AArea::DestroyOnlySameGridArea()
 
 	if (NewRoot) {
 		TransferRootToOtherArea(NewRoot);
+		BeginSoftDestroyArea(false);
 	}
-
-	Destroy();
+	else {
+		BeginSoftDestroyArea(true);
+	}
+	
 }
 //Grid 위치에 Area가 있는지 없는지 확인
 AArea* AArea::FindExistingAreaAtGrid(UWorld* World, AMapConstructor* Map, const FIntVector& Grid, AArea* IgnoreArea) {
@@ -395,6 +427,64 @@ void AArea::TransferRootToOtherArea(AArea* NewRoot) {
 
 	NewRoot->RootArea = NewRoot;
 	NewRoot->bIsRoot = true;
+}
+
+void AArea::BeginSoftDestroyAreaByDuration()
+{
+	BeginSoftDestroyArea(true);
+}
+
+void AArea::BeginSoftDestroyArea(bool bApplyOutEffect)
+{
+	if (!HasAuthority()) return;
+	if (bPendingDestroyAfterEffect) return;
+
+	bPendingDestroyAfterEffect = true;
+	bApplyOutEffectOnEndPlay = bApplyOutEffect;
+
+	GetWorldTimerManager().ClearTimer(AreaDurationTimerHandle);
+	if(bApplyOutEffect) ClearGroupEffects();
+	else {
+		if (UWorld* World = GetWorld()) {
+			for (TPair<TWeakObjectPtr<AActor>, FTimerHandle>& Pair : ActorRefreshTimerHandles) {
+				World->GetTimerManager().ClearTimer(Pair.Value);
+			}
+		}
+		GroupActorsInArea.Empty();
+		GroupOverlapAreaSet.Empty();
+		ActorRefreshTimerHandles.Empty();
+	}
+
+	Multicast_BeginSoftDestroyAreaVisual();
+
+	GetWorldTimerManager().ClearTimer(DestroyAfterEffectTimerHandle);
+	GetWorldTimerManager().SetTimer(DestroyAfterEffectTimerHandle, this, &AArea::FinalDestroyArea, AreaDestroyDelayForEffect, false);
+}
+
+void AArea::FinalDestroyArea()
+{
+	if (!HasAuthority()) return;
+
+	GetWorldTimerManager().ClearTimer(AreaDurationTimerHandle);
+	GetWorldTimerManager().ClearTimer(DestroyAfterEffectTimerHandle);
+
+	Destroy();
+}
+
+void AArea::Multicast_BeginSoftDestroyAreaVisual_Implementation()
+{
+	if (AreaDetectCollider) {
+		AreaDetectCollider->SetGenerateOverlapEvents(false);
+		AreaDetectCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (TestMesh) {
+		TestMesh->SetVisibility(false, true);
+		TestMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (LifeTimeEffectComp) {
+		LifeTimeEffectComp->Deactivate();
+	}
 }
 
 //영역으로 진입 시 효과

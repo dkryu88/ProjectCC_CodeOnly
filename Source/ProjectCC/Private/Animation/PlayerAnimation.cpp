@@ -14,10 +14,16 @@ void UPlayerAnimation::NativeUpdateAnimation(float DeltaSeconds) {
 		CurrentGripSequence = nullptr;
 		bHasGrip = false;
 		GripAlpha = 0.f;
+		FinalGripAlpha = 0.f;
+		bHitReactionUseNoArms = false;
+		bUseNoArmUpperSlot = false;
 		return;
 	}
 
 	CurrentGripSequence = PlayerCharacter->GetCurrentGripSequence();
 	bHasGrip = CurrentGripSequence != nullptr;
 	GripAlpha = bHasGrip ? 1.f : 0.f;
+	FinalGripAlpha = (bHitReactionUseNoArms && bHasGrip && (PlayerCharacter->bIsBigHitReaction || PlayerCharacter->bIsRecoverReaction) ? GripAlpha : 0.f);
+	bHitReactionUseNoArms = PlayerCharacter->bHitReactionUseNoArms;
+	bUseNoArmUpperSlot = bHitReactionUseNoArms && PlayerCharacter->bIsHitted && !PlayerCharacter->bIsBigHitReaction && !PlayerCharacter->bIsAttacking && !PlayerCharacter->bIsAiming;
 }

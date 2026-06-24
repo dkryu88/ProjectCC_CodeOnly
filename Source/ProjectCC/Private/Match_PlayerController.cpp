@@ -21,51 +21,26 @@
 #include "Engine/World.h"
 #include "Camera/CameraActor.h"
 #include "TimerManager.h"
-//[사운드] 추가
-#include "Effect/AudioManagerSubsystem.h"
-#include "Effect/GameAudioDataAsset.h"
-
 
 void AMatch_PlayerController::BeginPlay() {
 	Super::BeginPlay();
 
 	if (!IsLocalController()) return;
 
-	// [사운드]매치 BGM 재생
-	//if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-	//	if (GI->AudioData) {
-	//		FName CurrentMapName = FName(*GetWorld()->GetName());
-
-	//		if (USoundBase** FoundBGM = GI->AudioData->MatchBGM_Map.Find(CurrentMapName)) {
-	//			if (UAudioManagerSubsystem* AudioSub = GI->GetSubsystem<UAudioManagerSubsystem>()) {
-	//				AudioSub->PlayBGM(*FoundBGM, 1.f);
-	//			}
-	//		}
-	//	}
-	//}
-	if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-		FString MatchMapName = UGameplayStatics::GetCurrentLevelName(this, true);
-		AudioSub->PlayBGMByMapName(FName(*MatchMapName), 1.f);
-	}
-
-
 	GetWorldTimerManager().SetTimer(SetupRetryTimerHandle, this, &AMatch_PlayerController::TryFinishLocalSetup, SetupRetryInterval, true);
-
 }
 
 void AMatch_PlayerController::SetPawn(APawn* InPawn)
 {
 	Super::SetPawn(InPawn);
 
-	if (!IsLocalController()) return;
-
-	//[추가]매치 종료시 크래쉬 방지
+	if (!IsLocalController() || !GetLocalPlayer()) return;
 	if (InPawn == nullptr) return;
 
 	TryFinishLocalSetup();
 
 	//ScreenWidget이 없으면 새로 생성
-	if (Player_ControllerWidget && !ScreenWidget && GetLocalPlayer()) {	//&& GetLocalPlayer() 추가, 에디터플레이 중 강제종료시 에러창 발생 방지
+	if (Player_ControllerWidget && !ScreenWidget && GetLocalPlayer()) {
 		ScreenWidget = CreateWidget<UPlayer_ControllerWidget>(this, Player_ControllerWidget);
 		if (ScreenWidget) {
 			ScreenWidget->AddToViewport(0);
@@ -78,7 +53,7 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 			ScreenWidget->InitWidget(player);
 			//Shop 버튼 바인딩
 			BindShopButton();
-		}
+		}	
 	}
 
 	if (bWaitingRespawn) {
@@ -535,20 +510,6 @@ void AMatch_PlayerController::Client_UpdateCountDown_Implementation(int32 number
 		ScreenWidget->SetUIState(EPlayerUIState::Countdown);
 		ScreenWidget->SetCountdown(number);
 	}
-	// [사운드] 카운트다운 효과음 재생
-	if (number == 6) {
-		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->CountDownSound) {
-				AudioSub->StartDucking(0.3f, 0.5f);	//BGM볼륨 30%로 조절
-				AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->CountDownSound);
-			}
-		}
-	}
-	if (number == 1) {	//Start 나올 때
-		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-			AudioSub->StopDucking(0.5f);	//BGM볼륨 원복
-		}
-	}
 }
 
 void AMatch_PlayerController::Client_StartPlayingUI_Implementation()
@@ -575,7 +536,7 @@ void AMatch_PlayerController::Client_ShopPurchaseResult_Implementation(bool bSuc
 {
 	if (!IsLocalController()) return;
 	if (!bSuccess) return;
-
+	
 	//구매 완료 상태로 변경
 	bAlreadyPurchasedInShop = true;
 	//상점 닫기
@@ -589,16 +550,6 @@ void AMatch_PlayerController::Client_UpdateMatchEventCountdown_Implementation(FN
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventCountdown(EventName, SecondsUntilEvent);
 	}
-	// [사운드] 이벤트 시작 5초 전부터 경고음SFX 재생
-	if (SecondsUntilEvent == 5) {
-		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-			AudioSub->StartDucking(1.5f, 0.3f);	//1.5초동안 30%로 볼륨 조절
-			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->EventWarningSound) {
-				AudioSub->PlayManagedSFX(AudioSub->GetAudioData()->EventWarningSound, 1.f);
-			}
-
-		}
-	}
 }
 
 void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName EventName, int32 RemainSeconds)
@@ -606,33 +557,10 @@ void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName E
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventActive(EventName, RemainSeconds);
 	}
-	// [사운드] 이벤트 시작시
-	if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-		if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->EventWarningSound) {
-			AudioSub->StopManagedSFX(AudioSub->GetAudioData()->EventWarningSound);	// 경고음 정지
-		}
-		// BGM볼륨 원복
-		AudioSub->StopDucking(1.5f);
-		// BGM재생속도 증가
-		AudioSub->SetBGMPitch(1.5f);
-	}
 }
 
 void AMatch_PlayerController::Client_HideMatchEventUI_Implementation() {
 	if (ScreenWidget) {
 		ScreenWidget->HideMatchEventUI();
-	}
-	if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-		// BGM재생속도 원복
-		AudioSub->SetBGMPitch(1.f);
-	}
-}
-
-// [사운드] 매치 종료 시 bgm 종료 함수
-void AMatch_PlayerController::Client_FadeOutBgm_Implementation()	//헤더에 언선 후 정의 한 함수 -> PlayMode_Match.Cpp에서 EndMatchLogic함수 안에 사용됨
-{
-	// 서브시스템을 불러와 3초(3.0f) 동안 페이드아웃 후 자동 종료되게 명령
-	if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-		AudioSub->StopBGM(3.0f);
 	}
 }

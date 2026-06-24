@@ -6,7 +6,7 @@
 #include "Engine/GameInstance.h"
 #include "AllPlayMode_GameInstance.generated.h"
 
-class UGameAudioDataAsset;	//[사운드] 추가
+class UGameAudioDataAsset;
 
 /**
  * 게임이 실행되는 동안 계속 살아있는 클래스
@@ -47,7 +47,6 @@ enum class EMatchFlowState : uint8 {
 	PreMatch
 };
 
-//[4인]추가
 UENUM(BlueprintType)
 enum class EMatchMode : uint8 {
 	None,
@@ -60,7 +59,7 @@ UCLASS()
 class PROJECTCC_API UAllPlayMode_GameInstance : public UGameInstance
 {
 	GENERATED_BODY()
-
+	
 
 public:
 	//각 플레이어가 사용할 닉네임 설정
@@ -89,32 +88,23 @@ public:
 	UPROPERTY()
 	bool bPendingCreateLANSession = false;
 
-	//[사운드] 엔진 초기화 함수 오버라이드
-	virtual void Init() override;
-
-	//[사운드] 데이터에셋 참조
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
-	UGameAudioDataAsset* AllAudioData;
-
-	//[4인]추가
-	UFUNCTION(BlueprintCallable, Category = "Match")
+	UFUNCTION()
 	void SetSelectedMatchMode(EMatchMode Mode) { SelectedMatchMode = Mode; }
-	//[4인]추가
-	UFUNCTION(BlueprintCallable, Category = "Match")
-	EMatchMode GetSelectedMatchMode() const { return SelectedMatchMode; }
-	//[4인]추가-매치모드에 따른 최대 인원수 반환하는 헬퍼 함수
-	int32 GetMaxPlayersByMode() const {
+	UFUNCTION()
+	EMatchMode GetSelectedMatchMode() { return SelectedMatchMode; }
+	
+	int32 GetMaxPlayersByMode() {
 		switch (SelectedMatchMode) {
-		case EMatchMode::TwoPlayers:	return 2;
-		case EMatchMode::ThreePlayers:	return 3;
-		case EMatchMode::FourPlayers:	return 4;
-		default:						return 2;
+		case EMatchMode::TwoPlayers: return 2;
+		case EMatchMode::ThreePlayers: return 3;
+		case EMatchMode::FourPlayers: return 4;
+		default: return 2;
 		}
 	}
 
 protected:
 	//각 플레이어들의 닉네임
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Title")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Title")
 	FString LocalPlayerNickName;
 	//각 플레이어의 초상화 번호
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
@@ -129,8 +119,7 @@ protected:
 	UPROPERTY()
 	TArray<FMatchResultData> MatchResults;
 
-	//[4인]추가
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Match")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Match")
 	EMatchMode SelectedMatchMode = EMatchMode::TwoPlayers;
 };
 

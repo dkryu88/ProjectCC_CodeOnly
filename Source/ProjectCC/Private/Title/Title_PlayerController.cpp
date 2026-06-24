@@ -17,9 +17,6 @@
 #include "Components/Button.h"
 #include "GameFramework/InputSettings.h"
 #include "InputCoreTypes.h"
-//[사운드] 추가
-#include "Effect/AudioManagerSubsystem.h"
-#include "Effect/GameAudioDataAsset.h"
 
 
 ATitle_PlayerController::ATitle_PlayerController()
@@ -41,15 +38,6 @@ void ATitle_PlayerController::BeginPlay()
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->OnSessionStateChanged.AddDynamic(this, &ATitle_PlayerController::HandleSessionStateChanged);
 			HandleSessionStateChanged(SessionSubsystem->LastUIState, SessionSubsystem->LastUIMessage);
-		}
-	}
-
-	//[사운드]Title BGM 재생
-	if (IsLocalController()) {
-		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->TitleBGM) {
-				AudioSub->PlayBGM(AudioSub->GetAudioData()->TitleBGM, 0.5f);
-			}
 		}
 	}
 
@@ -91,7 +79,7 @@ void ATitle_PlayerController::SetTitleInputMode()
 	//마우스를 View에 강제로 가두지 않도록 설정
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
-
+	
 }
 //추가 위젯 열기/닫기
 void ATitle_PlayerController::ToggleAdditionalWidget()
@@ -182,14 +170,11 @@ void ATitle_PlayerController::CreateAndShowTitleWidget()
 			TitleWidgetInstance->SetNicknameText(SavedNickname);
 		}
 
-		//[추가] 클라이언트가 호스트의 타이틀레벨로 넘어왔을 때(Joining), 새 위젯을 매칭완료 상태로 덮어씌움
-		// 매칭되었지만 Play버튼이 다시 생성되는 버그 수정
 		EMatchFlowState FlowState = GameInstance->GetMatchFlowState();
 		if (FlowState == EMatchFlowState::Joining) {
 			TitleWidgetInstance->SetNicknameLocked(true);
 			TitleWidgetInstance->SetJoinCompleteMode();
-			TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("As Client, Matching Complete!")));
-			//확인용으로 As Client 추가해서 적었음. 글자 바뀌는게 싫다면 "Matching Complete!"로 동일하게 수정
+			TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Matching Complete!")));
 			return;
 		}
 
@@ -250,7 +235,7 @@ void ATitle_PlayerController::UpdatePreviewRotation()
 void ATitle_PlayerController::OnLeftMousePressed()
 {
 	bIsPreviewDragging = true;
-
+	
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	if (GetMousePosition(MouseX, MouseY)) {
@@ -299,7 +284,7 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 		return;
 	}
 
-	//[4인]추가-매칭 시작 전 선택한 모드(인원수)를 GameInstance에 저장
+	//GameInstance에 선택된 매치모드 저장
 	GameInstance->SetSelectedMatchMode(MatchMode);
 
 	//GameInstance에 입력받은 닉네임 저장
@@ -335,6 +320,22 @@ void ATitle_PlayerController::HandleCancelRequested()
 	if (!SessionSubsystem) return;
 
 	SessionSubsystem->CancelQuickMatchLAN();
+
+	//[버그]내가 호스트일때(풀방이 아닐때) 취소버튼을 눌러 방을 깼을 때
+	// 참여중이던 클라이언트를 내보내는 로직
+	if (HasAuthority() && GetWorld()->GetNetMode() == NM_ListenServer) {
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It) {
+			ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(It->Get());
+			if (PC && PC != this) {	// 자신(호스트) 제외
+				PC->Client_KickedByHost();
+			}
+		}
+		//  호스트 자신도 'Listen(멀티)' 모드를 끄고 싱글 로컬 맵으로 돌아가서 서버를 완전히 닫음
+		// (클라이언트가 명령을 받을 수 있도록 1프레임 뒤에 닫아주는 것이 안전
+		GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
+			UGameplayStatics::OpenLevel(this, FName("/Game/Levels/LV_Title"));
+			});
+	}
 }
 
 //세션 상태 변경을 확인 (Title 화면에서 매칭 상태를 플레이어에게 보여줌)
@@ -344,12 +345,10 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 
-	//[추가] Joining중일 때 연결끊김신호(None,Failed)를 차단하여, 참여진행이 잘 되는 중에 화면에서 플레이 버튼이 다시 활성화되는 버그 수정
+	//Joining중일 때 연결끊김신호(None, Failed)를 차단하여, 참여진행이 잘 되는 중에 화면에서 플레이 버튼이 다시 활성화되는 버그 수정
 	if (GameInstance && GameInstance->GetMatchFlowState() == EMatchFlowState::Joining) {
-		if (State == ESessionUIState::Failed || Message.Contains(TEXT("Cancelled"))) {
-			//Failed나 매칭취소 메시지가 온 경우 통과
-		}
-		else if (State == ESessionUIState::None) {
+		bool bIsCancelledMessage = Message.Contains(TEXT("Cancelled"));
+		if ((State == ESessionUIState::None || State == ESessionUIState::Failed) && !bIsCancelledMessage) {
 			return;
 		}
 	}
@@ -366,8 +365,6 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		break;
 	case ESessionUIState::Joining:
 		if (GameInstance) {
-			//GameInstance->SetMatchFlowState(EMatchFlowState::Searching);
-			//[추가]기존 Searching -> 변경 Joining
 			GameInstance->SetMatchFlowState(EMatchFlowState::Joining);
 		}
 		TitleWidgetInstance->SetJoinCompleteMode();
@@ -375,8 +372,6 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		break;
 	case ESessionUIState::Matched:
 		if (GameInstance) {
-			//GameInstance->SetMatchFlowState(EMatchFlowState::None);
-			//[추가]기존 None -> 변경 Joining
 			GameInstance->SetMatchFlowState(EMatchFlowState::Joining);
 		}
 		TitleWidgetInstance->SetJoinCompleteMode();
@@ -428,5 +423,16 @@ bool ATitle_PlayerController::ValidateNickname(const FString& nickname, FString&
 	}
 
 	return true;
+}
+
+// [버그]크라이언트가 호스트의 취소버튼클릭에 의해 퇴장당할 때 실행하는 함수	//HandleCancelRequested함수안에서 실행됨
+void ATitle_PlayerController::Client_KickedByHost_Implementation()
+{
+	// 매칭상태를 Joining에서 None으로 변경
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+	}
+	// 호스트방에서 타이틀 화면으로 돌아감
+	UGameplayStatics::OpenLevel(this, FName("/Game/Maps/LV_Title"));
 }
 

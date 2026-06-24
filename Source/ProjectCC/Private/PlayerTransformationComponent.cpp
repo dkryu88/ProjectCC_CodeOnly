@@ -12,6 +12,7 @@
 #include "PlayerTransformationAnimation.h"
 #include "Player_CharacterWidget.h"
 #include "PlayerConditionComponent.h"
+#include "NiagaraComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -38,13 +39,17 @@ void UPlayerTransformationComponent::BeginPlay()
 
 	if (CurrentTransformation.bActive) {
 		ApplyTransformationVisual();
+
+		if (CurrentTransformation.TransformPersistEffect.NiagaraEffect) {
+			StartTransformLoopEffect_Local(CurrentTransformation.TransformPersistEffect);
+		}
 	}
 	else {
 		ApplyNormalVisual();
 		SetComponentTickEnabled(false);
 		return;
 	}
-	
+
 }
 
 // Called every frame
@@ -88,8 +93,13 @@ void UPlayerTransformationComponent::OnRep_Transformation()
 
 	if (CurrentTransformation.bActive) {
 		ApplyTransformationVisual();
+
+		if (CurrentTransformation.TransformPersistEffect.NiagaraEffect) {
+			StartTransformLoopEffect_Local(CurrentTransformation.TransformPersistEffect);
+		}
 	}
 	else {
+		StopTransformLoopEffect_Local();
 		ApplyNormalVisual();
 		SetComponentTickEnabled(false);
 	}
@@ -123,6 +133,7 @@ void UPlayerTransformationComponent::Server_ResolveInputRule_Implementation(EPla
 
 	ResolveInputRule_Internal(Rule);
 }
+
 //변신 매쉬 초기화 및 설정
 void UPlayerTransformationComponent::CreateVisualMesh()
 {
@@ -165,7 +176,7 @@ void UPlayerTransformationComponent::ApplyTransformationVisual()
 	if (TransformSkeletalMesh) {
 		TransformSkeletalMesh->SetSkeletalMesh(CurrentTransformation.TransformSkeletalMesh);
 		TransformSkeletalMesh->SetRelativeScale3D(CurrentTransformation.MeshScale);
-		
+
 		bool bUseSkeletalTransform = CurrentTransformation.TransformSkeletalMesh != nullptr;
 
 		TransformSkeletalMesh->SetVisibility(bUseSkeletalTransform, true);
@@ -226,7 +237,7 @@ void UPlayerTransformationComponent::ApplyNormalVisual()
 		}
 
 		AppliedPlayer->VisualManagerComp->Multi_RefreshVisuals();
-	
+
 		AppliedPlayer->VisualManagerComp->RefreshPortraitMaterials();
 	}
 
@@ -245,7 +256,7 @@ void UPlayerTransformationComponent::UpdateTransformMeshLocation()
 		TransformStaticMesh->SetWorldLocation(TargetLocation);
 		TransformStaticMesh->SetWorldRotation(TargetRotation);
 	}
-	
+
 	if (TransformSkeletalMesh) {
 		TransformSkeletalMesh->SetWorldLocation(TargetLocation);
 		TransformSkeletalMesh->SetWorldRotation(TargetRotation);
@@ -305,7 +316,7 @@ void UPlayerTransformationComponent::CopyTransformationData(UPlayerTransformatio
 	if (AppliedPlayer && AppliedPlayer->HasAuthority() && EffectClass) {
 		NewData.TransformationEffect = NewObject<UPlayerTransformationEffect>(this, EffectClass);
 	}
-	
+
 	NewData.bUseVisualManager = DataAsset->bUseVisualManager;
 	NewData.VisualEffectName = DataAsset->VisualEffectName;
 	NewData.VisualData = DataAsset->VisualData;
@@ -323,11 +334,17 @@ void UPlayerTransformationComponent::CopyTransformationData(UPlayerTransformatio
 	NewData.Priority = DataAsset->Priority;
 	NewData.bExposureCharacterWidget = DataAsset->bExposureCharacterWidget;
 
+	NewData.bHidePlayerEffectsFromOthers = DataAsset->bHidePlayerEffectsFromOthers;
+	NewData.TransformStartEffect = DataAsset->TransformStartEffect;
+	NewData.TransformPersistEffect = DataAsset->TransformPersistEffect;
+	NewData.TransformEndEffect = DataAsset->TransformEndEffect;
+
 	NewData.TransformationType = DataAsset->TransformationType;
 	NewData.MoveRule = DataAsset->MoveRule;
 	NewData.JumpRule = DataAsset->JumpRule;
 	NewData.DodgeRule = DataAsset->DodgeRule;
 	NewData.AttackRule = DataAsset->AttackRule;
+	NewData.AimRule = DataAsset->AimRule;
 	NewData.HittedRule = DataAsset->HittedRule;
 	NewData.UseItemRule = DataAsset->UseItemRule;
 
@@ -481,7 +498,7 @@ bool UPlayerTransformationComponent::StartTransformation(UPlayerTransformationDa
 
 	//적용 확정된 변신 우선 순위가 기존 적용중인 변신보다 높은 경우 변신 교체(변신 끝 효과 x)
 	if (CurrentTransformation.bActive) {
-		StopTransformation(false);
+		StopTransformation(false, !TransformationData->bHidePlayerEffectsFromOthers);
 	}
 
 	if (AppliedPlayer->ConditionComp) {
@@ -490,21 +507,51 @@ bool UPlayerTransformationComponent::StartTransformation(UPlayerTransformationDa
 
 	FPlayerTransformation NewTransformation;
 	CopyTransformationData(TransformationData, NewTransformation, UsedPlayer, CustomDuration);
-	
+
 	CurrentTransformation = NewTransformation;
 	CurrentTransformation.bActive = true;
-	
+
+	if (CurrentTransformation.bHidePlayerEffectsFromOthers) AppliedPlayer->Multicast_RefreshPersistEffectVisibility();
+	if (AppliedPlayer->EffectManagerComp) {
+		FGameEffectContext Context;
+		Context.SourceActor = AppliedPlayer;
+		Context.SourceComponent = AppliedPlayer->GetMesh();
+		Context.WorldLocation = AppliedPlayer->GetActorLocation();
+		Context.WorldRotation = AppliedPlayer->GetActorRotation();
+
+		AppliedPlayer->EffectManagerComp->PlayGameEffect_Multicast(CurrentTransformation.TransformStartEffect, Context);
+	}
+
+	if (CurrentTransformation.TransformPersistEffect.NiagaraEffect) Multicast_StartTransformLoopEffect(CurrentTransformation.TransformPersistEffect);
+
 	//위젯 설정
 	UPlayer_CharacterWidget* Player_CharacterWidget = Cast<UPlayer_CharacterWidget>(AppliedPlayer->WidgetComponent->GetUserWidgetObject());
 	if (Player_CharacterWidget) {
 		Player_CharacterWidget->SetUI();
 	}
 
+	CreateVisualMesh();
+	ApplyTransformationVisual();
+
+	bool bNeedStaticMesh = CurrentTransformation.TransformStaticMesh != nullptr;
+	bool bNeedSkeletalMesh = CurrentTransformation.TransformSkeletalMesh != nullptr;
+	bool bStaticOK = !bNeedStaticMesh || (TransformStaticMesh && TransformStaticMesh->GetStaticMesh() == CurrentTransformation.TransformStaticMesh && TransformStaticMesh->IsVisible());
+	bool bSkeletalOK = !bNeedSkeletalMesh || (TransformSkeletalMesh && TransformSkeletalMesh->GetSkeletalMeshAsset() == CurrentTransformation.TransformSkeletalMesh && TransformSkeletalMesh->IsVisible());
+	
+	if (!bStaticOK || !bSkeletalOK) {
+		ApplyNormalVisual();
+		CurrentTransformation = FPlayerTransformation();
+		CurrentTransformation.bActive = false;
+
+		SetComponentTickEnabled(false);
+		AppliedPlayer->ForceNetUpdate();
+
+		return false;
+	}
+
 	if (CurrentTransformation.TransformationEffect) {
 		CurrentTransformation.TransformationEffect->StartEffect(AppliedPlayer, this, CurrentTransformation, UsedPlayer);
 	}
-	CreateVisualMesh();
-	ApplyTransformationVisual();
 
 	AppliedPlayer->SetReplicateMovement(true);
 	AppliedPlayer->ForceNetUpdate();
@@ -512,7 +559,7 @@ bool UPlayerTransformationComponent::StartTransformation(UPlayerTransformationDa
 	return true;
 }
 //변신 중지
-void UPlayerTransformationComponent::StopTransformation(bool bEndEffect)
+void UPlayerTransformationComponent::StopTransformation(bool bEndEffect, bool bRefreshEffect)
 {
 	if (!AppliedPlayer) {
 		AppliedPlayer = Cast<APlayer_Character>(GetOwner());
@@ -523,10 +570,23 @@ void UPlayerTransformationComponent::StopTransformation(bool bEndEffect)
 
 	GetWorld()->GetTimerManager().ClearTimer(ShortStopTimerHandle);
 
-	if (CurrentTransformation.TransformationEffect && bEndEffect) {
+	if (IsValid(CurrentTransformation.TransformationEffect)) {
 		CurrentTransformation.TransformationEffect->EndFunction(AppliedPlayer, this, CurrentTransformation, bEndEffect);
 	}
-	
+
+	bool bHavingHidedEffect = CurrentTransformation.bHidePlayerEffectsFromOthers;
+
+	Multicast_StopTransformLoopEffect();
+	if (AppliedPlayer->EffectManagerComp) {
+		FGameEffectContext Context;
+		Context.SourceActor = AppliedPlayer;
+		Context.SourceComponent = AppliedPlayer->GetRootComponent();
+		Context.WorldLocation = AppliedPlayer->GetActorLocation();
+		Context.WorldRotation = AppliedPlayer->GetActorRotation();
+
+		AppliedPlayer->EffectManagerComp->PlayGameEffect_Multicast(CurrentTransformation.TransformEndEffect, Context);
+	}
+
 	ApplyNormalVisual();
 	CurrentTransformation = FPlayerTransformation();
 	CurrentTransformation.bActive = false;
@@ -536,6 +596,8 @@ void UPlayerTransformationComponent::StopTransformation(bool bEndEffect)
 	if (Player_CharacterWidget) {
 		Player_CharacterWidget->SetUI();
 	}
+
+	if (bHavingHidedEffect && bRefreshEffect) AppliedPlayer->Multicast_RefreshPersistEffectVisibility();
 
 	SetComponentTickEnabled(false);
 	AppliedPlayer->SetReplicateMovement(true);
@@ -547,6 +609,78 @@ void UPlayerTransformationComponent::NotifyHittedDuringTransformation(APlayer_Ch
 	ResolveInputRule(CurrentTransformation.HittedRule);
 	if (CurrentTransformation.TransformationEffect) {
 		CurrentTransformation.TransformationEffect->HittedEffect(AppliedPlayer, this, CurrentTransformation, AttackedPlayer);
+	}
+}
+
+bool UPlayerTransformationComponent::CheckHidePlayerEffectsFromOthers()
+{
+	return CurrentTransformation.bActive && CurrentTransformation.bHidePlayerEffectsFromOthers;
+}
+
+void UPlayerTransformationComponent::StartTransformLoopEffect_Local(const FGameEffectData& EffectData)
+{
+	if (!AppliedPlayer) AppliedPlayer = Cast<APlayer_Character>(GetOwner());
+	if (!AppliedPlayer || !EffectData.NiagaraEffect) return;
+
+	bool bShouldShow = AppliedPlayer->ShouldShowGameEffectForThisClient(EffectData);
+
+	if (!TransformEffectComp) {
+		TransformEffectComp = NewObject<UNiagaraComponent>(AppliedPlayer, UNiagaraComponent::StaticClass(), TEXT("TransformLoopEffectComp"));
+
+		if (!TransformEffectComp) return;
+
+		TransformEffectComp->RegisterComponent();
+		TransformEffectComp->AttachToComponent(AppliedPlayer->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+	}
+
+	TransformEffectComp->SetAsset(EffectData.NiagaraEffect);
+	TransformEffectComp->SetRelativeLocation(EffectData.LocationOffset);
+	TransformEffectComp->SetRelativeRotation(EffectData.RotationOffset);
+	TransformEffectComp->SetRelativeScale3D(EffectData.Scale);
+
+	TransformEffectComp->SetVisibility(bShouldShow, true);
+	TransformEffectComp->SetHiddenInGame(!bShouldShow, true);
+
+	if (bShouldShow) TransformEffectComp->Activate(true);
+	else TransformEffectComp->Deactivate();
+}
+
+void UPlayerTransformationComponent::Multicast_StartTransformLoopEffect_Implementation(FGameEffectData EffectData)
+{
+	StartTransformLoopEffect_Local(EffectData);
+}
+
+void UPlayerTransformationComponent::StopTransformLoopEffect_Local()
+{
+	if (!TransformEffectComp) return;
+
+	TransformEffectComp->Deactivate();
+	TransformEffectComp->SetVisibility(false, true);
+	TransformEffectComp->SetHiddenInGame(true, true);
+}
+
+void UPlayerTransformationComponent::Multicast_StopTransformLoopEffect_Implementation()
+{
+	StopTransformLoopEffect_Local();
+}
+
+void UPlayerTransformationComponent::RefreshTransformLoopEffectVisibility()
+{
+	if (!AppliedPlayer) AppliedPlayer = Cast<APlayer_Character>(GetOwner());
+	if (!AppliedPlayer) return;
+	if (!TransformEffectComp || !CurrentTransformation.bActive) return;
+
+	FGameEffectData& EffectData = CurrentTransformation.TransformPersistEffect;
+	bool bShouldShow = AppliedPlayer->ShouldShowGameEffectForThisClient(EffectData);
+
+	TransformEffectComp->SetVisibility(bShouldShow, true);
+	TransformEffectComp->SetHiddenInGame(!bShouldShow, true);
+
+	if (bShouldShow) {
+		if (!TransformEffectComp->IsActive()) TransformEffectComp->Activate(true);
+	}
+	else {
+		TransformEffectComp->Deactivate();
 	}
 }
 
@@ -565,6 +699,11 @@ bool UPlayerTransformationComponent::CanDodgeDuringTransformation()
 	return ResolveInputRule(CurrentTransformation.DodgeRule);
 }
 
+bool UPlayerTransformationComponent::CanAimDuringTransformation()
+{
+	return ResolveInputRule(CurrentTransformation.AimRule);
+}
+
 bool UPlayerTransformationComponent::CanAttackDuringTransformation()
 {
 	return ResolveInputRule(CurrentTransformation.AttackRule);
@@ -579,3 +718,4 @@ bool UPlayerTransformationComponent::CanInteractionDuringTransformation()
 {
 	return ResolveInputRule(CurrentTransformation.InteractionRule);
 }
+

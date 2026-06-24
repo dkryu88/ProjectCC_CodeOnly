@@ -72,7 +72,7 @@ void AObjects_SnowBomb::SnowExplode()
 			APlayer_Character* Victim = Cast<APlayer_Character>(Result.GetActor());
 			AObjects* TargetObjects = Cast<AObjects>(Result.GetActor());
 			if (Victim) {
-				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false);
+				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false, false);
 				UPlayerTransformationComponent* TransComp = Victim->FindComponentByClass<UPlayerTransformationComponent>();
 				if (TransComp) {
 					TransComp->StartTransformation(SnowManTransformationData, OwnPlayer, -1.f);

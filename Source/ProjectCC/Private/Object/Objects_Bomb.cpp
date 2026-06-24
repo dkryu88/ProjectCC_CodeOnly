@@ -70,7 +70,7 @@ void AObjects_Bomb::Explode()
 			APlayer_Character* Victim = Cast<APlayer_Character>(Result.GetActor());
 			AObjects* TargetObjects = Cast<AObjects>(Result.GetActor());
 			if (Victim) {
-				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false, 750.f * 4.f);
+				Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, true, false, 750.f * 3.f);
 			}
 			if (TargetObjects) {
 				TargetObjects->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, false, 750.f * 2.f);

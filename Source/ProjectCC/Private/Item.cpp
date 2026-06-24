@@ -6,6 +6,8 @@
 #include "ItemDataAsset.h"
 #include "Net/UnrealNetwork.h"
 #include "NiagaraComponent.h"
+#include "Effect/FGameEffectData.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
@@ -142,6 +144,20 @@ void AItem::UseItem() {
 	if (NowUseCount > -1) {
 		if (ApplyUseEffect()) {
 			NowUseCount -= 1;
+			//아이템 사용 이펙트 재생
+			//물체 Hit 이펙트 생성
+			if (EffectManagerComp && EquippedPlayer) {
+				FGameEffectData* EffectData = &UsingEffect;
+				if (EffectData) {
+					FGameEffectContext Context;
+					Context.SourceActor = EquippedPlayer;
+					Context.SourceComponent = EquippedPlayer->GetMesh();
+					Context.WorldLocation = EquippedPlayer->GetActorLocation();
+					Context.WorldRotation = EquippedPlayer->GetActorRotation();
+
+					EquippedPlayer->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context);
+				}
+			}
 		}
 	}
 	if (NowUseCount <= 0) {

@@ -90,7 +90,7 @@ protected:
 
 	//플레이 버튼 입력 시 기능
 	UFUNCTION()
-	void HandlePlayRequested(FString NickName, EMatchMode MatchMode);	//[4인]수정-2번째 인자 추가
+	void HandlePlayRequested(FString NickName, EMatchMode MatchMode);
 	UFUNCTION()
 	void HandleCancelRequested();
 
@@ -99,4 +99,8 @@ protected:
 
 	//닉네임이 유효한지 검사
 	bool ValidateNickname(const FString& nickname, FString& OutSanitized, FText& OutErrorText);
+
+	//[버그] 호스트가 매칭 중 취소버튼을 눌러 방을 깰 때, 참여해있던 클라이언트를 퇴장시키는 함수
+	UFUNCTION(Client,Reliable)
+	void Client_KickedByHost();
 };

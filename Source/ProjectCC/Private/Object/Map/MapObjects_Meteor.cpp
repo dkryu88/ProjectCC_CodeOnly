@@ -70,7 +70,7 @@ void AMapObjects_Meteor::OnLanded(const FHitResult& Hit)
 		if (!Target) continue;         // 플레이어가 아니면 스킵
 		if (Target->IsOut()) continue; // 탈락한 플레이어는 스킵
 
-		Target->ApplyDamageInternal(DamageAmount, nullptr, this, false, false); // 폭발 데미지 적용
+		Target->ApplyDamageInternal(DamageAmount, nullptr, this, true, true, true, false); // 폭발 데미지 적용
 	}
 
 	if (Area_FireArea) {

@@ -348,19 +348,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effect")
 	TObjectPtr<UGameEffectManagerComponent> ObjectsEffectManagerComp;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effect")
-	FGameEffectData SpawnEffect;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	FGameEffectData HitEffect;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	FGameEffectData DestroyEffect;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	TMap<FName, FGameEffectData> CustomEffects;
-
 	FGameEffectData* GetObjectsEffectData(EEffectType EffectType, FName CustomEffectName = NAME_None);
+	void DelayForDestroyEffect();
 	void PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams());
 };
 

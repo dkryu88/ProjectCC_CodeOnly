@@ -232,7 +232,7 @@ void AObjects_AirRaidFlareGun::ExplodeNextRow()
 
 				if (bBlocked) continue;
 
-				Target->ApplyDamageInternal(ExplosionDamage, OwnPlayer, this, false, false, false);
+				Target->ApplyDamageInternal(ExplosionDamage, OwnPlayer, this, true, false, true, false, 750.f * 3.5f);
 				DamagedPlayersThisRow.Add(Target);
 			}
 
@@ -259,7 +259,17 @@ void AObjects_AirRaidFlareGun::Multicast_PlayExplosionCell_Implementation(FVecto
 	DrawDebugBox(GetWorld(), Center, FVector(BS * 0.5f, BS * 0.5f, BS * 0.5f), FQuat::Identity, FColor::Red, false, 3.f, 0, 3.f);
 	DrawDebugSphere(GetWorld(), Center, 20.f, 12, FColor::Green, false, 3.0f);
 
-	if (!ExplosionFX) return;
+	if (ObjectsEffectManagerComp) {
+		FGameEffectData* ExplosionEffect = GetObjectsEffectData(EEffectType::Custom, TEXT("AirRaid"));
+		if (ExplosionEffect) {
+			FGameEffectContext Context;
 
-	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ExplosionFX, Center, Rotation, FVector(0.1f));
+			Context.SourceActor = OwnPlayer;
+			Context.SourceComponent = GetRootComponent();
+			Context.WorldLocation = Center;
+			Context.WorldRotation = Rotation;
+
+			ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ExplosionEffect, Context);
+		}
+	}
 }

@@ -45,18 +45,16 @@ void APlayMode_Match::BeginPlay()
 		MaxPlayers = SessionSubsystem->GetTotalMatchPlayers();
 	}
 
-	//[4인] 추가 플레이 시간 증가
 	if (MaxPlayers == 4) {
-		MatchDuration = 10;
-		MatchEventTimes = { 525,375,225,75 };
-		CoinWaveTime = { 600, 500, 400, 300, 200, 100 };
-		SupplyWeaponMaxCount = 16;
+		MatchDuration = 600;
+		MatchEventTimes = {525, 375, 225, 75};
+		CoinWaveTime = {600, 500, 400, 300, 200, 100};
+		SupplyWeaponMaxCount = 12;
 		SupplyItemMaxCount = 8;
 	}
 
-
 	SetNowMap();
-
+	
 	AMatch_State* _MatchState = GetGameState<AMatch_State>();
 	if (_MatchState) {
 		_MatchState->SetMatchStarted(false);
@@ -68,7 +66,7 @@ void APlayMode_Match::BeginPlay()
 
 AActor* APlayMode_Match::ChoosePlayerStart_Implementation(AController* Player)
 {
-	if (RespawnPoints.Num() <= 0) {
+	if (RespawnPoints.Num() <= 0) { 
 		GetRespawnPoints();
 	}
 	if (RespawnPoints.Num() <= 0) {
@@ -116,7 +114,7 @@ void APlayMode_Match::StartMatchLogic()
 	MatchEventTimeIndex = 0;
 	ActiveMatchEvents.Reset();
 	UsedEvents.Reset();
-
+	
 	_MatchState->SetMatchTime(MatchDuration);
 	_MatchState->SetMatchStarted(true);
 	_MatchState->SetMatchEnded(false);
@@ -125,7 +123,7 @@ void APlayMode_Match::StartMatchLogic()
 	GetWorldTimerManager().SetTimer(MatchTimerHandle, this, &APlayMode_Match::UpdateMatchTimer, 1.0f, true);
 	GetWorldTimerManager().SetTimer(SupplyTimerHandle, this, &APlayMode_Match::SupplyWeaponAndItem, SupplyCheckInterval, true);
 	GetWorldTimerManager().SetTimer(SpawnObjectsTimerHandle, this, &APlayMode_Match::SupplyObjects, SpawnObjectsCheckInterval, true);
-
+	
 }
 //매치 시작 시 모든 플레이어를 리스폰 지점에서 다시 스폰
 void APlayMode_Match::SpawnAllPlayersAtRespawnPoint() {
@@ -185,7 +183,7 @@ void APlayMode_Match::EndMatchLogic()
 {
 	AMatch_State* _MatchState = GetGameState<AMatch_State>();
 	if (!_MatchState) return;
-
+	
 	StopMatchEvent();
 
 	GetWorldTimerManager().ClearTimer(MatchTimerHandle);
@@ -208,9 +206,6 @@ void APlayMode_Match::EndMatchLogic()
 				player->AddInputBlockController(FName("MatchEnd"), true, true, true, false);
 			}
 			PC->Client_ApplyUIInputMode();
-
-			// [사운드] 매치 종료 시 bgm fadeout
-			PC->Client_FadeOutBgm();
 		}
 	}
 
@@ -224,7 +219,7 @@ void APlayMode_Match::SendMatchResultsToPlayers()
 
 	TArray<FMatchResultData> AllResults;
 	FName CurrentMapName = CurrentMap ? CurrentMap->GetFName() : NAME_None;
-
+	
 	for (APlayerState* PS_Base : GS->PlayerArray) {
 		APlayer_State* PS = Cast<APlayer_State>(PS_Base);
 		if (!PS) continue;
@@ -242,7 +237,7 @@ void APlayMode_Match::SendMatchResultsToPlayers()
 
 	AllResults.Sort([](const FMatchResultData& A, const FMatchResultData& B) {
 		return A.Rank < B.Rank;
-		});
+	});
 
 	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
 		AMatch_PlayerController* MPC = Cast<AMatch_PlayerController>(IT->Get());
@@ -378,28 +373,28 @@ bool APlayMode_Match::GetRandomRewardInShopBox(APlayer_State* PS, EShopBoxs Box,
 		return GetRandomEquipmentWithGrade(PS, EGrade::Grade_A, ResultWeapon, ResultItem);
 	case EShopBoxs::S_Box:
 		return GetRandomEquipmentWithGrade(PS, EGrade::Grade_S, ResultWeapon, ResultItem);
-	case EShopBoxs::Random_Box:
-	{
-		int32 Random = FMath::RandRange(1, 100);
-		if (Random <= 50) {
-			return GetRandomEquipmentWithGrade(PS, EGrade::Grade_B, ResultWeapon, ResultItem);
+	case EShopBoxs::Random_Box: 
+		{
+			int32 Random = FMath::RandRange(1, 100);
+			if (Random <= 50) {
+				return GetRandomEquipmentWithGrade(PS, EGrade::Grade_B, ResultWeapon, ResultItem);
+			}
+			else if (Random > 50 && Random <= 80) {
+				return GetRandomEquipmentWithGrade(PS, EGrade::Grade_A, ResultWeapon, ResultItem);
+			}
+			else if (Random > 80 && Random <= 90) {
+				return GetRandomEquipmentWithGrade(PS, EGrade::Grade_S, ResultWeapon, ResultItem);
+			}
+			else {
+				return true;
+			}
 		}
-		else if (Random > 50 && Random <= 80) {
-			return GetRandomEquipmentWithGrade(PS, EGrade::Grade_A, ResultWeapon, ResultItem);
-		}
-		else if (Random > 80 && Random <= 90) {
-			return GetRandomEquipmentWithGrade(PS, EGrade::Grade_S, ResultWeapon, ResultItem);
-		}
-		else {
-			return true;
-		}
-	}
 	}
 
 	return true;
 }
 
-bool APlayMode_Match::GetRandomEquipmentWithGrade(APlayer_State* PS, EGrade Grade, TSubclassOf<AWeapon>& ResultWeapon, TSubclassOf<AItem>& ResultItem)
+bool APlayMode_Match::GetRandomEquipmentWithGrade(APlayer_State* PS, EGrade Grade , TSubclassOf<AWeapon>& ResultWeapon, TSubclassOf<AItem>& ResultItem)
 {
 	ResultWeapon = nullptr;
 	ResultItem = nullptr;
@@ -532,7 +527,7 @@ void APlayMode_Match::UpdatePlayersRank()
 		}
 	}
 	//동률 처리 우선순위 : 1. 코인 > 2. 탈락 시킨 횟수 - 탈락한 횟수  > 3. 탈락 시킨 횟수 > 4. 탈락한 횟수
-	Players.Sort([](const APlayer_State& APlayer, const APlayer_State& BPlayer) {
+	Players.Sort([](const APlayer_State& APlayer,const APlayer_State& BPlayer) {
 		if (APlayer.GetPlayerCoin() != BPlayer.GetPlayerCoin()) {
 			return APlayer.GetPlayerCoin() > BPlayer.GetPlayerCoin();
 		}
@@ -549,7 +544,7 @@ void APlayMode_Match::UpdatePlayersRank()
 		}
 
 		return false;
-		});
+	});
 
 	int32 CurrentRank = 0;
 
@@ -562,11 +557,11 @@ void APlayMode_Match::UpdatePlayersRank()
 			int32 NowPlayerScore = NowPlayer->GetPlayerEliminate() - NowPlayer->GetPlayerOut();
 			//코인 수, 아웃시킨 횟수 - 아웃한 횟수 ,아웃시킨 횟수, 아웃한 횟수가 모두 같은지 확인
 			bool bSameRank = (
-				PrePlayer->GetPlayerCoin() == NowPlayer->GetPlayerCoin() &&
+				PrePlayer->GetPlayerCoin() == NowPlayer->GetPlayerCoin() && 
 				PrePlayerScore == NowPlayerScore &&
-				PrePlayer->GetPlayerEliminate() == NowPlayer->GetPlayerEliminate() &&
+				PrePlayer->GetPlayerEliminate() == NowPlayer->GetPlayerEliminate() && 
 				PrePlayer->GetPlayerOut() == NowPlayer->GetPlayerOut()
-				);
+			);
 
 			if (!bSameRank) CurrentRank = i + 1;
 		}
@@ -592,7 +587,7 @@ AActor* APlayMode_Match::GetSpectatorTarget(APlayer_Character* OutPlayer) {
 		if (!PC) continue;
 
 		APlayer_Character* Player = Cast<APlayer_Character>(PC->GetPawn());
-		if (!Player || Player == OutPlayer || Player->IsOut()) continue;
+		if (!Player || Player==OutPlayer || Player->IsOut()) continue;
 		NotOutPlayers.Add(Player);
 	}
 	//탈락하지 않은 플레이어들 중 랜덤한 한 명 선정
@@ -608,19 +603,19 @@ AActor* APlayMode_Match::GetSpectatorTarget(APlayer_Character* OutPlayer) {
 void APlayMode_Match::CheckAllPlayersLoadedAndStartDelay()
 {
 	if (!HasAuthority()) return;
-
+	
 
 	AMatch_State* _MatchState = GetGameState<AMatch_State>();
 	if (!_MatchState || !GameState) return;
 
 	if (GetWorldTimerManager().IsTimerActive(MatchDelayTimerHandle)) return;
 
-	if (MaxPlayers <= 0) {
-		return;
+	if (MaxPlayers <= 0) { 
+		return; 
 	}
 
-	if (GameState->PlayerArray.Num() < MaxPlayers) {
-		return;
+	if (GameState->PlayerArray.Num() < MaxPlayers) { 
+		return; 
 	}
 
 	for (APlayerState* PSBase : GameState->PlayerArray) {
@@ -699,7 +694,7 @@ void APlayMode_Match::SetAllPlayersGameplayLocked(bool bLocked)
 		else {
 			Player->RemoveInputBlockController(FName("MatchReady"));
 		}
-
+		
 	}
 }
 
@@ -789,7 +784,7 @@ bool APlayMode_Match::ChooseRespawnPoint(APlayerController* RespawnPC, FTransfor
 
 	for (ATargetPoint* point : RespawnPoints) {
 		if (!point) continue;
-
+		
 		FVector SpawnLocation = point->GetActorLocation();
 		float NearestPlayerDistanceSq = -1.f;
 		float FallestPlayerDistanceSq = -1.f;
@@ -815,13 +810,13 @@ bool APlayMode_Match::ChooseRespawnPoint(APlayerController* RespawnPC, FTransfor
 				NearestPlayerDistanceSq = FMath::Min(NearestPlayerDistanceSq, DistanceSq);
 			}
 		}
-
+		
 		if (bFallbackSpawnPoint) {
 			FallBackRespawnPoint.Point = point;
 			FallBackRespawnPoint.NearestPlayerDistanceSq = FallestPlayerDistanceSq;
 		}
 		if (bNonSpawn) continue;
-
+	
 		FRespawnPoint TargetRespawnPoint;
 		TargetRespawnPoint.Point = point;
 		TargetRespawnPoint.NearestPlayerDistanceSq = NearestPlayerDistanceSq;
@@ -841,7 +836,7 @@ bool APlayMode_Match::ChooseRespawnPoint(APlayerController* RespawnPC, FTransfor
 
 	Candidates.Sort([](const FRespawnPoint& APoint, const FRespawnPoint& BPoint) {
 		return APoint.NearestPlayerDistanceSq < BPoint.NearestPlayerDistanceSq;
-		});
+	});
 
 	int32 PickCount = FMath::Min(3, Candidates.Num());
 	int32 RandomIndex = FMath::RandRange(0, PickCount - 1);
@@ -877,7 +872,7 @@ int32 APlayMode_Match::AllocateSpawnSlot()
 	}
 
 	if (NonChosedSlots.Num() <= 0) return -1;
-
+	
 	int32 RandomArrayIndex = FMath::RandRange(0, NonChosedSlots.Num() - 1);
 	return NonChosedSlots[RandomArrayIndex];
 }
@@ -957,7 +952,7 @@ void APlayMode_Match::TryRespawn(APlayerController* PC)
 
 	AMatch_PlayerController* Match_PC = Cast<AMatch_PlayerController>(PC);
 	if (!Match_PC) return;
-
+	
 	Respawn(Match_PC);
 }
 
@@ -965,6 +960,8 @@ void APlayMode_Match::TryRespawn(APlayerController* PC)
 void APlayMode_Match::RequestRespawn(APlayerController* PC) {
 	if (!HasAuthority()) return;
 	if (!PC) return;
+
+	if (APlayer_Character* OutPlayer = Cast<APlayer_Character>(PC->GetPawn())) OutPlayer->SaveCurrentEquipmentClass();
 
 	if (RespawnMap.Contains(PC)) return;
 
@@ -1010,7 +1007,7 @@ void APlayMode_Match::Respawn(AMatch_PlayerController* PC) {
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	APlayer_Character* SpawnPlayer = GetWorld()->SpawnActor<APlayer_Character>(DefaultPawnClass, SpawnTransform, SpawnParams);
-
+	
 	//없으면 큰일;;
 	if (!SpawnPlayer) {
 		UE_LOG(LogTemp, Error, TEXT("Fail to Respawn player"));
@@ -1026,6 +1023,7 @@ void APlayMode_Match::Respawn(AMatch_PlayerController* PC) {
 
 	SpawnPlayer->LoadNowItem();
 	SpawnPlayer->ApplyResevedWeapon();
+	SpawnPlayer->EquipSavedEquipmentAfterRespawn();
 
 	ApplyActiveEventToPlayer(SpawnPlayer);
 
@@ -1105,7 +1103,7 @@ bool APlayMode_Match::SelectRandomMatchEvent(FMatchEventData& EventData)
 			Candidates.Add(Eventdata);
 		}
 	}
-
+	
 	if (CurrentMap && CurrentMap->Match_MapEventList) {
 		for (const FMatchEventData& Eventdata : CurrentMap->Match_MapEventList->Events) {
 			if (!Eventdata.Event) continue;
@@ -1380,12 +1378,7 @@ void APlayMode_Match::SupplyWeaponAndItem()
 	int32 SpawnItemChangePercent = FMath::Clamp(ItemShortage * 20, 0, 100);
 	int32 Random = FMath::RandRange(1, 100);
 
-	UE_LOG(LogTemp, Warning, TEXT("SupplyCheck : WeaponCount = %d / Shortage = %d / Chance = %d / Roll = %d"),
-		CurrentWeaponCount, WeaponShortage, SpawnWeaponChangePercent, Random);
-	UE_LOG(LogTemp, Warning, TEXT("SupplyCheck : ItemCount = %d / Shortage = %d / Chance = %d / Roll = %d"),
-		CurrentItemCount, ItemShortage, SpawnItemChangePercent, Random);
-
-	if (Random <= SpawnWeaponChangePercent) {
+	if (Random <= SpawnWeaponChangePercent && !bCanSupplyWeaponSpawn) {
 		bool bSpawned = SpawnSupplyWeapon();
 
 		UE_LOG(LogTemp, Warning, TEXT("SupplyCheck : Spawn Result = %s"),
@@ -1404,7 +1397,7 @@ void APlayMode_Match::SupplyObjects()
 {
 	if (!HasAuthority()) return;
 	if (!CurrentMap) return;
-
+	
 	int32 Random = FMath::RandRange(1, 100);
 
 	if (Random <= 25) {
@@ -1434,7 +1427,7 @@ int32 APlayMode_Match::CountWorldWeapon()
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("Weapon: %d"), WeaponCount);
-
+	
 	return WeaponCount;
 }
 
@@ -1475,7 +1468,7 @@ TSubclassOf<AWeapon> APlayMode_Match::SelectSupplyWeapon()
 	else if (Random <= PercentOfB + PercentOfA && PercentOfB < Random) {
 		TargetPool = &AllWeaponList->AWeapons;
 	}
-	else if (100 - PercentOfS < Random) {
+	else if (100 - PercentOfS < Random ) {
 		TargetPool = &AllWeaponList->SWeapons;
 	}
 
@@ -1494,7 +1487,7 @@ TSubclassOf<AWeapon> APlayMode_Match::SelectSupplyWeapon()
 			return nullptr;
 		}
 	}
-
+	
 	int32 Index = FMath::RandRange(0, TargetPool->Num() - 1);
 	return (*TargetPool)[Index];
 }
@@ -1560,7 +1553,7 @@ TSubclassOf<AObjects> APlayMode_Match::SelectSpawnObjects()
 		else if (AllObjectsList->NormalObjects.Num() > 0) {
 			TargetPool = &AllObjectsList->NormalObjects;
 		}
-		else {
+		else{
 			return nullptr;
 		}
 	}

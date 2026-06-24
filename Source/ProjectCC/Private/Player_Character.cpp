@@ -165,6 +165,11 @@ void APlayer_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(APlayer_Character, Aim_TurnSpeed);
 	DOREPLIFETIME(APlayer_Character, Weight);
 
+	DOREPLIFETIME(APlayer_Character, bEquipLock);
+	DOREPLIFETIME(APlayer_Character, bDropLock);
+	DOREPLIFETIME(APlayer_Character, bInteractionLock);
+	DOREPLIFETIME(APlayer_Character, bFixEquipmentMode);
+
 	DOREPLIFETIME(APlayer_Character, NowWeapon);
 	DOREPLIFETIME(APlayer_Character, NowItem);
 	DOREPLIFETIME(APlayer_Character, NowObjects);
@@ -403,12 +408,18 @@ void APlayer_Character::OnRep_bIsOut()
 void APlayer_Character::OnRep_NowWeapon()
 {
 	AStat = GetWeaponStat();
+	HideAimPoint();
+	HideAimPreview();
+	if (bIsAiming) SetAimInternal(false);
 	OnWeaponChanged.Broadcast();
 }
 
 void APlayer_Character::OnRep_NowObjects()
 {
 	AStat = GetWeaponStat();
+	HideAimPoint();
+	HideAimPreview();
+	if (bIsAiming) SetAimInternal(false);
 	OnWeaponChanged.Broadcast();
 }
 
@@ -519,6 +530,45 @@ void APlayer_Character::UpdateAnimationMoveDirectionValues(float DeltaTime)
 	AnimMoveForward = FMath::FInterpTo(AnimMoveForward, TargetForward, DeltaTime, AnimTurnSpeed);
 	AnimMoveSide = FMath::FInterpTo(AnimMoveSide, TargetSide, DeltaTime, AnimTurnSpeed);
 
+}
+
+bool APlayer_Character::ShouldUseNoArmsReaction()
+{
+	if (NowWeapon && NowWeapon->WeaponData) return NowWeapon->WeaponData->bUsingSpecialPose;
+	if (NowObjects && NowObjects->ObjectsData) return NowObjects->ObjectsData->bUsingSpecialPose;
+	return false;
+}
+
+void APlayer_Character::SaveCurrentEquipmentClass()
+{
+	if (!HasAuthority()) return;
+	
+	APlayer_State* PS = GetThePlayerState();
+	if (!PS) return;
+	if (!PS->bSaveEquipmentMode) return;
+
+	TSubclassOf<AActor> EquipmentClass = nullptr;
+
+	if (NowWeapon) EquipmentClass = NowWeapon->GetClass();
+	else if (NowObjects) EquipmentClass = NowObjects->GetClass();
+	if (!EquipmentClass) return;
+
+	PS->SetSavedEquipmentForRespawn(EquipmentClass, true, bFixEquipmentMode, false);
+}
+
+void APlayer_Character::EquipSavedEquipmentAfterRespawn()
+{
+	if (!HasAuthority()) return;
+	
+	APlayer_State* PS = GetThePlayerState();
+	if (!PS) return;
+
+	if (!PS->bSaveEquipmentMode) return;
+	if (!PS->SavedEquipmentClass) return;
+
+	bFixEquipmentMode = PS->bSaveFixEquipmentMode;
+
+	EquipLockedEquipment(PS->SavedEquipmentClass, PS->bSaveFixEquipmentMode, PS->bSaveDestroyOnClear);
 }
 
 bool APlayer_Character::CheckWeaponInteraction(EFunctionInterActionReason Reason)
@@ -842,7 +892,7 @@ bool APlayer_Character::BuildCurrentAttackPreviewData(FAimPreviewVisualData& Out
 {
 	OutData.Reset();
 	if (!NowMap) return false;
-	if (NowWeapon && NowWeapon->BuildAimPreviewData(this, OutData)) return true;
+	if (NowWeapon) return NowWeapon->BuildAimPreviewData(this, OutData);
 	float BlockSize = NowMap->BlockSize;
 
 	FWeaponStats CurrentStats = GetWeaponStat();
@@ -1017,6 +1067,8 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir) {
 
 //상호작용 탐지 범위 내의 가장 가까운 Equipment 탐색
 AEquipment* APlayer_Character::ClosestEquipment() {
+	if (bEquipLock) return nullptr;
+
 	TArray<AActor*> Overlapping;
 	PickupDetectRange->GetOverlappingActors(Overlapping, AEquipment::StaticClass());
 	AEquipment* target = nullptr;
@@ -1026,6 +1078,10 @@ AEquipment* APlayer_Character::ClosestEquipment() {
 	for (AActor* Equipment : Overlapping) {
 		AEquipment* E = Cast<AEquipment>(Equipment);
 		if (!IsValid(E)) continue;
+
+		//장착물 고정 상태일 경우 아이템만 후보로 등록
+		if (bFixEquipmentMode && !Cast<AItem>(E)) continue;
+
 		UPrimitiveComponent* PickupCollider = E->GetPickupCollider();
 		if (!PickupCollider) continue;
 
@@ -1041,6 +1097,8 @@ AEquipment* APlayer_Character::ClosestEquipment() {
 
 //상호작용 탐지 범위 내의 가장 가까운 Object 탐색
 AObjects* APlayer_Character::ClosestObjects() {
+	if (bInteractionLock || bEquipLock || bFixEquipmentMode) return nullptr;
+
 	TArray<AActor*> Overlapping;
 	PickupDetectRange->GetOverlappingActors(Overlapping, AObjects::StaticClass());
 	AObjects* target = nullptr;
@@ -1069,8 +1127,12 @@ AObjects* APlayer_Character::ClosestObjects() {
 void APlayer_Character::Interaction(const FInputActionValue& Value) {
 	if (!bCanControl) return;
 	if (bIsOut) return;
+	if (bInteractionLock) return;
 	if (TransformationComp && !TransformationComp->CanInteractionDuringTransformation()) return;
-	if (!CheckWeaponInteraction(EFunctionInterActionReason::InterAction)) return;
+	if (!bFixEquipmentMode) {
+		if (!CheckWeaponInteraction(EFunctionInterActionReason::InterAction)) return;
+	}
+	
 
 	if (!HasAuthority()) {
 		Server_Interaction();
@@ -1153,43 +1215,53 @@ void APlayer_Character::EquipWeaponAuto(TSubclassOf<AWeapon> weapon)
 bool APlayer_Character::PickWeapon(TObjectPtr<AWeapon> weapon) {
 	if (!weapon) return false;
 	if (!HasAuthority()) return false;
-	if (bIsInteractionLocked) return false;
-	else {
-		float Strength = 30.f;
-		//이미 장착된 무기가 있다면 새로운 무기로 교체
-		if (NowWeapon) {
-			if (LastPlayerdir.IsNearlyZero(0.05f)) {
-				Strength = PutStrength;
-			}
-			else {
-				Strength = MoveStrength;
-			}
-			DropWeapon(Strength, false);
-		}
-		else if (NowObjects) {
-			if (LastPlayerdir.IsNearlyZero(0.05f)) {
-				Strength = PutStrength;
-			}
-			else {
-				Strength = MoveStrength;
-			}
-			DropObjects(Strength, false);
-		}
-		LastAttackTime = -1.f;
-		NowWeapon = weapon;
-		NowWeapon->Equip(this);
-		OnWeaponChanged.Broadcast();
-		//무기의 Stat 획득
-		AStat = GetWeaponStat();
-		//현재 플레이어 상태 갱신
-		NowWeapon->GetWeaponInfo(this);
-		//move_Speed = move_Speed - (50 * (Weight - 1));
-		UpdateMoveSpeed();
-
-		if (VisualManagerComp) {
-			VisualManagerComp->Multi_RefreshVisuals();
+	if (bInteractionLock) return false;
+	if (bEquipLock){
+		if (!CheckHavingLockedEquipment(weapon)){
+			return false;
 		}
 	}
+	if (bFixEquipmentMode){
+		if (!CheckHavingLockedEquipment(weapon)){
+			return false;
+		}
+	}
+
+	float Strength = 30.f;
+	//이미 장착된 무기가 있다면 새로운 무기로 교체
+	if (NowWeapon) {
+		if (LastPlayerdir.IsNearlyZero(0.05f)) {
+			Strength = PutStrength;
+		}
+		else {
+			Strength = MoveStrength;
+		}
+		DropWeapon(Strength, false);
+	}
+	else if (NowObjects) {
+		if (LastPlayerdir.IsNearlyZero(0.05f)) {
+			Strength = PutStrength;
+		}
+		else {
+			Strength = MoveStrength;
+		}
+		DropObjects(Strength, false);
+	}
+	LastAttackTime = -1.f;
+	NowWeapon = weapon;
+	NowWeapon->Equip(this);
+	OnWeaponChanged.Broadcast();
+	//무기의 Stat 획득
+	AStat = GetWeaponStat();
+	//현재 플레이어 상태 갱신
+	NowWeapon->GetWeaponInfo(this);
+	//move_Speed = move_Speed - (50 * (Weight - 1));
+	UpdateMoveSpeed();
+
+	if (VisualManagerComp) {
+		VisualManagerComp->Multi_RefreshVisuals();
+	}
+
 	return true;
 }
 
@@ -1197,25 +1269,25 @@ bool APlayer_Character::PickWeapon(TObjectPtr<AWeapon> weapon) {
 bool APlayer_Character::PickItem(TObjectPtr<AItem> Item) {
 	if (!Item) return false;
 	if (!HasAuthority()) return false;
-	if (bIsInteractionLocked) return false;
-	else {
-		float Strength = 30.f;
-		//이미 장착된 아이템 있다면 새로운 무기로 교체
-		if (NowItem) {
-			if (LastPlayerdir.IsNearlyZero(0.05f)) {
-				Strength = PutStrength;
-			}
-			else {
-				Strength = MoveStrength;
-			}
-			DropItem(Strength);
-		}
-		NowItem = Item;
-		NowItem->Equip(this);
+	if (bInteractionLock) return false;
+	if (bEquipLock) return false;
 
-		//장착한 Item을 PlayerState에도 저장
-		SaveNowItem();
+	float Strength = 30.f;
+	//이미 장착된 아이템 있다면 새로운 무기로 교체
+	if (NowItem) {
+		if (LastPlayerdir.IsNearlyZero(0.05f)) {
+			Strength = PutStrength;
+		}
+		else {
+			Strength = MoveStrength;
+		}
+		DropItem(Strength);
 	}
+	NowItem = Item;
+	NowItem->Equip(this);
+
+	//장착한 Item을 PlayerState에도 저장
+	SaveNowItem();
 	return true;
 }
 
@@ -1223,39 +1295,47 @@ bool APlayer_Character::PickItem(TObjectPtr<AItem> Item) {
 bool APlayer_Character::PickObjects(TObjectPtr<AObjects> Object) {
 	if (!Object) return false;
 	if (!HasAuthority()) return false;
-	if (bIsInteractionLocked) return false;
-	else {
-		float Strength = 30.f;
-		//이미 장착된 무기가 있다면 새로운 무기로 교체
-		if (NowWeapon) {
-			if (LastPlayerdir.IsNearlyZero(0.05f)) {
-				Strength = PutStrength;
-			}
-			else {
-				Strength = MoveStrength;
-			}
-			DropWeapon(Strength, false);
+	if (bInteractionLock) return false;
+	if (bEquipLock)	{
+		if (!CheckHavingLockedEquipment(Object)){
+			return false;
 		}
-		else if (NowObjects) {
-			if (LastPlayerdir.IsNearlyZero(0.05f)) {
-				Strength = PutStrength;
-			}
-			else {
-				Strength = MoveStrength;
-			}
-			DropObjects(Strength, false);
+	}
+	if (bFixEquipmentMode){
+		if (!CheckHavingLockedEquipment(Object)){
+			return false;
 		}
-		LastAttackTime = -1.f;
-		NowObjects = Object;
-		NowObjects->Equip(this);
-		//현재 플레이어 상태 갱신
-		NowObjects->GetObjectInfo(this);
-		//move_Speed = move_Speed - (50 * (Weight - 1));
-		UpdateMoveSpeed();
+	}
+	float Strength = 30.f;
+	//이미 장착된 무기가 있다면 새로운 무기로 교체
+	if (NowWeapon) {
+		if (LastPlayerdir.IsNearlyZero(0.05f)) {
+			Strength = PutStrength;
+		}
+		else {
+			Strength = MoveStrength;
+		}
+		DropWeapon(Strength, false);
+	}
+	else if (NowObjects) {
+		if (LastPlayerdir.IsNearlyZero(0.05f)) {
+			Strength = PutStrength;
+		}
+		else {
+			Strength = MoveStrength;
+		}
+		DropObjects(Strength, false);
+	}
+	LastAttackTime = -1.f;
+	NowObjects = Object;
+	NowObjects->Equip(this);
+	//현재 플레이어 상태 갱신
+	NowObjects->GetObjectInfo(this);
+	//move_Speed = move_Speed - (50 * (Weight - 1));
+	UpdateMoveSpeed();
 
-		if (VisualManagerComp) {
-			VisualManagerComp->Multi_RefreshVisuals();
-		}
+	if (VisualManagerComp) {
+		VisualManagerComp->Multi_RefreshVisuals();
 	}
 	return true;
 }
@@ -1309,9 +1389,13 @@ void APlayer_Character::Drop(const FInputActionValue& Value) {
 	if (!bCanControl) return;
 	if (bIsOut) return;
 	if (bIsDodging) return;
-	if (bIsInteractionLocked) return;
+	if (bIsAttacking) return;
+	if (bDropLock) return;
+	if (bInteractionLock) return;
 	if (TransformationComp && !TransformationComp->CanInteractionDuringTransformation()) return;
-	if (!CheckWeaponInteraction(EFunctionInterActionReason::Drop)) return;
+	if (!bFixEquipmentMode) {
+		if (!CheckWeaponInteraction(EFunctionInterActionReason::Drop)) return;
+	}
 	if (!HasAuthority()) {
 		Server_Drop();
 	}
@@ -1335,6 +1419,19 @@ void APlayer_Character::DropInternal() {
 	else {
 		Strength = MoveStrength;
 	}
+
+	//장착물 고정 모드 상태에서는 아이템만 드랍 가능
+	if (bFixEquipmentMode) {
+		if (NowItem) DropItem(Strength);
+
+		//순간적으로 PickupDetect 껏다 켜기
+		PickupDetectRange->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PickupDetectRange->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+		LastEquipTime = GetWorld()->GetTimeSeconds();
+		return;
+	}
+
 	if (NowWeapon) {
 		//무기 드롭 시 조준 해제
 		CancelAimState();
@@ -1439,9 +1536,9 @@ void APlayer_Character::DropWeapon(float Strength, bool bIsThrowing) {
 	GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
 
 	NowWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-	NowWeapon->UnEquip(this);
 	NowWeapon->SetActorTransform(DropTransform());
-
+	NowWeapon->UnEquip(this);
+	
 	if (VisualManagerComp) {
 		VisualManagerComp->Multi_RestoreActorVisuals(NowWeapon);
 		VisualManagerComp->Multi_RefreshVisuals();
@@ -1488,9 +1585,9 @@ void APlayer_Character::DropObjects(float Strength, bool bIsThrowing) {
 	GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
 
 	NowObjects->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-	NowObjects->UnEquip(this);
 	NowObjects->SetActorTransform(DropTransform());
-
+	NowObjects->UnEquip(this);
+	
 	if (VisualManagerComp) {
 		VisualManagerComp->Multi_RestoreActorVisuals(NowObjects);
 		VisualManagerComp->Multi_RefreshVisuals();
@@ -1566,6 +1663,7 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 	if (!bCanControl) return;
 	if (bIsOut) return;
 	if (bIsDodging) return;
+	if (TransformationComp && !TransformationComp->CanAimDuringTransformation()) return;
 	if (!CheckWeaponInteraction(EFunctionInterActionReason::Aim)) return;
 
 	if (!HasAuthority()) {
@@ -1619,7 +1717,7 @@ void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
 	if (!HasAuthority()) {
 		Server_Aim(false);
 	}
-	
+
 	CancelAimState();
 }
 
@@ -1693,6 +1791,31 @@ void APlayer_Character::TrySendtoServerAimPoint()
 		LastAimPoint = mousepoint;
 		LastAimTime = CurrentTime;
 	}
+}
+
+FVector APlayer_Character::BuildAttackAimPointForCurrentState()
+{
+	if (bIsAiming) {
+		FVector Dir = ServerAimPoint - GetActorLocation();
+		if (bHavingCurrentAimTargetPoint) {
+			Dir = CurrentAimTargetPoint - GetActorLocation();
+		}
+
+		Dir.Z = 0.f;
+		if (!Dir.IsNearlyZero()) return Dir.GetSafeNormal();
+	}
+
+	FVector Dir = GetActorForwardVector();
+	Dir.Z = 0.f;
+
+	if (Dir.IsNearlyZero()) {
+		Dir = LastPlayerdir;
+		Dir.Z = 0.f;
+	}
+
+	if (Dir.IsNearlyZero()) return FVector::ForwardVector;
+
+	return Dir.GetSafeNormal();
 }
 
 void APlayer_Character::UpdateAimTargetPoint()
@@ -1854,6 +1977,7 @@ void APlayer_Character::Attack(const struct FInputActionValue& inputValue) {
 	}
 
 	FVector AimPointToUse = bHavingCurrentAimTargetPoint ? CurrentAimTargetPoint : ServerAimPoint;
+	FVector AttackDirectionToUse = BuildAttackAimPointForCurrentState();
 
 	//서버에서 공격 처리
 	if (!HasAuthority()) {
@@ -1862,11 +1986,11 @@ void APlayer_Character::Attack(const struct FInputActionValue& inputValue) {
 				return;
 			}
 		}
-		Server_Attack(false, AimPointToUse);
+		Server_Attack(false, AimPointToUse, AttackDirectionToUse);
 		return;
 	}
 
-	Server_Attack_Implementation(false, AimPointToUse);
+	Server_Attack_Implementation(false, AimPointToUse, AttackDirectionToUse);
 }
 
 //플레이어 공격 (Hold) 
@@ -1889,14 +2013,15 @@ void APlayer_Character::HoldAttack(const FInputActionValue& inputValue)
 	if (IsLocallyControlled()) UpdateAimTargetPoint();
 
 	FVector AimPointToUse = bHavingCurrentAimTargetPoint ? CurrentAimTargetPoint : ServerAimPoint;
+	FVector AttackDirectionToUse = BuildAttackAimPointForCurrentState();
 
 	//클라이언트라면 서버에 공격 요청 후 리턴하고 서버에서 처리하도록
 	if (!HasAuthority()) {
-		Server_Attack(true, AimPointToUse);
+		Server_Attack(true, AimPointToUse, AttackDirectionToUse);
 		return;
 	}
 	//서버라면 직접 공격 처리
-	Server_Attack_Implementation(true, AimPointToUse);
+	Server_Attack_Implementation(true, AimPointToUse, AttackDirectionToUse);
 }
 
 void APlayer_Character::AttackRelease(const struct FInputActionValue& inputValue) {
@@ -1949,15 +2074,6 @@ bool APlayer_Character::AttackLineOfSight(AActor* TargetActor)
 
 	FHitResult Hit;
 	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params);
-
-	if (bBlocked) {
-		// 뭔가에 막혔다면 붉은색 선을 그립니다. (ImpactPoint까지만)
-		DrawDebugLine(GetWorld(), Start, Hit.ImpactPoint, FColor::Red, false, 3.f, 0, 2.f);
-	}
-	else {
-		// 뻥 뚫려있다면 초록색 선을 그립니다. (끝까지)
-		DrawDebugLine(GetWorld(), Start, End, FColor::Green, false, 3.f, 0, 2.f);
-	}
 
 	return !bBlocked;
 }
@@ -2075,7 +2191,13 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 	//공격 무기 범위 계산
 	FVector ARangeStart;
 	FVector ARangeEnd;
-	FVector Forward = GetActorForwardVector();
+	FVector Forward = ServerAttackDirection;
+	Forward.Z = 0.f;
+	if (Forward.IsNearlyZero()) {
+		Forward = GetActorForwardVector();
+		Forward.Z = 0.f;
+	}
+	Forward = Forward.GetSafeNormal();
 
 	float ARadius = FMath::Max(1.f, AStat.AttackRadius);
 	float AHalfAngle = AStat.AttackDegree * 0.5f;
@@ -2158,7 +2280,11 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		//무기가 전체 범위 공격을 사용할 경우 가로x세로 방향의 Attack Sphere Trace 생성
 		else {
 			int32 HorizontalTraceCount = CalculateTraceIntervalCount(AHalfAngle, AdjustedRange, ARadius);
-			int32 VerticalTraceCount = CalculateTraceIntervalCount(AHalfAngle * 0.5f, AdjustedRange, ARadius);
+			float VerticalAngle = AHalfAngle;
+			if (NowWeapon && NowWeapon->WeaponData && !NowWeapon->WeaponData->bHorizonEqualVertical) {
+				VerticalAngle *= 0.5f;
+			}
+			int32 VerticalTraceCount = CalculateTraceIntervalCount(VerticalAngle, AdjustedRange, ARadius);
 			FVector ForwardDir = Forward.GetSafeNormal();
 
 			for (int32 VerIndex = 0; VerIndex <= VerticalTraceCount; VerIndex++) {
@@ -2226,10 +2352,14 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		if (NowWeapon && NowWeapon->WeaponData->AttackDirection == EWeaponAttackDirection::Vertical) {
 			ShotDir = Forward.RotateAngleAxis(RandomAngle, FVector::RightVector).GetSafeNormal();
 		}
-		//만약 무기가 랜덤방향 공격을 사용한다면 가로범위 * 세로범위/2 만큼의 영역중 한곳을 랜덤으로 공격 범위로 지정
+		//만약 무기가 랜덤방향 공격을 사용한다면 가로범위 * 세로범위 만큼의 영역중 한곳을 랜덤으로 공격 범위로 지정
 		else if (NowWeapon && NowWeapon->WeaponData->AttackDirection == EWeaponAttackDirection::Round) {
 			float HorizontalHalfAngleRadian = FMath::DegreesToRadians(AStat.AttackDegree * 0.5f);
-			float VerticalHalfAngleRadian = FMath::DegreesToRadians(AStat.AttackDegree * 0.25f);
+			float VerticalAngle = AStat.AttackDegree * 0.5f;
+			if (NowWeapon && NowWeapon->WeaponData && !NowWeapon->WeaponData->bHorizonEqualVertical) {
+				VerticalAngle *= 0.5f;
+			}
+			float VerticalHalfAngleRadian = FMath::DegreesToRadians(VerticalAngle);
 			ShotDir = FMath::VRandCone(Forward.GetSafeNormal(), HorizontalHalfAngleRadian, VerticalHalfAngleRadian).GetSafeNormal();
 		}
 		FVector TraceStart = ARangeStart;
@@ -2333,12 +2463,16 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		return;
 	}
 
+	//공격 적중 Hit 데이터 확인 (공격 적중 위치 등 저장)
+	TArray<FHitResult> TargetPlayerHits;
+	TArray<FHitResult> TargetObjectsHits;
 
 	//공격 적중 대상 확인
-	TArray<APlayer_Character*> TargetPlayers;
-	TArray<AObjects*> TargetObjects;
-	TargetPlayers.Reserve(Hits.Num());
-	TargetObjects.Reserve(Hits.Num());
+	TSet<APlayer_Character*> AddedPlayers;
+	TSet<AObjects*> AddedObjects;
+
+	TargetPlayerHits.Reserve(Hits.Num());
+	TargetObjectsHits.Reserve(Hits.Num());
 
 	for (FHitResult H : Hits) {
 		AActor* Hitted = H.GetActor();
@@ -2347,12 +2481,16 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		if (!AttackLineOfSight(Hitted)) continue;
 
 		//타격 대상이 플레이어인 경우
-		if (APlayer_Character* HittedPlayers = Cast<APlayer_Character>(Hitted)) {
+		if (APlayer_Character* HittedPlayer = Cast<APlayer_Character>(Hitted)) {
 			//본인 타격 방지
-			if (!HittedPlayers || HittedPlayers == this) continue;
+			if (!HittedPlayer || HittedPlayer == this) continue;
 			//시체 공격 방지
-			if (HittedPlayers->HP <= 0 || HittedPlayers->bIsOut) continue;
-			TargetPlayers.AddUnique(HittedPlayers);
+			if (HittedPlayer->HP <= 0 || HittedPlayer->bIsOut) continue;
+			//이미 히트 데이터에 저장된 플레이어라면 무시
+			if (AddedPlayers.Contains(HittedPlayer)) continue;
+
+			AddedPlayers.Add(HittedPlayer);
+			TargetPlayerHits.Add(H);
 		}
 		if (AObjects* HittedObjects = Cast<AObjects>(Hitted)) {
 			//장착 중인 Object 무시
@@ -2363,13 +2501,16 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 			if (HittedObjects == NowObjects || HittedObjects == NowSupport) continue;
 			//본인이 소유자인 물체는 무시
 			if (HittedObjects->OwnPlayerController == this->GetController()) continue;
+			//이미 히트 데이터에 저장된 물체라면 무시
+			if (AddedObjects.Contains(HittedObjects)) continue;
 
-			TargetObjects.AddUnique(HittedObjects);
+			AddedObjects.Add(HittedObjects);
+			TargetObjectsHits.Add(H);
 		}
 	}
 
 	//공격 비적중시 공격 효과 발생
-	if (TargetPlayers.Num() == 0 && TargetObjects.Num() == 0) {
+	if (TargetPlayerHits.Num() == 0 && TargetObjectsHits.Num() == 0) {
 		LastAttackTime = GetWorld()->GetTimeSeconds();
 		if (NowWeapon) {
 			bool bHaveUseEffect = NowWeapon->ApplyUseEffect();
@@ -2381,7 +2522,8 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 	}
 
 	//공격 적중시 피해 적용 + 적중 효과 발생
-	auto ApplyToPlayer = [&](APlayer_Character* HittedPlayer, float Damage) {
+	auto ApplyToPlayer = [&](const FHitResult& AttackHit, float Damage) {
+		APlayer_Character* HittedPlayer = Cast<APlayer_Character>(AttackHit.GetActor());
 		if (!HittedPlayer || HittedPlayer->IsOut()) return;
 		//벽너머 공격 시 return;
 		if (!AttackLineOfSight(HittedPlayer)) return;
@@ -2389,23 +2531,29 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		bool bWeaponSkipRotation = false;	// 기본값 : 회전스킵==false
 		bool bApplyKnockBack = true;
 		bool bApplyRotation = true;
+		bool bApplyHitAction = true;
 
 		//무기 데이터에서 넉백 적용 여부, 회전 적용 여부 확인
 		if (NowWeapon && NowWeapon->WeaponData) {
 			bApplyKnockBack = NowWeapon->WeaponData->bApplyKnockBack;
 			bApplyRotation = NowWeapon->WeaponData->bApplyRotation;
+			bApplyHitAction = NowWeapon->WeaponData->bUsingHitAction;
 
 			DamageMultiplier = NowWeapon->OnPreHit(HittedPlayer, bWeaponSkipRotation);
 		}
 		float FinalDamage = Damage * DamageMultiplier;
 
 		//여기서 데미지 적용 함수 호출
-		HittedPlayer->ApplyDamageInternal(FinalDamage, this, this, bApplyKnockBack, bApplyRotation && !bWeaponSkipRotation, false);
+		HittedPlayer->ApplyDamageInternal(FinalDamage, this, this, bApplyKnockBack, bApplyRotation && !bWeaponSkipRotation, bApplyHitAction, false);
 		if (NowWeapon) {
-			NowWeapon->ApplyHitEffect(HittedPlayer);
+			NowWeapon->ApplyHitEffect(HittedPlayer, AttackHit);
+		}
+		else {
+			PlayNormalAttackHitEffect(HittedPlayer, AttackHit);
 		}
 		};
-	auto ApplyToObject = [&](AObjects* HittedObject, float Damage) {
+	auto ApplyToObject = [&](const FHitResult& AttackHit, float Damage) {
+		AObjects* HittedObject = Cast<AObjects>(AttackHit.GetActor());
 		if (!HittedObject) return;
 		//벽너머 공격 시 Return
 		if (!AttackLineOfSight(HittedObject)) return;
@@ -2420,56 +2568,58 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		//여기서 데미지 적용 함수 호출
 		HittedObject->ApplyDamageInternal(Damage, this, this, bApplyKnockBack, false);
 		if (NowWeapon) {
-			NowWeapon->ApplyHitEffect(HittedObject);
+			NowWeapon->ApplyHitEffect(HittedObject, AttackHit);
+		}
+		else {
+			PlayNormalAttackHitEffect(HittedObject, AttackHit);
 		}
 		};
 
 	switch (AStat.AttackTargetType) {
 	case EAttackTargetType::SingleTarget:
 	{
-		APlayer_Character* ClosestTargetPlayer = nullptr;
-		AObjects* ClosestTargetObject = nullptr;
+		FHitResult* ClosestPlayerHit = nullptr;
+		FHitResult* ClosestObjectsHit = nullptr;
+
 		float ClosestDistance = -1.f;
 		float ClosestObDistance = -1.f;
 		//가장 가까운 것이 플레이어 캐릭터인지 물체인지 탐색
 		//적중 플레이어들과 적중 물체들의 가장 가까운 객체를 탐색
-		for (AActor* Target : TargetPlayers) {
+		for (FHitResult& Hit : TargetPlayerHits) {
+			AActor* Target = Hit.GetActor();
 			if (!Target) continue;
 			float Distance = FVector::DistSquared(GetActorLocation(), Target->GetActorLocation());
 			if (Distance < ClosestDistance || ClosestDistance == -1.f) {
-				if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
-					ClosestDistance = Distance;
-					ClosestTargetPlayer = TargetPlayer;
-				}
+				ClosestDistance = Distance;
+				ClosestPlayerHit = &Hit;
 			}
 		}
-		for (AActor* Target : TargetObjects) {
+		for (FHitResult& Hit : TargetObjectsHits) {
+			AActor* Target = Hit.GetActor();
 			if (!Target) continue;
 			float Distance = FVector::DistSquared(GetActorLocation(), Target->GetActorLocation());
-			if (Distance < ClosestDistance || ClosestDistance == -1.f) {
-				if (AObjects* TargetObject = Cast<AObjects>(Target)) {
-					ClosestObDistance = Distance;
-					ClosestTargetObject = TargetObject;
-				}
+			if (Distance < ClosestObDistance || ClosestObDistance == -1.f) {
+				ClosestObDistance = Distance;
+				ClosestObjectsHit = &Hit;
 			}
 		}
 		//가장 가까운 대상을 선별 후 그 대상에게 공격 적용 (bIsPlayer로 캐릭터인지 물체인지 판단)
-		if (!ClosestTargetObject && !ClosestTargetPlayer) return;
-		if ((ClosestObDistance < ClosestDistance || ClosestDistance == -1) && ClosestObDistance != -1) {
-			ApplyToObject(ClosestTargetObject, AStat.Attack);
+		if (!ClosestObjectsHit && !ClosestPlayerHit) return;
+		if (ClosestObjectsHit && (ClosestObDistance < ClosestDistance || !ClosestPlayerHit)) {
+			ApplyToObject(*ClosestObjectsHit, AStat.Attack);
 		}
-		else if ((ClosestObDistance >= ClosestDistance || ClosestObDistance == -1) && ClosestDistance != -1) {
-			ApplyToPlayer(ClosestTargetPlayer, AStat.Attack);
+		else if (ClosestPlayerHit) {
+			ApplyToPlayer(*ClosestPlayerHit, AStat.Attack);
 		}
 		break;
 	}
 	case EAttackTargetType::MultiTarget:
 		//적중한 모든 대상에게 공격 적용
-		for (APlayer_Character* P : TargetPlayers) {
-			ApplyToPlayer(P, AStat.Attack);
+		for (FHitResult& Hit : TargetPlayerHits) {
+			ApplyToPlayer(Hit, AStat.Attack);
 		}
-		for (AObjects* O : TargetObjects) {
-			ApplyToObject(O, AStat.Attack);
+		for (FHitResult& Hit : TargetObjectsHits) {
+			ApplyToObject(Hit, AStat.Attack);
 		}
 		break;
 	}
@@ -2489,20 +2639,22 @@ float APlayer_Character::TakeDamage(float damage, struct FDamageEvent const& Dam
 	bool bWeaponSkipRotation = false;	// 기본값 : 회전스킵==false
 	bool bApplyKnockBack = true;
 	bool bApplyRotation = true;
+	bool bApplyHitReaction = true;
 	//무기 데이터에서 넉백 적용 여부, 회전 적용 여부 확인
 	if (AttackPlayer && AttackPlayer->NowWeapon && AttackPlayer->NowWeapon->WeaponData) {
 		bApplyKnockBack = AttackPlayer->NowWeapon->WeaponData->bApplyKnockBack;
 		bApplyRotation = AttackPlayer->NowWeapon->WeaponData->bApplyRotation;
+		bApplyHitReaction = AttackPlayer->NowWeapon->WeaponData->bUsingHitAction;
 
 		DamageMultiplier = AttackPlayer->NowWeapon->OnPreHit(this, bWeaponSkipRotation);
 	}
 	float FinalDamage = damage * DamageMultiplier;
 
-	return ApplyDamageInternal(FinalDamage, AttackPlayer, DamageCauser, bApplyKnockBack, bApplyRotation && !bWeaponSkipRotation, false);
+	return ApplyDamageInternal(FinalDamage, AttackPlayer, DamageCauser, bApplyKnockBack, bApplyRotation && !bWeaponSkipRotation, bApplyHitReaction, false);
 }
 
 //플레이어 데미지 적용 처리
-float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bApplyRotation, bool bForceDamage, float OverrideKnockBackStrength)
+float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bApplyRotation, bool bUsingHitAction, bool bForceDamage, float OverrideKnockBackStrength)
 {
 	if (!HasAuthority()) return 0.f;
 	if (bIsOut) return 0.f;
@@ -2536,8 +2688,8 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 		TransformationComp->NotifyHittedDuringTransformation(AttackPlayer);
 	}
 
-	bool bSkipHitReaction = bIsDodging;
 	bool bSkipRotation = !bApplyRotation;
+	bool bSkipHitReaction = bIsDodging || bSkipRotation || !bUsingHitAction;
 	bIsHitted = true;
 
 	//체력이 0이 되면 탈락
@@ -2548,7 +2700,7 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 			Server_SpawnLostCoin(dropCoinAmount);
 			LastLoseCoinHP = HP;
 		}
-		Multicast_PlayHitReaction(FinalDamage, true, false, AttackDir);
+		Multicast_PlayHitReaction(FinalDamage, true, false, AttackDir, false);
 		Out(AttackPlayer);
 		return FinalDamage;
 	}
@@ -2568,7 +2720,7 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 		KnockBackStrength = Object->ObjectsData->KnockBackStrength;
 		KnockBackScale = Object->ObjectsData->KnockBackScale;
 	}
-	
+
 	AttackDir.Z = 0.f;
 	AttackDir = AttackDir.GetSafeNormal();
 	float TotalKnockBackStrength = 0.f;
@@ -2580,8 +2732,9 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 			TotalKnockBackStrength = KnockBackStrength * KnockBackScale;
 		}
 	}
-	
+
 	bool bBigHit = TotalKnockBackStrength >= BigHitKnockBackRule;
+	bHitReactionUseNoArms = ShouldUseNoArmsReaction();
 
 	//피격 시 변경되는 Condition 상태 제어
 	if (FinalDamage > 0.f && ConditionComp) {
@@ -2597,13 +2750,13 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	{
 		if (bBigHit) {
 			StartBigHitReaction();
-			Multicast_PlayHitReaction(FinalDamage, false, !bSkipRotation, AttackDir, true);
+			Multicast_PlayHitReaction(FinalDamage, false, !bSkipRotation, AttackDir, bHitReactionUseNoArms, true);
 		}
 		else {
 			bool bPlayedEquipHittedAnim = PlayEquipmentAnimation(EFunctionInterActionReason::Hitted);
 
 			if (!bPlayedEquipHittedAnim) {
-				Multicast_PlayHitReaction(FinalDamage, false, !bSkipRotation, AttackDir);
+				Multicast_PlayHitReaction(FinalDamage, false, !bSkipRotation, AttackDir, bHitReactionUseNoArms);
 			}
 		}
 	}
@@ -3326,6 +3479,8 @@ void APlayer_Character::StartBigHitReaction()
 	bIsBigHitReaction = true;
 	bIsRecoverReaction = false;
 	bIsHitted = true;
+	bHitReactionUseNoArms = ShouldUseNoArmsReaction();
+	Multicast_SetReactionUseNoArms(bHitReactionUseNoArms);
 
 	BigHitStartTime = GetWorld()->GetTimeSeconds();
 	BigHitStopTime = 0.f;
@@ -3369,6 +3524,8 @@ void APlayer_Character::StartBigHitReaction()
 			StartRecoverReaction();
 			return;
 		}
+
+		Multicast_SetReactionUseNoArms(bHitReactionUseNoArms);
 
 		//플레이어가 아직 날아가는 중이면 DuringSection 재생, 재생 후에도 여전히 날아가는 도중이면 해당 포즈에서 정지
 		Multicast_PlayOverrideMontage(BigHittedMontage, FName("During"), false, bHoldBigHittingPose);
@@ -3427,6 +3584,7 @@ void APlayer_Character::StartRecoverReaction()
 		MoveComp->StopMovementImmediately();
 	}
 
+	Multicast_SetReactionUseNoArms(bHitReactionUseNoArms);
 	Multicast_PlayOverrideMontage(BigHittedMontage, FName("End"), false, false);
 	float EndDuration = 0.5f;
 
@@ -3445,7 +3603,9 @@ void APlayer_Character::StartRecoverReaction()
 		if (!bIsRecoverReaction) return;
 		if (bIsOut || bEndMatchState) return;
 
+		Multicast_SetReactionUseNoArms(bHitReactionUseNoArms);
 		Multicast_PlayRecoverReaction();
+
 		float RecoverDuration = 0.3f;
 		if (RecoverMontage) {
 			RecoverDuration = RecoverMontage->GetPlayLength();
@@ -3466,7 +3626,8 @@ void APlayer_Character::EndBigHitReaction()
 	bIsBigHitReaction = false;
 	bIsRecoverReaction = false;
 	bIsHitted = false;
-
+	bHitReactionUseNoArms = false;
+	Multicast_SetReactionUseNoArms(false);
 	BigHitStopTime = 0.f;
 
 	GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);
@@ -3493,12 +3654,226 @@ bool APlayer_Character::GetCurrentEquipmentActionAnimation(EFunctionInterActionR
 		FoundAnimation = NowObjects->ObjectsData->AdditionalAnimation.Find(Reason);
 	}
 
-	if(!FoundAnimation || !FoundAnimation->IsValid()) return false;
+	if (!FoundAnimation || !FoundAnimation->IsValid()) return false;
 
 	Animation = *FoundAnimation;
 	return true;
 }
 
+FName APlayer_Character::GetAnimationSlot(APlayer_Character* Player)
+{
+	if (!Player) return NAME_None;
+	bool bUsingUpperBody_NoArmsByWeapon = IsValid(Player->NowWeapon) && Player->NowWeapon->WeaponData->bUsingSpecialPose;
+	bool bUsingUpperBody_NoArmsByObjects = IsValid(Player->NowObjects) && Player->NowObjects->ObjectsData->bUsingSpecialPose;
+	FName SlotName = bUsingUpperBody_NoArmsByWeapon || bUsingUpperBody_NoArmsByObjects ? FName(TEXT("UpperBody_NoArms")) : FName(TEXT("DefaultSlot"));
+
+	return SlotName;
+}
+//행동 제약 관련-------------------------------------------------------------------------------------
+void APlayer_Character::EquippmentLockActivateForEvent(TSubclassOf<AActor> TargetClass, bool bEnable)
+{
+	if (!HasAuthority()) return;
+
+	APlayer_State* PS = GetThePlayerState();
+
+	if (bEnable) {
+		if (!TargetClass) return;
+		bool bIsWeaponClass = TargetClass->IsChildOf(AWeapon::StaticClass());
+		bool bIsObjectsClass = TargetClass->IsChildOf(AObjects::StaticClass());
+
+		if (!bIsWeaponClass && !bIsObjectsClass) return;
+
+		bFixEquipmentMode = true;
+	
+		if (PS) {
+			PS->SetSavedEquipmentForRespawn(TargetClass, true, true, true);
+		}
+
+		EquipLockedEquipment(TargetClass, true, true);
+	}
+	else {
+		ClearLockedEquipment(true);
+
+		bFixEquipmentMode = false;
+		LockedEquipment = nullptr;
+
+		if (PS) {
+			PS->ClearSavedEquipmentForRespawn();
+		}
+	}
+
+	ForceNetUpdate();
+}
+void APlayer_Character::ClearLockedEquipment(bool bForceDestroyFixEquipment)
+{
+	if (!HasAuthority()) return;
+
+	AActor* TargetActor = LockedEquipment;
+	if (!TargetActor) {
+		bLockedEquipmentDestroyOnClear = false;
+		bLockedEquipmentSpawnedByForce = false;
+		LockedEquipment = nullptr;
+		return;
+	}
+
+	AWeapon* TargetWeapon = Cast<AWeapon>(TargetActor);
+	if (TargetWeapon) TargetWeapon->SetFixUseCount(false);
+
+	TargetActor->Tags.Remove(TEXT("LockedEquipment"));
+	bool bWillBeDestroy = bForceDestroyFixEquipment && bLockedEquipmentDestroyOnClear && bLockedEquipmentSpawnedByForce;
+
+	if (bWillBeDestroy) {
+		if (NowWeapon == TargetActor) {
+			GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
+			NowWeapon = nullptr;
+
+			Weight = BaseStats.Default_Weight;
+			move_Speed = BaseStats.Default_Speed;
+			Aim_TurnSpeed = 0.f;
+			LastAttackTime = -1.f;
+
+			AStat = GetWeaponStat();
+
+			UpdateMoveSpeed();
+			OnWeaponChanged.Broadcast();
+		}
+		else if (NowObjects == TargetActor) {
+			GetWorldTimerManager().ClearTimer(AttackEarlierDelayTimerHanlde);
+			NowObjects = nullptr;
+
+			Weight = BaseStats.Default_Weight;
+			move_Speed = BaseStats.Default_Speed;
+			LastAttackTime = -1.f;
+
+			AStat = GetWeaponStat();
+
+			UpdateMoveSpeed();
+			OnWeaponChanged.Broadcast();
+		}
+		if (VisualManagerComp) VisualManagerComp->Multi_RefreshVisuals();
+		TargetActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		TargetActor->Destroy();
+	}
+
+	bLockedEquipmentDestroyOnClear = false;
+	bLockedEquipmentSpawnedByForce = false;
+	LockedEquipment = nullptr;
+}
+void APlayer_Character::EquipLockedEquipment(TSubclassOf<AActor> EquipmentClass, bool bApplyFixUseCount, bool bDestroyOnClear)
+{
+	if (!HasAuthority()) return;
+	if (!EquipmentClass) return;
+	if (bIsOut) return;
+
+	bool bIsWeaponClass = EquipmentClass->IsChildOf(AWeapon::StaticClass());
+	bool bIsObjectsClass = EquipmentClass->IsChildOf(AObjects::StaticClass());
+
+	if (!bIsWeaponClass && !bIsObjectsClass) return;
+
+	//장착중인 장착물이 Lock대상이라면 Lock상태 적용 후 리턴
+	if (NowWeapon && NowWeapon->IsA(EquipmentClass)) {
+		bool bAlreadyForcedSpawned = LockedEquipment == NowWeapon && bLockedEquipmentSpawnedByForce;
+		LockedEquipment = NowWeapon;
+
+		if (bAlreadyForcedSpawned) {
+			bLockedEquipmentDestroyOnClear = bDestroyOnClear;
+		}
+		else {
+			bLockedEquipmentDestroyOnClear = false;
+			bLockedEquipmentSpawnedByForce = false;
+		}
+
+		if (bFixEquipmentMode) {
+			LockedEquipment = NowWeapon;
+			NowWeapon->Tags.AddUnique(TEXT("LockedEquipment"));
+		}
+		else {
+			LockedEquipment = nullptr;
+			NowWeapon->Tags.Remove(TEXT("LockedEquipment"));
+		}
+		
+		NowWeapon->SetFixUseCount(bApplyFixUseCount);
+		NowWeapon->ForceNetUpdate();
+
+		return;
+	}
+	else if (NowObjects && NowObjects->IsA(EquipmentClass)) {
+		bool bAlreadyForcedSpawned = LockedEquipment == NowObjects && bLockedEquipmentSpawnedByForce;
+		LockedEquipment = NowObjects;
+
+		if (bAlreadyForcedSpawned) {
+			bLockedEquipmentDestroyOnClear = bDestroyOnClear;
+		}
+		else {
+			bLockedEquipmentDestroyOnClear = false;
+			bLockedEquipmentSpawnedByForce = false;
+		}
+		if (bFixEquipmentMode) {
+			LockedEquipment = NowObjects;
+			NowObjects->Tags.AddUnique(TEXT("LockedEquipment"));
+		}
+		else {
+			LockedEquipment = nullptr;
+			NowObjects->Tags.Remove(TEXT("LockedEquipment"));
+		}
+
+		NowObjects->ForceNetUpdate();
+
+		return;
+	}
+
+	//Lock 대상 장착물 강제 장착 (기존 장착중이던 무기/물체는 장착 해제)
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	if (NowWeapon) {
+		DropWeapon(0.f, false);
+ 	}
+	if (NowObjects) {
+		DropObjects(0.f, false);
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AActor* SpawnedActor = World->SpawnActor<AActor>(EquipmentClass, GetActorLocation(), FRotator::ZeroRotator, SpawnParams);
+	if (!SpawnedActor) return;
+
+	LockedEquipment = SpawnedActor;
+	bLockedEquipmentSpawnedByForce = true;
+	bLockedEquipmentDestroyOnClear = bDestroyOnClear;
+
+	if (bFixEquipmentMode) {
+		SpawnedActor->Tags.AddUnique(TEXT("LockedEquipment"));
+	}
+
+	if (AWeapon* SpawnedWeapon = Cast<AWeapon>(SpawnedActor)) {
+		SpawnedWeapon->SetFixUseCount(bApplyFixUseCount);
+		PickWeapon(SpawnedWeapon);
+		//장착 이후 한번 더 고정 (누락 방지)
+		SpawnedWeapon->SetFixUseCount(bApplyFixUseCount);
+
+		return;
+	}
+	if (AObjects* SpawnedObject = Cast<AObjects>(SpawnedActor))
+	{
+		PickObjects(SpawnedObject);
+		return;
+	}
+
+	//실패시 실패 액터 제거
+	SpawnedActor->Destroy();
+	LockedEquipment = nullptr;
+	bLockedEquipmentDestroyOnClear = false;
+	bLockedEquipmentSpawnedByForce = false;
+}
+bool APlayer_Character::CheckHavingLockedEquipment(AActor* Actor)
+{
+	return Actor && LockedEquipment && Actor == LockedEquipment;
+}
+//-----------------------------------------------------------------------------------------------------
 void APlayer_Character::BindPlayer_State()
 {
 	APlayer_State* PS = GetThePlayerState();
@@ -3600,7 +3975,6 @@ void APlayer_Character::PlayDamageAnimation(float Damage, bool bBigHit) {
 
 	UAnimMontage* TargetMontage = nullptr;
 	TargetMontage = HittedMontage;
-
 	float ReleaseDelay = 0.15f;
 
 	if (TargetMontage) {
@@ -3613,6 +3987,8 @@ void APlayer_Character::PlayDamageAnimation(float Damage, bool bBigHit) {
 	GetWorldTimerManager().ClearTimer(HittedResetTimerHandle);
 	GetWorldTimerManager().SetTimer(HittedResetTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
 		bIsHitted = false;
+		bHitReactionUseNoArms = false;
+
 		if (HasAuthority()) {
 			if (ConditionComp) {
 				ConditionComp->ResumeCurrentConditionAnimation();
@@ -3714,6 +4090,29 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 		FName SlotName = GetActionSlotName(false);
 		Multicast_PlayAnimationDynamic(NormalAttackSequence, SlotName, 0.025f, 0.1f, 1.f, 1, 0);
 
+		float AnimLength = NormalAttackSequence->GetPlayLength();
+		float StartTime = 0.f;
+
+		if (StartFrame > 0) {
+			int32 NumKeys = NormalAttackSequence->GetNumberOfSampledKeys();
+			if (AnimLength > 0.01f && NumKeys > 1) {
+				float FPS = (NumKeys - 1) / AnimLength;
+				StartTime = StartTime / FPS;
+				StartTime = FMath::Clamp(StartTime, 0.f, FMath::Max(0.f, AnimLength));
+			}
+			float RemainTime = (AnimLength - StartTime) / 1.f;
+			RemainTime = FMath::Max(0.01f, RemainTime - 0.1f);
+
+			bIsAttacking = true;
+
+			GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
+			GetWorldTimerManager().SetTimer(EndAttackStateTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+				bIsAttacking = false;
+				}), RemainTime, false);
+
+			if (HasAuthority()) ForceNetUpdate();
+		}
+
 		return true;
 	}
 
@@ -3767,7 +4166,7 @@ bool APlayer_Character::PlayEquipmentAnimation(EFunctionInterActionReason Reason
 			GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
 			GetWorldTimerManager().SetTimer(EndAttackStateTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
 				bIsAttacking = false;
-			}), RemainTime, false);
+				}), RemainTime, false);
 		}
 
 		//조준 중 공격 애니메이션이 끝나면 조준 애니메이션 복구
@@ -3808,6 +4207,120 @@ FName APlayer_Character::GetActionSlotName(bool bUseFullBodyAnim)
 	return FName(TEXT("UpperBody"));
 }
 
+/*-------------------------이펙트 관련----------------------------------*/
+void APlayer_Character::PlayNormalAttackHitEffect(AActor* Target, const FHitResult& AttackHit)
+{
+	if (!HasAuthority()) return;
+	if (!EffectManagerComp) return;
+
+	bool bHasNiagara = NormalAttackHitEffect.NiagaraEffect != nullptr;
+	bool bHasSound = NormalAttackHitEffect.Sound != nullptr;
+
+	if (!bHasNiagara && !bHasSound) return;
+
+	FVector HitLocation = AttackHit.ImpactPoint;
+	if (HitLocation.IsNearlyZero()) HitLocation = AttackHit.Location;
+	if (HitLocation.IsNearlyZero() && Target) {
+		HitLocation = Target->GetActorLocation();
+		if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
+			HitLocation = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 35.f);
+		}
+		else if (AObjects* TargetObjects = Cast<AObjects>(Target)) {
+			HitLocation = TargetObjects->PhysicsCollider->Bounds.Origin;
+		}
+	}
+
+	//히트 이펙트를 대상 쪽으로 약간 밀어넣음 (공중에 뜨는것 방지)
+	float HitInsideDistance = 10.f;
+	if (Target) {
+		FVector TargetCenter = Target->GetActorLocation();
+		if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
+			TargetCenter = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		}
+		else if (AObjects* TargetObjects = Cast<AObjects>(Target)) {
+			TargetCenter = TargetObjects->PhysicsCollider->Bounds.Origin;
+		}
+
+		FVector InwardDir = TargetCenter - HitLocation;
+
+		if (!InwardDir.IsNearlyZero()) HitLocation += InwardDir.GetSafeNormal() * HitInsideDistance;
+	}
+
+	FVector HitNormal = AttackHit.ImpactNormal;
+	if (HitNormal.IsNearlyZero()) {
+		if (Target) {
+			HitNormal = GetActorLocation() - Target->GetActorLocation();
+			HitNormal.Z = 0.f;
+			HitNormal = HitNormal.GetSafeNormal();
+		}
+	}
+	if (HitNormal.IsNearlyZero()) HitNormal = FVector::UpVector;
+
+	FVector AttackDir = HitLocation - GetActorLocation();
+	AttackDir.Z = 0.f;
+	FRotator HitRotation = AttackDir.IsNearlyZero() ? GetActorRotation() : AttackDir.GetSafeNormal().Rotation();
+
+	FGameEffectContext Context;
+	Context.SourceActor = this;
+	Context.SourceComponent = GetMesh();
+	Context.WorldLocation = HitLocation;
+	Context.WorldRotation = HitRotation;
+	Context.HitPoint = HitLocation;
+	Context.HitNormal = HitNormal;
+
+	EffectManagerComp->PlayGameEffect_Multicast(NormalAttackHitEffect, Context);
+}
+
+void APlayer_Character::PlayAttackEffectByNotify()
+{
+	if (!GetMesh()) return;
+	if (NowWeapon) {
+		NowWeapon->PlayAttackEffectByNotify(this);
+		return;
+	}
+
+	if (!EffectManagerComp) return;
+	if (!NormalAttackUseEffect.NiagaraEffect && !NormalAttackUseEffect.Sound) return;
+
+	NormalAttackUseEffect.SpawnLocationType = EGameEffectSpawnLocationType::ActorLocation;
+	NormalAttackUseEffect.SpawnRotationType = EGameEffectSpawnRotationType::ActorRotation;
+
+	FGameEffectContext Context;
+	Context.SourceActor = this;
+	Context.SourceComponent = GetMesh();
+	Context.WorldLocation = GetActorLocation();
+	Context.WorldRotation = GetActorRotation();
+
+	EffectManagerComp->PlayGameEffect_Local(NormalAttackUseEffect, Context);
+}
+
+bool APlayer_Character::ShouldHideEffectsFromOtherPlayer()
+{
+	return TransformationComp && TransformationComp->CheckHidePlayerEffectsFromOthers();
+}
+
+bool APlayer_Character::ShouldShowGameEffectForThisClient(const FGameEffectData& EffectData)
+{
+	bool bIsMySelf = IsLocallyControlled();
+
+	switch (EffectData.Target) {
+	case EEffectShowTarget::OnlyMyself:
+		if (!bIsMySelf) return false;
+		break;
+	case EEffectShowTarget::OnlyOthers:
+		if (bIsMySelf) return false;
+		break;
+	case EEffectShowTarget::EveryOne:
+	default:
+		break;
+	}
+
+	if (ShouldHideEffectsFromOtherPlayer() && !bIsMySelf) return false;
+
+	return true;
+}
+
+
 /*----------------------------- RPC 모음 --------------------------------*/
 //Server RPC 모음
 void APlayer_Character::Server_Aim_Implementation(bool bAiming) {
@@ -3844,15 +4357,26 @@ void APlayer_Character::Server_Dodge_Implementation(FVector DodgeDir) {
 }
 void APlayer_Character::Server_ApplyDamage_Implementation(float Damage, APlayer_Character* AttackPlayer)
 {
-	ApplyDamageInternal(Damage, AttackPlayer, nullptr, NowWeapon ? NowWeapon->WeaponData->bApplyKnockBack : true, NowWeapon ? NowWeapon->WeaponData->bApplyRotation : true, false);
+	ApplyDamageInternal(Damage, AttackPlayer, nullptr, NowWeapon ? NowWeapon->WeaponData->bApplyKnockBack : true, NowWeapon ? NowWeapon->WeaponData->bApplyRotation : true, NowWeapon ? NowWeapon->WeaponData->bUsingHitAction : true, false);
 }
-void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector ClientAimPoint) {
+void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector ClientAimPoint, FVector ClientAttackDirection) {
 	if (!bCanControl) return;
 	if (bIsOut) return;
 	if (bIsDodging) return;
 	if (TransformationComp && !TransformationComp->CanAttackDuringTransformation()) return;
 	//무기가 없는데 홀딩 중인 상태라면 무시 (Holding가능한 Usecount가 0인 무기를 던지기 시도 시 HoldAttack과 Attack의 중복 호출 방지)
 	if (bHolding && !NowWeapon) return;
+
+	ClientAttackDirection.Z = 0.f;
+
+	if (!ClientAttackDirection.IsNearlyZero()) {
+		ServerAttackDirection = ClientAttackDirection.GetSafeNormal();
+	}
+	else {
+		ServerAttackDirection = GetActorForwardVector();
+		ServerAttackDirection.Z = 0.f;
+		ServerAttackDirection = ServerAttackDirection.GetSafeNormal();
+	}
 
 	ServerAimPoint = ClientAimPoint;
 
@@ -3924,6 +4448,8 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 				bNowHoldingAttack = false;
 				return;
 			}
+
+			PlayEquipmentAnimation(EFunctionInterActionReason::Attack);
 		}
 		AttackInternal(false);
 		return;
@@ -3962,7 +4488,7 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 		return;
 	}
 
-	AttackInternal();
+	AttackInternal(true);
 }
 
 void APlayer_Character::Server_AttackRelease_Implementation()
@@ -4011,7 +4537,8 @@ void APlayer_Character::Server_SpawnLostCoin_Implementation(int32 Amount) {
 
 //Multi RPC 모음
 //피격반응행동 함수
-void APlayer_Character::Multicast_PlayHitReaction_Implementation(float Damage, bool _bIsOut, bool bApplyRotation, FVector AttackDir, bool bBigHit) {
+void APlayer_Character::Multicast_PlayHitReaction_Implementation(float Damage, bool _bIsOut, bool bApplyRotation, FVector AttackDir, bool bUseNoArmsHitReaction, bool bBigHit) {
+	bHitReactionUseNoArms = bUseNoArmsHitReaction;
 	if (_bIsOut) {
 		if (OutMontage) PlayAnimMontage(OutMontage);
 		return;
@@ -4064,6 +4591,11 @@ void APlayer_Character::Multicast_StopSlotAnimation_Implementation(FName SlotNam
 	AnimInstance->StopSlotAnimation(BlendOutTime, SlotName);
 }
 
+void APlayer_Character::Multicast_SetReactionUseNoArms_Implementation(bool bUseNoArms)
+{
+	bHitReactionUseNoArms = bUseNoArms;
+}
+
 void APlayer_Character::Multicast_PlayRecoverReaction_Implementation()
 {
 	if (!RecoverMontage) return;
@@ -4084,6 +4616,13 @@ void APlayer_Character::Multicast_StopMontage_Implementation(UAnimMontage* Monta
 
 	AnimInstance->Montage_Stop(BlendOutTime, Montage);
 }
+
+void APlayer_Character::Multicast_RefreshPersistEffectVisibility_Implementation()
+{
+	if (TransformationComp) TransformationComp->RefreshTransformLoopEffectVisibility();
+	if (ConditionComp) ConditionComp->RefreshConditionLoopEffectVisibility();
+}
+
 //Client RPC 모음
 //탈락 시 가라앉음 연출 RPC(Liquid)
 void APlayer_Character::Client_Out_Implementation()
@@ -4144,3 +4683,4 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 /*체크해보기*/
 //FMath::Max(A, B) -> A와 B 중 큰 쪽을 반환하는 함수
 //OnRep -> 서버가 값을 변경했고 그 값이 Client에 반영되었을 경우 호출되는 함수
+

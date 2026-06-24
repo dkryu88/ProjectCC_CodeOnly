@@ -143,10 +143,16 @@ public:
 	bool bCanCamControl = true;
 	UPROPERTY(BlueprintReadWrite, Category = "Control")
 	bool bIsDodgeLocked = false;
-	UPROPERTY(BlueprintReadWrite, Category = "Control")
-	bool bIsInteractionLocked = false;
 	UPROPERTY(Replicated)
 	bool bEndMatchState = false;
+	UPROPERTY(Replicated)
+	bool bInteractionLock = false;
+	//드랍 불가 상태 여부 (아이템 포함)
+	UPROPERTY(Replicated)
+	bool bDropLock = false;
+	//장착/장착 해제 불가 상태 여부
+	UPROPERTY(Replicated)
+	bool bEquipLock = false;
 	UFUNCTION()
 	void OnRep_CanControl();
 	UFUNCTION()
@@ -237,6 +243,18 @@ public:
 	//장착 무기
 	UPROPERTY(ReplicatedUsing = OnRep_NowWeapon, BlueprintReadOnly)
 	TObjectPtr<AWeapon> NowWeapon;
+	//장착물 고정 상태 여부 (무기/물체 장착/ 장착해제 불가)
+	UPROPERTY(Replicated)
+	bool bFixEquipmentMode = false;
+	//실제 고정된 무기 Object
+	UPROPERTY()
+	TObjectPtr<AActor> LockedEquipment;
+	//장착 무기가 강제 장착 무기인지 확인
+	UPROPERTY()
+	bool bLockedEquipmentSpawnedByForce = false;
+	//장착 무기가 UnEquip될 때 Destroy 될지 확인
+	UPROPERTY()
+	bool bLockedEquipmentDestroyOnClear = false;
 	//장착 무기 변경 시 서버/로컬 알림
 	UFUNCTION()
 	void OnRep_NowWeapon();
@@ -322,6 +340,9 @@ public:
 	TEnumAsByte<ECollisionChannel> AimTraceChannel = ECC_GameTraceChannel2;
 	UPROPERTY(Replicated)
 	FVector ServerAimPoint = FVector::ZeroVector;
+	//공격 방향 (조준/비조준 공통, 서버에서 계산)
+	UPROPERTY()
+	FVector ServerAttackDirection = FVector::ForwardVector;
 	//조준 프리뷰
 	UPROPERTY(EditAnywhere, Category = "Aim")
 	TSubclassOf<AAttackPreviewGuide> AttackPreviewGuide;
@@ -380,7 +401,7 @@ public:
 	void Server_AddCoin(int32 CoinValue);
 	//플레이어 공격
 	UFUNCTION(Server, Reliable)
-	void Server_Attack(bool bHolding, FVector ClientAimPoint);
+	void Server_Attack(bool bHolding, FVector ClientAimPoint, FVector ClientAttackDirection);
 	UFUNCTION(Server, Reliable)
 	void Server_AttackRelease();
 	//플레이어 데미지 적용
@@ -438,7 +459,10 @@ public:
 	float OutAnimDuration = 2.f;
 	//일반 피격 몽타주 재생
 	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayHitReaction(float Damage, bool _bIsOut, bool bApplyRotation, FVector AttackDir, bool bBigHit = false);
+	void Multicast_PlayHitReaction(float Damage, bool _bIsOut, bool bApplyRotation, FVector AttackDir, bool bUseNoArmsHitReaction, bool bBigHit = false);
+	//애니메이션 재생 시 두 손도 적용할지 여부 설정
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SetReactionUseNoArms(bool bUseNoArms);
 	//Recover 몽타주 재생
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayRecoverReaction();
@@ -454,6 +478,9 @@ public:
 	//몽차주 애니메이션 정지
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_StopMontage(UAnimMontage* Montage, float BlendOutTime);
+	//피격 시 두 손까지 포즈에 적용 시킬지 여부 (두 손 Grip, 특수 포즈는 false로 해서 두 손은 제외)
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bHitReactionUseNoArms = true;
 	//강한 피격 몽타주
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
 	TObjectPtr<UAnimMontage> BigHittedMontage;
@@ -506,8 +533,19 @@ public:
 	UPROPERTY()
 	FRotator TargetHitRotation;
 	//플레이어 이펙트--------------------
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_RefreshPersistEffectVisibility();
 	UPROPERTY()
 	UGameEffectManagerComponent* EffectManagerComp;
+	//일반 공격 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData NormalAttackUseEffect;
+	//일반 공격 타격 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData NormalAttackHitEffect;
+	//플레이어 탈락 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	TMap<FName, FGameEffectData> OutEffects;
 public:
 	//현재 매치에서 플레이 중인 맵
 	AMapConstructor* NowMap;
@@ -604,7 +642,7 @@ public:
 	//플레이어 데미지 적용 전 처리
 	float TakeDamage(float damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 	//클라이언트가 데미지 적용
-	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack = true, bool bApplyRotation = true, bool bForceDamage = false, float OverrideKnockBackStrength = -1.f);
+	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack = true, bool bApplyRotation = true, bool bUsingHitAction = true, bool bForceDamage = false, float OverrideKnockBackStrength = -1.f);
 	//플레이어 넉백
 	void ApplyKnockBack(FVector& AttackDir, float Strength, float UpStrength);
 	//코인 손실--------------------------------------------------------------
@@ -630,6 +668,8 @@ public:
 	//-------------------------------------------------------------------------
 	//플레이어 이동 방향/현재 방향 차이 계산 (Animation 사용)
 	void UpdateAnimationMoveDirectionValues(float DeltaTime);
+	//애니메이션 재생 시 두 손 영향 여부
+	bool ShouldUseNoArmsReaction();
 	//플레이어 피격 애니메이션 재생
 	void PlayDamageAnimation(float Damage, bool bBigHit);
 	//플레이어 기본 무기/물체 공격 애니메이션 재생
@@ -660,6 +700,8 @@ public:
 	void EndBigHitReaction();
 	//현재 재생중인 애니메이션 획득
 	bool GetCurrentEquipmentActionAnimation(EFunctionInterActionReason Reason, FEquipmentActionAnimation& Animation);
+	//재생할 애니메이션 슬롯 선택 (두 손 사용 여부)
+	FName GetAnimationSlot(APlayer_Character* Player);
 	//강한 피격 시작 시간
 	float BigHitStartTime = 0.f;
 	//강한 피격 종료 시간
@@ -672,7 +714,20 @@ public:
 	FTimerHandle ResumeAimAnimationTimerHandle;
 	//공격 상태 종료 타이머 (애니메이션 기준)
 	FTimerHandle EndAttackStateTimerHandle;
+	/*---------------------------플레이어 이펙트 처리----------------------------*/
+	void PlayNormalAttackHitEffect(AActor* Target, const FHitResult& AttackHit);
+	void PlayAttackEffectByNotify();
+	bool ShouldHideEffectsFromOtherPlayer();
+	bool ShouldShowGameEffectForThisClient(const FGameEffectData& EffectData);
 public:
+	//플레이어 제어 관련//
+	//*----------------------------------
+	void EquippmentLockActivateForEvent(TSubclassOf<AActor> TargetClass, bool bEnable);
+	void EquipLockedEquipment(TSubclassOf<AActor> EquipmentClass, bool bApplyFixUseCount, bool bDestroyOnClear);
+	void ClearLockedEquipment(bool bForceDestroyFixEquipment);
+
+	bool CheckHavingLockedEquipment(AActor* Actor);
+	//*--------------------------------
 	//현재 플레이어의 Player_State
 	TObjectPtr<APlayer_State> NowPlayer_State;
 	//PlayerState 바인딩
@@ -736,12 +791,15 @@ public:
 	bool IsOut() { return bIsOut; }
 	//플레이어 조준 점
 	FVector LastAimPoint = FVector::ZeroVector;
+	//플레이어 비조준 공격 방향
+	FVector BuildAttackAimPointForCurrentState();
 	//플레이어 조준 시간
 	float LastAimTime = -1.f;
 	//플레이어 회전 시간
 	float LastTurnTime = 0.f;
 	float LastSenttoServerYaw = 0.f;
 	FTimerHandle HittedResetTimerHandle;
+
 	//플레이어 코인 손실 시간
 	float LastLoseCoinHP = -1.f;
 	//직전 공격 플레이어 설정
@@ -752,6 +810,10 @@ public:
 	bool bIsOnLiquidWhenOut = false;
 	//플레이어 탈락 시 액체에 있다면 위치 보완 (안하면 끊겨서 보임)
 	bool bOutVisualSmoothing = false;
+	//플레이어 탈락 시 SaveEquipment모드라면 현재 장착중인 Equipment 클래스 저장
+	void SaveCurrentEquipmentClass();
+	//플레이어 부활 시 SaveEquipment가 있다면 바로 장착
+	void EquipSavedEquipmentAfterRespawn();
 
 	bool CheckWeaponInteraction(EFunctionInterActionReason Reason);
 	bool IsCurrentWeaponInputType(EWeaponAttackInputType InputType);

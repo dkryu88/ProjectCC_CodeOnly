@@ -223,7 +223,6 @@ void UPlayer_ControllerWidget::SetCountdown(int32 Number)
 
 void UPlayer_ControllerWidget::SwitchLayout()
 {
-	//[추가]매치 종료시 크래쉬 방지
 	APawn* MyPawn = GetOwningPlayerPawn();
 	if (!IsValid(MyPawn)) return;
 

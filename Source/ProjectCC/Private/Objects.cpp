@@ -106,6 +106,17 @@ void AObjects::BeginPlay()
 
 	SetPhysicsCollider();
 
+	if (ObjectsEffectManagerComp) {
+		//물체 Spawn 이펙트 생성
+		FGameEffectContext Context;
+		Context.SourceActor = this;
+		Context.SourceComponent = Mesh;
+		Context.WorldLocation = GetActorLocation();
+		Context.WorldRotation = GetActorRotation();
+
+		PlayObjectsEffect(EEffectType::Spawn, Context);
+	}
+
 	if (HasAuthority()) {
 		//물체 스탯 초기화
 		SetObjectsStat();
@@ -165,7 +176,6 @@ void AObjects::OnConstruction(const FTransform& Transform) {
 void AObjects::LifeSpanExpired()
 {
 	Func_Destroy();
-
 	Super::LifeSpanExpired();
 }
 
@@ -185,7 +195,19 @@ void AObjects::Tick(float DeltaTime)
 			LifeTime = FMath::Max(LifeTime, 0.f);
 			if (LifeTime <= 0.f) {
 				Func_ZeroLife();
-				Destroy();
+
+				if (ObjectsEffectManagerComp) {
+					//물체 Destroy 이펙트 생성
+					FGameEffectContext Context;
+					Context.SourceActor = this;
+					Context.SourceComponent = Mesh;
+					Context.WorldLocation = GetActorLocation();
+					Context.WorldRotation = GetActorRotation();
+
+					PlayObjectsEffect(EEffectType::Destroy, Context);
+				}
+
+				DelayForDestroyEffect();
 				return;
 			}
 		}
@@ -228,7 +250,19 @@ void AObjects::Tick(float DeltaTime)
 	if (bTickMoveActive && Type == EObjectsType::Projectile && AttackRange > 0.f && MoveDistance >= AttackRange) {
 		bTickMoveActive = false;
 		Func_Destroy();
-		Destroy();
+
+		if (ObjectsEffectManagerComp) {
+			//물체 Destroy 이펙트 생성
+			FGameEffectContext Context;
+			Context.SourceActor = this;
+			Context.SourceComponent = Mesh;
+			Context.WorldLocation = GetActorLocation();
+			Context.WorldRotation = GetActorRotation();
+
+			PlayObjectsEffect(EEffectType::Destroy, Context);
+		}
+
+		DelayForDestroyEffect();
 		return;
 	}
 }
@@ -485,7 +519,19 @@ float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlaye
 	//체력이 0이 되면 파괴 (파괴 효과 발동)
 	if (HP <= 0.0f) {
 		Func_Destroy();
-		Destroy();
+
+		if (ObjectsEffectManagerComp) {
+			//물체 Destroy 이펙트 생성
+			FGameEffectContext Context;
+			Context.SourceActor = this;
+			Context.SourceComponent = Mesh;
+			Context.WorldLocation = GetActorLocation();
+			Context.WorldRotation = GetActorRotation();
+			
+			PlayObjectsEffect(EEffectType::Destroy, Context);
+		}
+		
+		DelayForDestroyEffect();
 	}
 	//체력이 남으면 피격 효과 발동
 	else {
@@ -883,13 +929,34 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		AObjects* HitObject = Cast<AObjects>(OtherActor);
 
 		if (HitPlayer && !HitPlayer->IsOut()) {
-			HitPlayer->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, true, false);
+			HitPlayer->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, ObjectsData->bApplyHitRotation, ObjectsData->bUsingHitAction, false);
+
+			//물체 Hit 이펙트 생성
+			FGameEffectContext EffectContext;
+			EffectContext.SourceActor = this;
+			EffectContext.SourceComponent = Mesh;
+			EffectContext.WorldRotation = MoveDirection.IsNearlyZero() ? GetActorRotation() : MoveDirection.Rotation();
+			EffectContext.HitPoint = Hit.ImpactPoint;
+			EffectContext.HitNormal = Hit.ImpactNormal;
+
+			PlayObjectsEffect(EEffectType::Hit, EffectContext);
+
 			Func_HitPlayer(HitPlayer);
 			LastHitPlayer = HitPlayer;
 		}
 
 		else if (HitObject && HitObject->ObjectsData && HitObject->ObjectsData->bUseHP) {
 			HitObject->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, false);
+
+			//물체 Hit 이펙트 생성
+			FGameEffectContext EffectContext;
+			EffectContext.SourceActor = this;
+			EffectContext.SourceComponent = Mesh;
+			EffectContext.WorldRotation = MoveDirection.IsNearlyZero() ? GetActorRotation() : MoveDirection.Rotation();
+			EffectContext.HitPoint = Hit.ImpactPoint;
+			EffectContext.HitNormal = Hit.ImpactNormal;
+
+			PlayObjectsEffect(EEffectType::Hit, EffectContext);
 		}
 	}
 
@@ -914,7 +981,19 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 	if ((ObjectsData->bUseHP && HP <= 0.0f)) {
 		bTickMoveActive = false;
 		Func_Destroy();
-		Destroy();
+
+		if (ObjectsEffectManagerComp) {
+			//물체 Destroy 이펙트 생성
+			FGameEffectContext Context;
+			Context.SourceActor = this;
+			Context.SourceComponent = Mesh;
+			Context.WorldLocation = GetActorLocation();
+			Context.WorldRotation = GetActorRotation();
+
+			PlayObjectsEffect(EEffectType::Destroy, Context);
+		}
+
+		DelayForDestroyEffect();
 		return;
 	}
 
@@ -927,7 +1006,19 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		default:
 			bTickMoveActive = false;
 			Func_Destroy();
-			Destroy();
+
+			if (ObjectsEffectManagerComp) {
+				//물체 Destroy 이펙트 생성
+				FGameEffectContext Context;
+				Context.SourceActor = this;
+				Context.SourceComponent = Mesh;
+				Context.WorldLocation = GetActorLocation();
+				Context.WorldRotation = GetActorRotation();
+
+				PlayObjectsEffect(EEffectType::Destroy, Context);
+			}
+
+			DelayForDestroyEffect();
 			return;
 		}
 	}
@@ -1114,22 +1205,53 @@ void AObjects::ApplyAdditionalSetting() {}
 
 FGameEffectData* AObjects::GetObjectsEffectData(EEffectType EffectType, FName CustomEffectName)
 {
+	if (!ObjectsData) return nullptr;
+
 	switch (EffectType) {
 	case EEffectType::Spawn:
-		return &SpawnEffect;
+		return &ObjectsData->SpawnEffect;
 	case EEffectType::Hit:
-		return &HitEffect;
+		return &ObjectsData->HitEffect;
 	case EEffectType::Destroy:
-		return &DestroyEffect;
+		return &ObjectsData->DestroyEffect;
 	case EEffectType::Custom:
 		if (!CustomEffectName.IsNone()) {
-			FGameEffectData* CustomEffect = CustomEffects.Find(CustomEffectName);
-			return CustomEffect;	// 누락
+			return ObjectsData->CustomEffects.Find(CustomEffectName);
 		}
 		else return nullptr;
 	default:
 		return nullptr;
 	}
+}
+
+void AObjects::DelayForDestroyEffect()
+{
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	SetActorTickEnabled(false);
+
+	if (PhysicsCollider)
+	{
+		PhysicsCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (InterActionCollider)
+	{
+		InterActionCollider->SetGenerateOverlapEvents(false);
+		InterActionCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (HPWidgetComp)
+	{
+		HPWidgetComp->SetVisibility(false);
+		HPWidgetComp->SetHiddenInGame(true);
+	}
+
+	FTimerHandle DelayDestroyHandle;
+	GetWorldTimerManager().SetTimer(DelayDestroyHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		Destroy();
+	}), 0.1f, false);
 }
 
 void AObjects::PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)

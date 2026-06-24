@@ -4,13 +4,9 @@
 #include "Result/Result_PlayerController.h"
 #include "Result/Player_ResultWidget.h"
 #include "AllPlayMode_GameInstance.h"
+#include "AllPlayMode_SessionSubsystem.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
-//[사운드] 추가
-#include "Effect/AudioManagerSubsystem.h"
-#include "Effect/GameAudioDataAsset.h"
-//[추가]세션종료
-#include "AllPlayMode_SessionSubsystem.h"
 
 void AResult_PlayerController::BeginPlay() {
 	Super::BeginPlay();
@@ -31,15 +27,6 @@ void AResult_PlayerController::BeginPlay() {
 
 			if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 				ResultWidget->InitWidget(GameInstance->GetMatchResult(), GameInstance->GetMatchResults());
-			}
-		}
-	}
-
-	// [사운드] Ready BGM 재생
-	if (IsLocalController()) {
-		if (UAudioManagerSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAudioManagerSubsystem>()) {
-			if (AudioSub->GetAudioData() && AudioSub->GetAudioData()->ResultBGM) {
-				AudioSub->PlayBGM(AudioSub->GetAudioData()->ResultBGM, 0.5f);
 			}
 		}
 	}
@@ -71,8 +58,7 @@ void AResult_PlayerController::OnPressedExitToTitle()
 {
 	if (!bCanExitMatch) return;
 
-	//[추가] 게임이 끝나고 결과창에서 타이틀로 돌아갈 때
-	// 기존 세션을 종료시킴
+	//매치 종료 후 결과창에서 타이틀 화면으로 돌아갈 때 기존 세션을 종료
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->CancelQuickMatchLAN();

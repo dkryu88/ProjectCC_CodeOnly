@@ -57,6 +57,22 @@ void APlayer_State::OverrideWith(APlayerState* OldPlayerState)
 	bMatchLevelLoaded = OldPS->bMatchLevelLoaded;
 }
 
+void APlayer_State::SetSavedEquipmentForRespawn(TSubclassOf<AActor> EquipmentClass, bool bSaveMode, bool bFixMode, bool bDestroyOnClear)
+{
+	bSaveEquipmentMode = bSaveMode;
+	bSaveFixEquipmentMode = bFixMode;
+	SavedEquipmentClass = EquipmentClass;
+	bSaveDestroyOnClear = bDestroyOnClear;
+}
+
+void APlayer_State::ClearSavedEquipmentForRespawn()
+{
+	SavedEquipmentClass = nullptr;
+	bSaveEquipmentMode = false;
+	bSaveFixEquipmentMode = false;
+	bSaveDestroyOnClear = false;
+}
+
 void APlayer_State::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -74,6 +90,11 @@ void APlayer_State::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(APlayer_State, PortraitId);
 	DOREPLIFETIME(APlayer_State, ReadySyncState);
 	DOREPLIFETIME(APlayer_State, bMatchLevelLoaded);
+
+	DOREPLIFETIME(APlayer_State, bSaveEquipmentMode);
+	DOREPLIFETIME(APlayer_State, bSaveFixEquipmentMode);
+	DOREPLIFETIME(APlayer_State, bSaveDestroyOnClear);
+	DOREPLIFETIME(APlayer_State, SavedEquipmentClass);
 }
 
 void APlayer_State::AddCoin(int32 CoinValue)

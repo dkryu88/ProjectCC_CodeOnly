@@ -126,12 +126,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Throw")
 	TMap<EFunctionInterActionReason, FEquipmentActionAnimation> AdditionalAnimation;
 
+	//물체 Grip 애니메이션이 특수한지 여부 (true면 손에는 다른 애니메이션이 영향 x (두손으로 들거나, 한손이라도 자세가 특이한 경우))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bUsingSpecialPose = true;
+
+	//물체에 피격 시 회전 적용 여부
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bApplyHitRotation = true;
+
+	//물체에 피격 시 피격 애니메이션 적용 여부
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bUsingHitAction = true;
+
 	//이펙트--------------------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData SpawnEffect;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
 	FGameEffectData HitEffect;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
 	FGameEffectData DestroyEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	TMap<FName, FGameEffectData> CustomEffects;
 
 	//타격 이펙트 (물체 던지기)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")

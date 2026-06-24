@@ -28,10 +28,14 @@ public:
 
 	virtual float OnPreHit(APlayer_Character* TPlayer, bool& bSkipRotation) override;
 	virtual bool BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualData& PreviewData) override;
+
 protected:
 	virtual void EquipEffect_Implementation(APlayer_Character* Player) override;
 	virtual void UnEquipEffect_Implementation(APlayer_Character* Player) override;
 	virtual void AdditionalUnEquipWeaponFunction() override;
+
+	void PlaySniperOtherImpactHitEffect(const FHitResult& Hit);
+	bool BuildDirectionalHitForEffect(AActor* TraceActor, const FHitResult& OriginalHit, FHitResult& ForEffectHIt);
 public:
 	void ToggleScopeMode();
 	void ApplyScopeModeEffects(bool bEnabled);
@@ -105,6 +109,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Sniper|Option")
 	bool bAutoExitScopeOnDamage = true;
+
+	//ÀÌÆåÆ® Trace °ü·Ã
+	UPROPERTY(EditDefaultsOnly, Category = "SniperEffect")
+	float EffectHitTraceRadius = 10.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SniperEffect")
+	float EffectHitTraceStartHeight = 35.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="SniperEffect")
+	float EffectHitTraceExtraDistance = 100.f;
 
 private:
 	FTimerHandle ScopeLogicTimerHandle;

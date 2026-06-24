@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "PlayerVisualManagerComponent.h"
+#include "Effect/FGameEffectData.h"
 #include "PlayerTransformations.generated.h"
 
 class UPlayerTransformationEffect;
@@ -96,6 +97,16 @@ struct FPlayerTransformation {
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Visual")
 	FVisualEffectRequest VisualData;
 
+	//이펙트 관련
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData TransformStartEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData TransformPersistEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FGameEffectData TransformEndEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	bool bHidePlayerEffectsFromOthers = false;
+
 	//변신 행동 규칙-------------------------------------------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transformation Input")
 	EPlayerInputResult MoveRule = EPlayerInputResult::CanAction;
@@ -105,6 +116,9 @@ struct FPlayerTransformation {
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
 	EPlayerInputResult DodgeRule = EPlayerInputResult::CanAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
+	EPlayerInputResult AimRule = EPlayerInputResult::CanAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
 	EPlayerInputResult AttackRule = EPlayerInputResult::CanAction;

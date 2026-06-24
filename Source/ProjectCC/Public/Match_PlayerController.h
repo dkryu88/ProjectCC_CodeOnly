@@ -115,7 +115,7 @@ protected:
 	//상점 팝업 닫기
 	UFUNCTION()
 	void CloseShop();
-
+	
 
 public:
 	//서버에 Player_State 데이터를 전송
@@ -169,7 +169,4 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_HideMatchEventUI();
 
-	// [사운드] 매치 종료시 bgm 정지 함수
-	UFUNCTION(Client, Reliable)
-	void Client_FadeOutBgm();
 };

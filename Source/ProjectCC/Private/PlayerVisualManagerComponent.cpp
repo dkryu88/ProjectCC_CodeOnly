@@ -136,7 +136,7 @@ void UPlayerVisualManagerComponent::RefreshPortraitMaterials()
 	if (!IsValid(PS)) return;
 
 	int32 PortraitId = PS->GetPortraitId();
-	
+
 	if (PortraitId < 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Portrait] PortraitId is not initialized yet. PS=%s"), *GetNameSafe(PS));
@@ -250,7 +250,7 @@ void UPlayerVisualManagerComponent::ApplyPortraitIdToMesh(UMeshComponent* Mesh, 
 	if (!IsValid(Mesh)) return;
 
 	int32 MaterialCount = Mesh->GetNumMaterials();
-	
+
 	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
 		UMaterialInterface* CurrentMaterial = Mesh->GetMaterial(MaterialIndex);
 		if (!CurrentMaterial) continue;
@@ -258,7 +258,7 @@ void UPlayerVisualManagerComponent::ApplyPortraitIdToMesh(UMeshComponent* Mesh, 
 		float UsingPortraitColor = 0.f;
 
 		bool bHasUsingPortraitColor = CurrentMaterial->GetScalarParameterValue(FMaterialParameterInfo(UsingPortraitColorParamName), UsingPortraitColor);
-	
+
 		//PortraitId를 사용하는 머터리얼이 아닌 경우 스킵
 		if (!bHasUsingPortraitColor || UsingPortraitColor < 0.5f) continue;
 
@@ -480,7 +480,7 @@ TArray<UMeshComponent*> UPlayerVisualManagerComponent::GetTargetMeshes(const FVi
 		}
 
 		return Result;
- 	}
+	}
 
 	if (EffectData.bAffectPlayerMesh && Player->GetMesh()) {
 		Result.AddUnique(Player->GetMesh());
@@ -538,7 +538,7 @@ bool UPlayerVisualManagerComponent::GetHighestPriorityEffect(FName& OutName, FVi
 
 	for (const auto& Pair : ActiveVisualEffects) {
 		const FVisualEffectRequest& Effect = Pair.Value;
-		
+
 		bool bHigherPriority = Effect.Priority > BestPriority;
 		//같은 우선순위인 경우 새로운 Effect를 적용
 		bool bFinalSelectedEffect = bHigherPriority || (Effect.Priority == BestPriority && Effect.ApplyOrder > BestApplyOrder);

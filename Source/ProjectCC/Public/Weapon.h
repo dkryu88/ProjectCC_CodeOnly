@@ -8,6 +8,7 @@
 #include "ETC/ObjectsLaunchData.h"
 #include "Player_FunctionInterActionReason.h"
 #include "ETC/AttackPreviewGuide.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Weapon.generated.h"
 
 DECLARE_MULTICAST_DELEGATE(FOnWeaponUseCountChanged);
@@ -47,6 +48,12 @@ public:
 	//남은 사용 횟수 (서버에서 관리)
 	UPROPERTY(ReplicatedUsing = OnRep_NowUseCount)
 	int32 NowUseCount = -2;
+	//남은 사용 횟수 고정 (서버에서 관리, 이벤트 적용 시 발동)
+	UPROPERTY(Replicated)
+	bool bFixUseCount = false;
+	//무기가 이벤트로 인해 생성되었는지 여부 
+	UPROPERTY(Replicated)
+	bool bCreatedByEvent = false;
 	UFUNCTION()
 	void OnRep_NowUseCount();
 	//무기 물리 Collider
@@ -110,7 +117,7 @@ public:
 	//무기 사용 효과
 	bool ApplyUseEffect();
 	//무기 적중 효과
-	void ApplyHitEffect(AActor* TPlayer);
+	void ApplyHitEffect(AActor* TPlayer, const FHitResult& AttackHit = FHitResult());
 	//무기 사용 횟수 검사
 	bool CheckUseCounting();
 	//무기 사용
@@ -121,6 +128,10 @@ public:
 	FName WeaponName();
 	//무기 물리 Collider 반환 (물리 계산시 사용)
 	UPrimitiveComponent* GetweaponCollider();
+	//이벤트 생성 상태로 변경
+	void SetWeaponEventMode(bool bEnable);
+	//남은 사용횟수 고정 (True일 동안 사용횟수 상관없이 사용 가능)
+	void SetFixUseCount(bool bEnable);
 	//무기 무게 반환
 	float GetWeaponWeight() { return WeaponData->Weight; }
 	//무기 선딜레이 반환 (자식 클래스에서 값 재정의)
@@ -165,6 +176,12 @@ public:
 	virtual bool InteractionWeaponFunction(EFunctionInterActionReason Reason);
 	//공격 릴리즈 기능
 	virtual void ReleaseAttackWeaponFunction();
+
+	/*무기별 이펙트/사운드*/
+	//히트 이펙트
+	void PlayWeaponHitEffect(AActor* Target, const FHitResult& AttackHit);
+	void PlayAttackEffectByNotify(APlayer_Character* Player);
+	virtual FGameEffectData* GetWeaponHitEffectData();
 };
 
 //효과 구현은 Equipment에 있는 효과 함수를 Override 하여 사용

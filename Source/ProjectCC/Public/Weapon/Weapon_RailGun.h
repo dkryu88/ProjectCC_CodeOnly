@@ -124,4 +124,11 @@ public:
 
 	// UseCount 소진 후 홀드 자동 재개 방지 플래그
 	bool bWaitingRepress = false;
+
+	//현재 재생중인 애니메이션 Sequence의 슬롯 이름
+	FName CurrentAnimSlot = NAME_None;
+	//재생할 애니메이션 Sequence의 슬롯 이름 획득
+	FName GetAnimationSlotName();
+	//재생중인 애니메이션 슬롯 전환
+	void RefreshRailGunAnimationSlot();
 };

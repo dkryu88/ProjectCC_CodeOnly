@@ -15,7 +15,8 @@ AWeapon_SuperHammer::AWeapon_SuperHammer(const FObjectInitializer& ObjectInitial
 void AWeapon_SuperHammer::EquipEffect_Implementation(APlayer_Character* Player) {
 	OwnPlayer = Player;
 	if (OwnPlayer) {
-		OwnPlayer->bIsInteractionLocked = true;
+		OwnPlayer->bInteractionLock = true;
+		OwnPlayer->bEquipLock = true;
 		OwnPlayer->bIsDodgeLocked = true;
 
 		if (OwnPlayer->ConditionComp && DamageImmunityDataAsset) {
@@ -55,7 +56,8 @@ void AWeapon_SuperHammer::OnConstruction(const FTransform& Transform)
 void AWeapon_SuperHammer::Destroyed()
 {
 	if (OwnPlayer) {
-		OwnPlayer->bIsInteractionLocked = false;
+		OwnPlayer->bInteractionLock = false;
+		OwnPlayer->bEquipLock = false;
 		OwnPlayer->bIsDodgeLocked = false;
 	}
 
@@ -87,7 +89,7 @@ void AWeapon_SuperHammer::AutoAttack()
 void AWeapon_SuperHammer::FinishHammerDuration()
 {
 	if (OwnPlayer) {
-		OwnPlayer->bIsInteractionLocked = false;
+		OwnPlayer->bInteractionLock = false;
 		OwnPlayer->bIsDodgeLocked = false;
 	}
 

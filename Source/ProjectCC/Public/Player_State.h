@@ -80,6 +80,19 @@ protected:
 
 	UPROPERTY(Replicated, BlueprintReadOnly)
 	bool bMatchLevelLoaded = false;
+
+public:
+	//탈락 직전 무기 저장 여부 (부활 이후 자동 장착)
+	UPROPERTY(Replicated)
+	bool bSaveEquipmentMode = false;
+	UPROPERTY(Replicated)
+	bool bSaveFixEquipmentMode = false;
+	UPROPERTY(Replicated)
+	bool bSaveDestroyOnClear = false;
+	//고정 대상 무기/물체 Class
+	UPROPERTY(Replicated)
+	TSubclassOf<AActor> SavedEquipmentClass;
+
 public:
 	UFUNCTION()
 	void OnRep_PlayerNickname();
@@ -128,6 +141,9 @@ public:
 
 	bool CheckEquippedItem() const { return EquippedItem != nullptr; }
 	bool CheckReservedWeapon() const { return ReservedWeapon != nullptr; }
+
+	void SetSavedEquipmentForRespawn(TSubclassOf<AActor> EquipmentClass, bool bSaveMode, bool bFixMode, bool bDestroyOnClear);
+	void ClearSavedEquipmentForRespawn();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

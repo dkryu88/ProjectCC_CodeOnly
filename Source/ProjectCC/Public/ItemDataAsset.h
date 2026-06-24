@@ -58,4 +58,7 @@ public:
 	//º“∏Í ¿Ã∆Â∆Æ
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ItemEffect")
 	FGameEffectData DestroyEffect;
+	//±◊ ø‹¿« ¿Ã∆Â∆Æ
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ItemEffect")
+	TMap<FName, FGameEffectData> CustomEffects;
 };

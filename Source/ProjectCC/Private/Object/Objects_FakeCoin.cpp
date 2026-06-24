@@ -118,10 +118,21 @@ void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAct
 				APlayer_Character* Victim = Cast<APlayer_Character>(Result.GetActor());
 				if (Victim) {
 					APlayer_Character* Attacker = IsValid(OwnPlayer) ? OwnPlayer : nullptr;
-					Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, true, false);
+					Victim->ApplyDamageInternal(DamageAmount, Attacker, this, true, true, true, false);
 				}
 			}
 		}
+
+		//이펙트 파라미터 설정 및 재생
+		FGameEffectContext EffectContext;
+		EffectContext.SourceActor = this;
+		EffectContext.SourceComponent = GetRootComponent();
+		EffectContext.WorldLocation = ExplosionOrigin;
+		EffectContext.WorldRotation = FRotator::ZeroRotator;
+		EffectContext.HitPoint = ExplosionOrigin;
+		EffectContext.HitNormal = FVector::UpVector;
+
+		PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
 		Destroy();
 	}

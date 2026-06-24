@@ -15,8 +15,9 @@ void UPlayerConditionEffect_Electronic::StartEffect(APlayer_Character* Player, U
 	ConditionData.NextEffectTimer = ConditionData.EffectInterval;
 	ConditionData.RemainingTickCount = ConditionData.EffectCount;
 
-	if (ConditionData.ConditionMontage) {
-		Player->Multicast_PlayOverrideMontage(ConditionData.ConditionMontage);
+	if (ConditionData.ConditionAnimation) {
+		FName SlotName = Player->GetAnimationSlot(Player);
+		Player->Multicast_PlayAnimationDynamic(ConditionData.ConditionAnimation, SlotName, 0.01f, 0.01f, 1.f, 999999, 0);
 	}
 }
 
@@ -25,15 +26,16 @@ void UPlayerConditionEffect_Electronic::PersistEffect(APlayer_Character* Player,
 	if (!Player) return;
 	if (!Player->HasAuthority()) return;
 
-	Player->ApplyDamageInternal(ConditionData.HelthChange, ConditionData.CausePlayer, nullptr, false, false, false);
+	Player->ApplyDamageInternal(ConditionData.HelthChange, ConditionData.CausePlayer, nullptr, false, false, false, false, 0.f);
 }
 
 void UPlayerConditionEffect_Electronic::EndFunction(APlayer_Character* Player, UPlayerConditionComponent* ConditionComp, FPlayerCondition& ConditionData, bool bUseEndEffect)
 {
 	if (Player) {
 		Player->RemoveInputBlockController(FName("Electronic"));
-		if (ConditionData.ConditionMontage) {
-			Player->Multicast_StopMontage(ConditionData.ConditionMontage, 0.15f);
+		if (ConditionData.ConditionAnimation) {
+			FName SlotName = Player->GetAnimationSlot(Player);
+			Player->Multicast_StopSlotAnimation(SlotName, 0.2f);
 		}
 	}
 
@@ -43,9 +45,10 @@ void UPlayerConditionEffect_Electronic::EndFunction(APlayer_Character* Player, U
 void UPlayerConditionEffect_Electronic::ResumeEffectVisual(APlayer_Character* Player, UPlayerConditionComponent* ConditionComp, FPlayerCondition& ConditionData)
 {
 	if (!Player) return;
-	if (!ConditionData.ConditionMontage) return;
+	if (!ConditionData.ConditionAnimation) return;
 
-	Player->Multicast_PlayOverrideMontage(ConditionData.ConditionMontage);
+	FName SlotName = Player->GetAnimationSlot(Player);
+	Player->Multicast_PlayAnimationDynamic(ConditionData.ConditionAnimation, SlotName, 0.1f, 0.05f, 1.f, 999999, 0);
 }
 
 

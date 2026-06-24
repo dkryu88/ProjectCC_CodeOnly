@@ -8,6 +8,7 @@
 #include "PlayerTransformationComponent.generated.h"
 
 class APlayer_Character;
+class UNiagaraComponent;
 class UStaticMeshComponent;
 class UPlayerTransformationDataAsset;
 class UMeshComponent;
@@ -30,12 +31,12 @@ struct FTransformationMeshBackup {
 	bool bOriginalHideden = false;
 };
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTCC_API UPlayerTransformationComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:	
+public:
 	// Sets default values for this component's properties
 	UPlayerTransformationComponent();
 	// Called when the game starts
@@ -43,14 +44,20 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-public:	
-	UFUNCTION(BlueprintCallable, Category="Transformation")
+public:
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StartTransformLoopEffect(FGameEffectData EffectData);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StopTransformLoopEffect();
+
+	UFUNCTION(BlueprintCallable, Category = "Transformation")
 	bool StartTransformation(UPlayerTransformationDataAsset* TransformationData, APlayer_Character* UsedPlayer, float CustomDuration = -1.f);
 
-	UFUNCTION(BlueprintCallable, Category="Transformation")
-	void StopTransformation(bool bEndEffect);
+	UFUNCTION(BlueprintCallable, Category = "Transformation")
+	void StopTransformation(bool bEndEffect, bool bRefreshEffect = true);
 
-	UFUNCTION(BlueprintCallable, Category="Transformation")
+	UFUNCTION(BlueprintCallable, Category = "Transformation")
 	bool IsTransformed() const { return CurrentTransformation.bActive; }
 
 	UPROPERTY()
@@ -67,9 +74,15 @@ public:
 	bool CanMoveDuringTransfomation();
 	bool CanJumpDuringTransformation();
 	bool CanDodgeDuringTransformation();
+	bool CanAimDuringTransformation();
 	bool CanAttackDuringTransformation();
 	bool CanUseItemDuringTransformation();
 	bool CanInteractionDuringTransformation();
+
+	bool CheckHidePlayerEffectsFromOthers();
+	void StartTransformLoopEffect_Local(const FGameEffectData& EffectData);
+	void StopTransformLoopEffect_Local();
+	void RefreshTransformLoopEffectVisibility();
 
 	void GetActiveTransformationMeshes(TArray<UMeshComponent*>& OutMeshes);
 	void RemoveTransformationByRule(bool bUseEndEffect, int32 Priority, EPlayerTransformationType RemoveType);
@@ -82,6 +95,9 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> TransformSkeletalMesh;
+
+	UPROPERTY()
+	TObjectPtr<UNiagaraComponent> TransformEffectComp = nullptr;
 
 	FTimerHandle ShortStopTimerHandle;
 

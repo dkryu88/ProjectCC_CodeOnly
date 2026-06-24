@@ -16,6 +16,7 @@ class PROJECTCC_API AWeapon_BambooSpear : public AWeapon
 
 public:
 	virtual float OnPreHit(APlayer_Character* Target, bool& bSkipRotation) override;
+	virtual FGameEffectData* GetWeaponHitEffectData() override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack")
 	int32 MultiPlyRuleEnemyCoinEnemy = 50;
@@ -25,5 +26,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack")
 	float AttackMagnification = 30.f;
+
+	UPROPERTY()
+	bool bBigHitTarget = false;
 
 };

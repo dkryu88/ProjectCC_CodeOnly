@@ -56,6 +56,18 @@ void AMagnetCoin::Tick(float DeltaTime)
 			if (HasAuthority() && TargetPlayer->GetThePlayerState()) {
 				TargetPlayer->GetThePlayerState()->AddCoin(MagnetCoinValue);
 			}
+
+			if (EffectManagerComp && PickedEffect.NiagaraEffect) {
+				FGameEffectContext Context;
+
+				Context.SourceActor = this;
+				Context.SourceComponent = MagnetCoinMesh;
+				Context.WorldLocation = GetActorLocation();
+				Context.WorldRotation = GetActorRotation();
+
+				EffectManagerComp->PlayGameEffect_Multicast(PickedEffect, Context);
+			}
+
 			Destroy();
 		}
 	}

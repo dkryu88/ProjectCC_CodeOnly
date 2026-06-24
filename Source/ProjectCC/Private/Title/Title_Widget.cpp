@@ -7,18 +7,39 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Throbber.h"
+#include "Components/Image.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/Overlay.h"
+#include "AllPlayMode_GameInstance.h"
 #include "Framework/Application/SlateApplication.h"
-#include "AllPlayMode_GameInstance.h"	//[4인]추가
 
 void UTitle_Widget::NativeConstruct() {
 	Super::NativeConstruct();
-	//[4인]수정,추가
-	if (Button_Play2P) {
-		//Play버튼에 함수 바인딩
-		Button_Play2P->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::Handle2PlayButtonClicked);
+
+	if (Button_TwoPlayer) {
+		Button_TwoPlayer->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandleTwoPlayerButtonClicked);
 	}
-	if (Button_Play4P) {
-		Button_Play4P->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::Handle4PlayButtonClicked);
+	if (Button_FourPlayer) {
+		Button_FourPlayer->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandleFourPlayerButtonClicked);
+	}
+	if (Image_TwoPlayerButton) {
+		Image_TwoPlayerButton->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (Image_FourPlayerButton) {
+		Image_FourPlayerButton->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	if (Image_SelectedFrame) {
+		Image_SelectedFrame->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Image_SelectedFrame->Slot)) {
+			FrameSlot->SetZOrder(10);
+			FrameSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		}
+	}
+
+	if (Button_Play) {
+		//Play버튼에 함수 바인딩
+		Button_Play->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandlePlayButtonClicked);
 	}
 
 	if (Button_Exit) {
@@ -39,26 +60,46 @@ void UTitle_Widget::NativeConstruct() {
 		//위젯이 처음 화면에 생성될 때 보이는 기본 상태 메세지
 		Text_Status->SetText(FText::FromString(TEXT("Enter Your Nickname.")));
 	}
+
+	ApplyMatchMode(EMatchMode::TwoPlayers, true);
 }
 
 void UTitle_Widget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!bStatusFading || !Text_Status) return;
+	if (bFrameMoving && Image_SelectedFrame) {
+		UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Image_SelectedFrame->Slot);
+		if (FrameSlot) {
+			FVector2D CurrentPosition = FrameSlot->GetPosition();
+			FVector2D NewPosition = FMath::Vector2DInterpTo(CurrentPosition, TargetFramePosition, InDeltaTime, FrameMoveSpeed);
 
-	StatusElapsedTime += InDeltaTime;
+			FrameSlot->SetPosition(NewPosition);
+			
+			float Distance = FVector2D::Distance(NewPosition, TargetFramePosition);
 
-	if (StatusElapsedTime < ErrorVisibleTime) return;
-
-	float FadeElapsed = StatusElapsedTime - ErrorVisibleTime;
-	float Alpha = 1.f - FMath::Clamp(FadeElapsed / ErrorFadeTime, 0.f, 1.f);
-
-	Text_Status->SetRenderOpacity(Alpha);
-
-	if (Alpha <= 0.f) {
-		ClearStatusMessage();
+			if (Distance <= 0.5f) {
+				FrameSlot->SetPosition(TargetFramePosition);
+				bFrameMoving = false;
+			}
+		}
 	}
+
+	if (bStatusFading && Text_Status) {
+		StatusElapsedTime += InDeltaTime;
+
+		if (StatusElapsedTime >= ErrorVisibleTime) {
+			float FadeElapsed = StatusElapsedTime - ErrorVisibleTime;
+			float Alpha = 1.f - FMath::Clamp(FadeElapsed / ErrorFadeTime, 0.f, 1.f);
+
+			Text_Status->SetRenderOpacity(Alpha);
+
+			if (Alpha <= 0.f) {
+				ClearStatusMessage();
+			}
+		}
+	}
+
 }
 
 //닉네임 획득
@@ -99,14 +140,10 @@ void UTitle_Widget::SetNicknameLocked(bool bLocked)
 }
 
 void UTitle_Widget::SetMatchingMode(bool bMatching)
-{	//[4인]수정,추가
-	if (Button_Play2P) {
-		Button_Play2P->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		Button_Play2P->SetIsEnabled(!bMatching);
-	}
-	if (Button_Play4P) {
-		Button_Play4P->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		Button_Play4P->SetIsEnabled(!bMatching);
+{
+	if (Button_Play) {
+		Button_Play->SetVisibility(bMatching ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		Button_Play->SetIsEnabled(!bMatching);
 	}
 	if (Throbber_Matching) {
 		Throbber_Matching->SetVisibility(bMatching ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -115,17 +152,20 @@ void UTitle_Widget::SetMatchingMode(bool bMatching)
 		Button_CancelMatch->SetVisibility(bMatching ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 		Button_CancelMatch->SetIsEnabled(bMatching);
 	}
+
+	if (Button_TwoPlayer) {
+		Button_TwoPlayer->SetIsEnabled(!bMatching);
+	}
+	if (Button_FourPlayer) {
+		Button_FourPlayer->SetIsEnabled(!bMatching);
+	}
 }
 
 void UTitle_Widget::SetJoinCompleteMode()
-{	//[4인]수정,추가
-	if (Button_Play2P) {
-		Button_Play2P->SetVisibility(ESlateVisibility::Collapsed);
-		Button_Play2P->SetIsEnabled(false);
-	}
-	if (Button_Play4P) {
-		Button_Play4P->SetVisibility(ESlateVisibility::Collapsed);
-		Button_Play4P->SetIsEnabled(false);
+{
+	if (Button_Play) {
+		Button_Play->SetVisibility(ESlateVisibility::Collapsed);
+		Button_Play->SetIsEnabled(false);
 	}
 
 	if (Throbber_Matching) {
@@ -203,15 +243,9 @@ void UTitle_Widget::SetStatusMessageFadeOut(const FText& text, float VisibleTime
 }
 
 //OnTitlePlayRequest 이벤트를 발생시켜 입력받은 닉네임을 PlayerController가 저장하도록 지정
-void UTitle_Widget::Handle2PlayButtonClicked()
+void UTitle_Widget::HandlePlayButtonClicked()
 {
-	OnTitlePlayRequested.Broadcast(GetNicknameString(), EMatchMode::TwoPlayers);	//[4인]수정-2번째 인자 추가
-}
-
-//[4인]추가-4인매칭버튼 클릭 시 바인딩 할 함수
-void UTitle_Widget::Handle4PlayButtonClicked()
-{
-	OnTitlePlayRequested.Broadcast(GetNicknameString(), EMatchMode::FourPlayers);
+	OnTitlePlayRequested.Broadcast(GetNicknameString(), SelectedMatchMode);
 }
 
 void UTitle_Widget::HandleCancelButtonClicked() {
@@ -227,6 +261,16 @@ void UTitle_Widget::HandleExitButtonClicked()
 
 }
 
+void UTitle_Widget::HandleTwoPlayerButtonClicked()
+{
+	SetMatchMode(EMatchMode::TwoPlayers);
+}
+
+void UTitle_Widget::HandleFourPlayerButtonClicked()
+{
+	SetMatchMode(EMatchMode::FourPlayers);
+}
+
 //닉네임 입력 박스 텍스트 변경 시 갱신
 void UTitle_Widget::HandleNickNameTextChanged(const FText& NewText)
 {
@@ -234,6 +278,11 @@ void UTitle_Widget::HandleNickNameTextChanged(const FText& NewText)
 	if (!ChangedText.IsEmpty()) {
 		ClearStatusMessage();
 	}
+}
+
+void UTitle_Widget::SetMatchMode(EMatchMode TheMatchMode)
+{
+	ApplyMatchMode(TheMatchMode, false);
 }
 
 //닉네임 입력 박스 갱신
@@ -250,6 +299,84 @@ void UTitle_Widget::RefreshNicknameBox()
 	else {
 		EditableTextBox_Nickname->SetHintText(FText::FromString(TEXT("Enter Your Nickname.")));
 	}
+}
+
+void UTitle_Widget::ApplyMatchMode(EMatchMode NewMatchMode, bool bInstant)
+{
+	if (SelectedMatchMode == NewMatchMode && !bInstant) return;
+
+	SelectedMatchMode = NewMatchMode;
+
+	RefreshMatchModeButtons();
+	UpdateSelectedFrameTargetPosition();
+
+	if (bInstant) SnapSelectedFrameToTargetLocation();
+	else bFrameMoving = true;
+}
+
+void UTitle_Widget::RefreshMatchModeButtons()
+{
+	bool bTwoPlayerSelected = SelectedMatchMode == EMatchMode::TwoPlayers;
+	bool bFourPlayerSelected = SelectedMatchMode == EMatchMode::FourPlayers;
+
+	if (Image_TwoPlayerButton) {
+		Image_TwoPlayerButton->SetColorAndOpacity(bTwoPlayerSelected ? FLinearColor::White : UnSelectedButtonTint);
+	}
+	if (Image_FourPlayerButton) {
+		Image_FourPlayerButton->SetColorAndOpacity(bFourPlayerSelected ? FLinearColor::White : UnSelectedButtonTint);
+	}
+
+	if (Image_SelectedFrame) {
+		Image_SelectedFrame->SetColorAndOpacity(FLinearColor::White);
+	}
+}
+
+void UTitle_Widget::UpdateSelectedFrameTargetPosition()
+{
+	if (!Image_SelectedFrame) return;
+
+	UWidget* TargetWidget = nullptr;
+
+	switch (SelectedMatchMode) {
+	case EMatchMode::TwoPlayers:
+		TargetWidget = Overlay_TwoPlayer;
+		break;
+	case EMatchMode::FourPlayers:
+		TargetWidget = Overlay_FourPlayer;
+		break;
+	default:
+		break;
+	}
+
+	if (!TargetWidget) return;
+
+	UCanvasPanelSlot* TargetSlot = Cast<UCanvasPanelSlot>(TargetWidget->Slot);
+	UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Image_SelectedFrame->Slot);
+
+	if (!TargetSlot || !FrameSlot) return;
+
+	FVector2D TargetPosition = TargetSlot->GetPosition();
+	FVector2D TargetSize = TargetSlot->GetSize();
+	FVector2D TargetAlignment = TargetSlot->GetAlignment();
+
+	//버튼의 실제 중앙 좌표 계산
+	FVector2D TargetCenterPosition = TargetPosition + TargetSize * (FVector2D(0.5f, 0.5f) - TargetAlignment);
+		
+	FrameSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+
+	TargetFramePosition = TargetCenterPosition + FramePositionOffset;
+}
+
+void UTitle_Widget::SnapSelectedFrameToTargetLocation()
+{
+	if (!Image_SelectedFrame) return;
+
+	UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Image_SelectedFrame->Slot);
+
+	if (!FrameSlot) return;
+
+	FrameSlot->SetPosition(TargetFramePosition);
+	bFrameMoving = false;
 }
 
 

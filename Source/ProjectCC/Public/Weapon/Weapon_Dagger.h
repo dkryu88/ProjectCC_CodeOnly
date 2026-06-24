@@ -14,9 +14,12 @@ class PROJECTCC_API AWeapon_Dagger : public AWeapon
 {
 	GENERATED_BODY()
 	
-
-protected:
+public:
 	virtual float OnPreHit(APlayer_Character* Target, bool& bSkipRotation) override;
+	virtual FGameEffectData* GetWeaponHitEffectData() override;
+
+	UPROPERTY()
+	bool bBackAttacked = false;
 
 private:
 	const float BackAttackThreshold = 0.707f;

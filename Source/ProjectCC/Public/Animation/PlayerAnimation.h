@@ -45,5 +45,14 @@ public:
 	bool bHasGrip = false;
 
 	UPROPERTY(BlueprintReadWrite, Category = PlayerAnim)
+	bool bUseNoArmUpperSlot = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = PlayerAnim)
+	bool bHitReactionUseNoArms = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = PlayerAnim)
 	float GripAlpha = 0.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = PlayerAnim)
+	float FinalGripAlpha = 0.f;
 };

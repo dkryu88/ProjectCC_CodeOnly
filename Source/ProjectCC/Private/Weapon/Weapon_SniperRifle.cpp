@@ -148,6 +148,105 @@ void AWeapon_SniperRifle::AdditionalUnEquipWeaponFunction()
 	}
 }
 
+void AWeapon_SniperRifle::PlaySniperOtherImpactHitEffect(const FHitResult& Hit)
+{
+	if (!EquippedPlayer) return;
+	if (!WeaponData) return;
+	if (!EquippedPlayer->EffectManagerComp) return;
+
+	FGameEffectData* EffectData = &WeaponData->HitEffect;
+	if (!EffectData) return;
+	if (!EffectData->NiagaraEffect && !EffectData->Sound) return;
+
+	FVector ImpactPoint = Hit.ImpactPoint;
+	if (ImpactPoint.IsNearlyZero()) ImpactPoint = Hit.Location;
+	if (ImpactPoint.IsNearlyZero()) ImpactPoint = Hit.TraceEnd;
+
+	FVector ImpactNormal = Hit.ImpactNormal;
+	if (ImpactNormal.IsNearlyZero()) ImpactNormal = FVector::UpVector;
+
+	FGameEffectContext Context;
+	Context.SourceActor = EquippedPlayer;
+	Context.SourceComponent = EquippedPlayer->GetMesh();
+	Context.WorldLocation = ImpactPoint;
+	Context.WorldRotation = ImpactNormal.Rotation();
+	Context.HitPoint = ImpactPoint;
+	Context.HitNormal = ImpactNormal;
+
+	EquippedPlayer->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context);
+}
+
+bool AWeapon_SniperRifle::BuildDirectionalHitForEffect(AActor* TraceActor, const FHitResult& OriginalHit, FHitResult& ForEffectHit)
+{
+	if (!EquippedPlayer) return false;
+	if (!TraceActor) return false;
+	if (!GetWorld()) return false;
+
+	FVector Start = EquippedPlayer->GetActorLocation() + FVector(0.f, 0.f, EffectHitTraceStartHeight);
+	FVector TargetCenter = TraceActor->GetActorLocation();
+
+	if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(TraceActor)) {
+		TargetCenter = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 35.f);
+	}
+	else if (UPrimitiveComponent* HitComp = OriginalHit.GetComponent()) {
+		TargetCenter = HitComp->Bounds.Origin;
+	}
+
+	FVector Dir = TargetCenter - Start;
+	Dir.Z = 0.f;
+
+	if (Dir.IsNearlyZero()) {
+		Dir = TraceActor->GetActorLocation() - EquippedPlayer->GetActorLocation();
+		Dir.Z = 0.f;
+		if (Dir.IsNearlyZero()) return false;
+	}
+	
+	Dir = Dir.GetSafeNormal();
+
+	FVector End = TargetCenter + Dir * EffectHitTraceExtraDistance;
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(EquippedPlayer);
+	QueryParams.AddIgnoredActor(this);
+	if (EquippedPlayer->NowSupport) QueryParams.AddIgnoredActor(EquippedPlayer->NowSupport);
+	QueryParams.bReturnPhysicalMaterial = false;
+	QueryParams.bTraceComplex = false;
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel4);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	TArray<FHitResult> EffectHits;
+
+	FCollisionShape EffectShape = FCollisionShape::MakeSphere(EffectHitTraceExtraDistance);
+	bool bAnyHit = GetWorld()->SweepMultiByObjectType(EffectHits, Start, End, FQuat::Identity, ObjectQueryParams, EffectShape, QueryParams);
+
+	if (bAnyHit) {
+		for (const FHitResult& EffectHit : EffectHits) {
+			if (EffectHit.GetActor() == TraceActor) {
+				ForEffectHit = EffectHit;
+
+				if (ForEffectHit.ImpactPoint.IsNearlyZero()) {
+					ForEffectHit.ImpactPoint = ForEffectHit.Location;
+				}
+				if (ForEffectHit.ImpactNormal.IsNearlyZero()) {
+					ForEffectHit.ImpactNormal = -Dir;
+				}
+
+				return true;
+			}
+		}
+	}
+
+	ForEffectHit = OriginalHit;
+	ForEffectHit.ImpactPoint = TargetCenter - Dir * 30.f;
+	ForEffectHit.Location = ForEffectHit.ImpactPoint;
+	ForEffectHit.ImpactNormal = Dir;
+
+	return true;
+}
+
 void AWeapon_SniperRifle::ToggleScopeMode() {
 	if (!EquippedPlayer) return;
 	bool bNewState = !bIsScopeModeActive;
@@ -173,7 +272,8 @@ void AWeapon_SniperRifle::ApplyScopeModeEffects(bool bEnabled)
 	if (!EquippedPlayer) return;
 
 	EquippedPlayer->bIsDodgeLocked = bEnabled;
-	EquippedPlayer->bIsInteractionLocked = bEnabled;
+	EquippedPlayer->bInteractionLock = bEnabled;
+	EquippedPlayer->bEquipLock = bEnabled;
 	EquippedPlayer->bCanCamControl = !bEnabled;
 	
 	if (bEnabled) {
@@ -386,6 +486,7 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 	if (!bIsScopeModeActive) return;
 
 	EquippedPlayer->Multicast_PlayAnimationDynamic(SniperAttackAnimation, FName(TEXT("DefaultSlot")), 0.05f, 0.1f, 1.f, 1, 0);
+	PlayAttackEffectByNotify(EquippedPlayer);
 	float AnimLength = SniperAttackAnimation ? SniperAttackAnimation->GetPlayLength() : 0.f;
 	float StartTime = 0.f;
 	float RemainTime = (AnimLength - StartTime) / 1.f;
@@ -431,7 +532,13 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 
 		if (bAutoExitScopeAfterFire) {
 			GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
-			ApplyScopeModeEffects(false);
+			FTimerHandle ExitScopeModeTimerHandle;
+			//즉시 끊어지지 않고 0.15초 후에 조준 모드 해제
+			GetWorldTimerManager().SetTimer(ExitScopeModeTimerHandle, FTimerDelegate::CreateWeakLambda(this, [&]() {
+				if (!bIsScopeModeActive) return;
+				ApplyScopeModeEffects(false);
+				GetWorldTimerManager().ClearTimer(ExitScopeModeTimerHandle);
+			}), 0.2f, false);
 		}
 	}
 }
@@ -512,23 +619,29 @@ void AWeapon_SniperRifle::Server_ExecuteFireTrace_Implementation(FVector TraceSt
 	{
 		if (AActor* HitActor = Hit.GetActor())
 		{
-			float FinalDamage = GetWeaponStats()->Attack;
+			bool bIsDamageTarget = Cast<APlayer_Character>(HitActor) != nullptr && Cast<AObjects>(HitActor) != nullptr;
 
-			if (APlayer_Character* HitPlayer = Cast<APlayer_Character>(HitActor))
-			{
-				bool bSkipRot = false;
-				FinalDamage *= OnPreHit(HitPlayer, bSkipRot);
+			if (bIsDamageTarget) {
+				float FinalDamage = GetWeaponStats()->Attack;
+
+				if (APlayer_Character* HitPlayer = Cast<APlayer_Character>(HitActor))
+				{
+					bool bSkipRot = false;
+					FinalDamage *= OnPreHit(HitPlayer, bSkipRot);
+					HitPlayer->ApplyDamageInternal(FinalDamage, EquippedPlayer, this, true, false);
+				}
+				else if (AObjects* HitObjects = Cast<AObjects>(HitActor)) {
+					HitObjects->ApplyDamageInternal(FinalDamage * 0.5f, EquippedPlayer, this, true, false);
+				}
+
+				FHitResult EffectHit = Hit;
+				BuildDirectionalHitForEffect(HitActor, Hit, EffectHit);
+
+				ApplyHitEffect(HitActor, EffectHit);
 			}
-
-			UGameplayStatics::ApplyDamage(
-				HitActor,
-				FinalDamage,
-				EquippedPlayer->GetController(),
-				EquippedPlayer,
-				nullptr
-			);
-
-			ApplyHitEffect(HitActor);
+			else {
+				PlaySniperOtherImpactHitEffect(Hit);
+			}
 		}
 	}
 

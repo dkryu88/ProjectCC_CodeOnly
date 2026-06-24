@@ -99,6 +99,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 	}
 
 	ApplyRailGunMoveSpeed();
+	RefreshRailGunAnimationSlot();
 
 	if (ChargeGauge < MinGauge) return;
 
@@ -166,7 +167,13 @@ void AWeapon_RailGun::PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32
 	if (!EquippedPlayer) return;
 	if (!Sequence) return;
 
-	FName RailGunSlotName = FName(TEXT("UpperBody"));
+	FName RailGunSlotName = GetAnimationSlotName();
+
+	if (!CurrentAnimSlot.IsNone() && CurrentAnimSlot != RailGunSlotName) {
+		EquippedPlayer->Multicast_StopSlotAnimation(CurrentAnimSlot, 0.05);
+	}
+
+	CurrentAnimSlot = RailGunSlotName;
 
 	EquippedPlayer->Multicast_StopSlotAnimation(RailGunSlotName, 0.01f);
 	EquippedPlayer->Multicast_PlayAnimationDynamic(Sequence, RailGunSlotName, 0.1f, 0.1f, 1.f, LoopCount, 0);
@@ -177,9 +184,14 @@ void AWeapon_RailGun::StopRailGunAnimation()
 	if (!HasAuthority()) return;
 	if (!EquippedPlayer) return;
 
-	FName RailGunSlotName = FName(TEXT("UpperBody"));
+	if (!CurrentAnimSlot.IsNone()) {
+		EquippedPlayer->Multicast_StopSlotAnimation(CurrentAnimSlot, 0.15f);
+	}
 
-	EquippedPlayer->Multicast_StopSlotAnimation(RailGunSlotName, 0.15f);
+	EquippedPlayer->Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.15f);
+	EquippedPlayer->Multicast_StopSlotAnimation(FName(TEXT("DefaultSlot")), 0.15f);
+
+	CurrentAnimSlot = NAME_None;
 	RailGunAnimState = ERailGunAnimState::None;
 }
 
@@ -202,6 +214,46 @@ void AWeapon_RailGun::OnRep_NoShowingRailGunPreview()
 	if (bNoShowingRailGunPreview && EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
 		EquippedPlayer->HideAimPreview();
 	}
+}
+
+FName AWeapon_RailGun::GetAnimationSlotName()
+{
+	if (!EquippedPlayer) return FName(TEXT("UpperBody"));
+
+	FVector Velocity2D = EquippedPlayer->GetVelocity();
+	Velocity2D.Z = 0.f;
+
+	bool bStandingStill = Velocity2D.SizeSquared() < FMath::Square(10.f);
+
+	if (bStandingStill) return FName(TEXT("DefaultSlot"));
+
+	return FName(TEXT("UpperBody"));
+}
+
+void AWeapon_RailGun::RefreshRailGunAnimationSlot()
+{
+	if (!HasAuthority()) return;
+	if (!EquippedPlayer) return;
+	if (RailGunAnimState == ERailGunAnimState::None) return;
+
+	FName DesiredSlot = GetAnimationSlotName();
+
+	if (CurrentAnimSlot == DesiredSlot) return;
+
+	UAnimSequence* CurrentSequence = nullptr;
+
+	switch (RailGunAnimState) {
+	case ERailGunAnimState::Charging:
+		CurrentSequence = RailGunChargeAnimation;
+		break;
+	case ERailGunAnimState::Firing:
+		CurrentSequence = RailGunAttackAnimation;
+		break;
+	default:
+		break;
+	}
+
+	if (CurrentSequence) PlayRailGunDynamicAnimation(CurrentSequence, 999999);
 }
 
 void AWeapon_RailGun::ReleaseRailGunAttack()
@@ -509,7 +561,7 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 	//플레이어 AttackInternal과 동일
 	auto ApplyToPlayer = [&](APlayer_Character* TargetPlayer) {
 		if (!TargetPlayer) return;
-		TargetPlayer->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, WeaponData->bApplyKnockBack, WeaponData->bApplyRotation, false);
+		TargetPlayer->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, WeaponData->bApplyKnockBack, WeaponData->bApplyRotation, WeaponData->bUsingHitAction, false);
 		ApplyHitEffect(TargetPlayer);
 	};
 

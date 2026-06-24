@@ -55,7 +55,9 @@ void UPlayerTransformationEffect::AddVisualEffect(APlayer_Character* Player, UPl
 {
 	if (!TransformationData.bUseVisualManager) return;
 	if (!Player || !Player->HasAuthority()) return;
-	if (!Player->VisualManagerComp) return;
+	
+	UPlayerVisualManagerComponent* VisualManager = Player->FindComponentByClass<UPlayerVisualManagerComponent>();
+	if (!VisualManager) return;
 
 	FName ResolvedEffectName = ResolveVisualEffectName(TransformationData);
 
@@ -65,19 +67,21 @@ void UPlayerTransformationEffect::AddVisualEffect(APlayer_Character* Player, UPl
 
 	if (!BuildVisualEffectRequest(Player, TransformationComp, TransformationData, UsedPlayer, Request)) return;
 
-	Player->VisualManagerComp->Multi_AddVisualEffect(ResolvedEffectName, Request);
+	VisualManager->Multi_AddVisualEffect(ResolvedEffectName, Request);
 }
 
 void UPlayerTransformationEffect::RemoveVisualEffect(APlayer_Character* Player, UPlayerTransformationComponent* TransformationComp, FPlayerTransformation& TransformationData)
 {
 	if (!TransformationData.bUseVisualManager) return;
 	if (!Player || !Player->HasAuthority()) return;
-	if (!Player->VisualManagerComp) return;
+	
+	UPlayerVisualManagerComponent* VisualManager = Player->FindComponentByClass<UPlayerVisualManagerComponent>();
+	if (!VisualManager) return;
 
 	FName ResolvedEffectName = ResolveVisualEffectName(TransformationData);
 	if (ResolvedEffectName.IsNone()) return;
 
-	Player->VisualManagerComp->Multi_RemoveVisualEffect(ResolvedEffectName);
+	VisualManager->Multi_RemoveVisualEffect(ResolvedEffectName);
 }
 
 

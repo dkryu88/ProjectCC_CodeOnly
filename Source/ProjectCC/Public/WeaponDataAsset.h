@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -12,7 +12,7 @@
 #include "WeaponDataAsset.generated.h"
 
 /**
- * °¢°¢ÀÇ ¹«±âµé StatÀ» °ü¸® (StatÀÇ Á¾·ù´Â WeaponTypes.h¿¡¼­ ÁöÁ¤¹ŞÀ½)
+ * ê°ê°ì˜ ë¬´ê¸°ë“¤ Statì„ ê´€ë¦¬ (Statì˜ ì¢…ë¥˜ëŠ” WeaponTypes.hì—ì„œ ì§€ì •ë°›ìŒ)
  */
 
 
@@ -39,59 +39,71 @@ class PROJECTCC_API UWeaponDataAsset : public UDataAsset
 	GENERATED_BODY()
 
 public:
-	//¹«±â ½ºÅÈ
+	//ë¬´ê¸° ìŠ¤íƒ¯
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FWeaponStats Stats;
 
-	//¿ø°Å¸®/ÅõÃ´ ¹«±â ¹ß»çÃ¼ ÁöÁ¤
+	//ì›ê±°ë¦¬/íˆ¬ì²™ ë¬´ê¸° ë°œì‚¬ì²´ ì§€ì •
 	UPROPERTY(EditAnywhere, BlueprintReadONly, Category = "WeaponBullet")
 	TSubclassOf<class AObjects> Bullet;
 
-	//¹«±â »ç¿ë °¡´É È½¼ö
+	//ë¬´ê¸° ì‚¬ìš© ê°€ëŠ¥ íšŸìˆ˜
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	int32 MaxUseCount = 1;
 
-	//¹«±â ¹«°Ô (0 ~ 2)
+	//ë¬´ê¸° ë¬´ê²Œ (0 ~ 2)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	int32 Weight = 0;
 
-	//¹«±â °ø°İÀÌ ÇÃ·¹ÀÌ¾î¸¦ È¸Àü ½ÃÅ°´ÂÁö ¿©ºÎ
+	//ë¬´ê¸° ê³µê²©ì´ í”Œë ˆì´ì–´ë¥¼ íšŒì „ ì‹œí‚¤ëŠ”ì§€ ì—¬ë¶€
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bApplyRotation = true;
 
-	//¹«±â °ø°İÀÌ ÇÃ·¹ÀÌ¾î¸¦ ³Ë¹é ½ÃÅ°´ÂÁö ¿©ºÎ
+	//ë¬´ê¸° ê³µê²©ì´ í”Œë ˆì´ì–´ë¥¼ ë„‰ë°± ì‹œí‚¤ëŠ”ì§€ ì—¬ë¶€
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bApplyKnockBack = true;
 
-	//¹«±â Á¶ÁØ È¸Àü ¼Óµµ (0:±âº», 1:´À¸², 2:¿ÏÀü ´À¸²)
+	//ë¬´ê¸° ì¡°ì¤€ íšŒì „ ì†ë„ (0:ê¸°ë³¸, 1:ëŠë¦¼, 2:ì™„ì „ ëŠë¦¼)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	int32 Aim_TurnSpeed = 0;
 
-	//¹«±â ºñÀûÁß ½Ã Ä«¿îÆ® ÁÙÀÌ±â ¿©ºÎ
+	//ë¬´ê¸° ë¹„ì ì¤‘ ì‹œ ì¹´ìš´íŠ¸ ì¤„ì´ê¸° ì—¬ë¶€
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bNotCountWhenUnHit = false;
 
-	//¹«±â µî±Ş
+	//ë¬´ê¸° ë“±ê¸‰
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	EWeaponGrade WeaponGrade = EWeaponGrade::B;
 
-	//¹«±â °ø°İ ¹æÇâ
+	//ë¬´ê¸° ê³µê²© ë°©í–¥
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	EWeaponAttackDirection AttackDirection = EWeaponAttackDirection::Horizontal;
 
-	//¹«±â Çàµ¿º° ¾Ö´Ï¸ŞÀÌ¼Ç
+	//ë¬´ê¸° ê³µê²© ë°©í–¥ Roundì¼ë•Œ ì„¸ë¡œ ë²”ìœ„
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	bool bHorizonEqualVertical = false;
+
+	//ë¬´ê¸° í–‰ë™ë³„ ì• ë‹ˆë©”ì´ì…˜
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
 	TMap<EFunctionInterActionReason, FEquipmentActionAnimation> AdditionalAnimation;
 
-	//¹«±â ´ë±â ¾Ö´Ï¸ŞÀÌ¼Ç
+	//ë¬´ê¸° ëŒ€ê¸° ì• ë‹ˆë©”ì´ì…˜
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
 	TObjectPtr<UAnimSequence> WeaponGripSequence;
 
-	//¹«±â ¾ÆÀÌÄÜ
+	//ë¬´ê¸° ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒ ê¸°ì¤€ (Trueë©´ ì†ì€ ë‹¤ë¥¸ ì• ë‹ˆë©”ì´ì…˜ì— ì˜í–¥ì„ ë°›ì§€ ì•ŠìŒ, Falseë©´ ì†ë„ ë‹¤ë¥¸ ì• ë‹ˆë©”ì´ì…˜ì— ì˜í–¥ì„ ë°›ìŒ)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
+	bool bUsingSpecialPose = false;
+
+	//ë¬´ê¸° ì ì¤‘ ì•¡ì…˜ ì‚¬ìš© ì—¬ë¶€
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
+	bool bUsingHitAction = true;
+
+	//ë¬´ê¸° ì•„ì´ì½˜
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<UTexture2D> WeaponIcon = nullptr;
 
-	//¹«±â Á¶ÁØ Preview-------------------------------------------------
+	//ë¬´ê¸° ì¡°ì¤€ Preview-------------------------------------------------
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Preview")
 	bool bUseAimPreview = true;
 
@@ -120,7 +132,7 @@ public:
 	float AimFillOpacity = 0.15f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Preview")
-	float AimEdgeOpacity = 0.85f;
+	float AimEdgeOpacity = 0.5f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Preview")
 	float AimEdgeWidth = 8.f;
@@ -132,22 +144,19 @@ public:
 	float AimPatternLength = 80.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Preview")
-	float AimFlowSpeed = 0.2f;
+	float AimFlowSpeed = 0.1f;
 	
-	//¹«±â ÀÌÆåÆ®--------------------------------------------------------
-	//°ø°İ ÀÌÆåÆ® (±ÙÁ¢/ShootHS)
+	//ë¬´ê¸° ì´í™íŠ¸--------------------------------------------------------
+	//ê³µê²©(ë¬´ê¸° ì‚¬ìš©) ì´í™íŠ¸
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	FGameEffectData AttackEffect;
-	//¹ß»ç ÀÌÆåÆ® (Shoot/ShootHS)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	FGameEffectData ShootEffect;
-	//Å¸°İ ÀÌÆåÆ®
+	//íƒ€ê²© ì´í™íŠ¸ (ë¬´ê¸° ë˜ì§€ê¸°/ë¬´ê¸° ì ì¤‘)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	FGameEffectData HitEffect;
-	//¼Ò¸ê ÀÌÆåÆ®
+	//ì†Œë©¸ ì´í™íŠ¸
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	FGameEffectData DestroyEffect;
-	//Å¸°İ ÀÌÆåÆ® (¹«±â ´øÁö±â)
+	//ê¸°íƒ€ ìƒí™© ì´í™íŠ¸
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	FGameEffectData ThrowHitEffect;
+	TMap<FName, FGameEffectData> CustomEffects;
 };

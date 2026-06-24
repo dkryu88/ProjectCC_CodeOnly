@@ -3,6 +3,7 @@
 
 #include "Effect/GameEffectManagerComponent.h"
 #include "Effect/FGameEffectData.h"
+#include "Player_Character.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -11,14 +12,39 @@
 // Sets default values for this component's properties
 UGameEffectManagerComponent::UGameEffectManagerComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 	SetIsReplicatedByDefault(true);
+}
+
+void UGameEffectManagerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	for (int32 i = ActiveTranslationFollowEffects.Num() - 1; i >= 0; --i) {
+		FActiveTranslationFollowEffect& FollowEffect = ActiveTranslationFollowEffects[i];
+		if (!FollowEffect.NiagaraComp.IsValid() || !FollowEffect.SourceActor.IsValid()) {
+			ActiveTranslationFollowEffects.RemoveAtSwap(i);
+			continue;
+		}
+
+		UNiagaraComponent* NiagaraComp = FollowEffect.NiagaraComp.Get();
+		AActor* SourceActor = FollowEffect.SourceActor.Get();
+
+		FVector SourceDelta = SourceActor->GetActorLocation() - FollowEffect.InitialSourceLocation;
+		FVector NewEffectLocation = FollowEffect.InitialEffectLocation + SourceDelta;
+
+		NiagaraComp->SetWorldLocation(NewEffectLocation);
+		NiagaraComp->SetWorldRotation(FollowEffect.InitialEffectRotation);
+	}
+
+	if (ActiveTranslationFollowEffects.Num() <= 0) SetComponentTickEnabled(false);
 }
 
 void UGameEffectManagerComponent::PlayGameEffect_Local(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)
 {
 	FTransform EffectTransform = ResolveGameEffectTransform(EffectData, Context);
-	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams);
+	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams, Context);
 }
 
 void UGameEffectManagerComponent::PlayGameEffect_Multicast(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)
@@ -31,18 +57,21 @@ void UGameEffectManagerComponent::PlayGameEffect_Multicast(const FGameEffectData
 
 	FTransform EffectTransform = ResolveGameEffectTransform(EffectData, Context);
 
-	Multicast_PlayResolvedGameEffect(EffectData, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), RuntimeParams);
+	Multicast_PlayResolvedGameEffect(EffectData, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), RuntimeParams, Context);
 }
 
-void UGameEffectManagerComponent::Multicast_PlayResolvedGameEffect_Implementation(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams)
+void UGameEffectManagerComponent::Multicast_PlayResolvedGameEffect_Implementation(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams, const FGameEffectContext& Context)
 {
 	FTransform EffectTransform(EffectRotation, EffectLocation, EffectScale);
-	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams);
+	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams, Context);
 }
 
-void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams)
+void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams, const FGameEffectContext& Context)
 {
 	if (!GetWorld()) return;
+	if (APlayer_Character* SourcePlayer = Cast<APlayer_Character>(Context.SourceActor.Get())) {
+		if (!SourcePlayer->ShouldShowGameEffectForThisClient(EffectData)) return;
+	}
 
 	bool bHavingNiagara = EffectData.NiagaraEffect != nullptr;
 	bool bHavingSound = EffectData.Sound != nullptr;
@@ -50,9 +79,39 @@ void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEf
 	if (!bHavingNiagara && !bHavingSound) return;
 
 	if (bHavingNiagara) {
-		UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), EffectData.NiagaraEffect, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), true, true);
+		UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), EffectData.NiagaraEffect, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), true, false);
 
-		if (NiagaraComp) ApplyGameEffectRuntimeParams(NiagaraComp, RuntimeParams);
+		if (NiagaraComp) {
+			bool bUseTranslationFollow = EffectData.bFollowSourceTranslationOnly && Context.SourceActor;
+
+			if (!bUseTranslationFollow && EffectData.bAttachToSourceWhenSpawned && Context.SourceComponent) {
+				NiagaraComp->AttachToComponent(Context.SourceComponent.Get(), FAttachmentTransformRules::KeepWorldTransform);
+
+				if (EffectData.bKeepWorldRotationWhenAttached) {
+					NiagaraComp->SetAbsolute(false, true, false);
+				}
+			}
+			ApplyGameEffectRuntimeParams(NiagaraComp, RuntimeParams);
+
+			if (EffectData.bOverrideNiagaraColor && !EffectData.NiagaraColorParamName.IsNone()) {
+				NiagaraComp->SetVariableLinearColor(EffectData.NiagaraColorParamName, EffectData.NiagaraColor);
+				NiagaraComp->SetVariableLinearColor(EffectData.SubEffectColorParamName, EffectData.NiagaraColor);
+			}
+
+			if (bUseTranslationFollow) {
+				FActiveTranslationFollowEffect FollowEffect;
+				FollowEffect.NiagaraComp = NiagaraComp;
+				FollowEffect.SourceActor = Context.SourceActor.Get();
+				FollowEffect.InitialSourceLocation = Context.SourceActor->GetActorLocation();
+				FollowEffect.InitialEffectLocation = EffectTransform.GetLocation();
+				FollowEffect.InitialEffectRotation = EffectTransform.GetRotation().Rotator();
+
+				ActiveTranslationFollowEffects.Add(FollowEffect);
+				SetComponentTickEnabled(true);
+			}
+
+			NiagaraComp->Activate(true);
+		}
 	}
 
 	if (bHavingSound) {
@@ -88,7 +147,7 @@ FTransform UGameEffectManagerComponent::ResolveGameEffectTransform(const FGameEf
 		else {
 			FinalLocation = OwnerActor ? OwnerActor->GetActorLocation() : Context.WorldLocation;
 		}
-		break;	//´©¶ô
+		break;
 	case EGameEffectSpawnLocationType::AttackRangeStart:
 		FinalLocation = Context.AttackRangeStart;
 		break;
@@ -116,12 +175,26 @@ FTransform UGameEffectManagerComponent::ResolveGameEffectTransform(const FGameEf
 		}
 		break;
 	case EGameEffectSpawnRotationType::ForwardRotation:
+	{
+		FVector Forward = FVector::ZeroVector;
 		if (OwnerActor) {
-			FinalRotation = OwnerActor->GetActorForwardVector().Rotation();
+			Forward = OwnerActor->GetActorForwardVector();
+		}
+		else {
+			Forward = Context.WorldRotation.RotateVector(FVector(0.f, 1.f, 0.f));
+		}
+		Forward.Z = 0.f;
+
+		if (!Forward.IsNearlyZero()) {
+			Forward.Normalize();
+			FinalRotation = FRotationMatrix::MakeFromY(Forward).Rotator();
 		}
 		else {
 			FinalRotation = Context.WorldRotation;
 		}
+
+		break;
+	}
 	case EGameEffectSpawnRotationType::HitNormalRotation:
 		FinalRotation = Context.HitNormal.Rotation();
 		break;
@@ -130,8 +203,9 @@ FTransform UGameEffectManagerComponent::ResolveGameEffectTransform(const FGameEf
 		break;
 	}
 	
+	FRotator LocationOffsetRotation = FinalRotation;
+	FinalLocation += LocationOffsetRotation.RotateVector(EffectData.LocationOffset);
 	FinalRotation += EffectData.RotationOffset;
-	FinalLocation += FinalRotation.RotateVector(EffectData.LocationOffset);
 
 	return FTransform(FinalRotation, FinalLocation, EffectData.Scale);
 

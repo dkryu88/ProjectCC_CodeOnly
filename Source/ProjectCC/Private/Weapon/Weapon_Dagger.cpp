@@ -10,6 +10,8 @@ float AWeapon_Dagger::OnPreHit(APlayer_Character* Target, bool& bSkipRotation)
 {
 	if (!Target) return 1.f;
 
+	bBackAttacked = false;
+
 	FVector PlayerForward = EquippedPlayer->GetActorForwardVector();
 	FVector TargetForward = Target->GetActorForwardVector();
 
@@ -18,9 +20,21 @@ float AWeapon_Dagger::OnPreHit(APlayer_Character* Target, bool& bSkipRotation)
 	//Target의 뒤를 공격했을 경우 데미지 2배, 회전 비적용
 	if (DotResult > BackAttackThreshold) {
 		bSkipRotation = true;
+		bBackAttacked = true;
 		return BackAttackMuliplier;
 	}
 
 	//뒤가 아닌곳을 공격 시 일반 데미지, 회전 적용
 	return Super::OnPreHit(Target, bSkipRotation);
+}
+
+FGameEffectData* AWeapon_Dagger::GetWeaponHitEffectData()
+{
+	if (!WeaponData) return nullptr;
+	if (bBackAttacked) {
+		bBackAttacked = false;
+		return WeaponData->CustomEffects.Find(FName(TEXT("BigHittedEffect")));
+	}
+
+	return Super::GetWeaponHitEffectData();
 }

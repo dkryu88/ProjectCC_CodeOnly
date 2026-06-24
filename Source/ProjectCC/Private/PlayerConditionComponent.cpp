@@ -3,6 +3,9 @@
 
 #include "PlayerConditionComponent.h"
 #include "Player_Character.h"
+#include "Effect/FGameEffectData.h"
+#include "Effect/GameEffectManagerComponent.h"
+#include "NiagaraComponent.h"
 #include "PlayerTransformationComponent.h"
 #include "PlayerConditionDataAsset.h"
 
@@ -22,7 +25,6 @@ void UPlayerConditionComponent::BeginPlay()
 
 	Player = Cast<APlayer_Character>(GetOwner());
 }
-
 
 // Called every frame
 void UPlayerConditionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -58,8 +60,17 @@ void UPlayerConditionComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		bool bTickEffectEnd = (Condition.EffectInterval > 0.f && Condition.EffectCount >= 0 && Condition.RemainingTickCount <= 0);
 
 		if (bTimeOver || bTickEffectEnd) {
+			FName RemovedConditionName = CurrentConditions[i].ConditionName;
+			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(RemovedConditionName, i);
+
+			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(RemovedConditionName);
+
 			if (CurrentConditions[i].ConditionEffect) {
-				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
+				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], true);
+			}
+
+			if (!bHasSameConditionAfterRemove) {
+				PlayConditionOnceEffect(CurrentConditions[i].ConditionEndEffect, CurrentConditions[i]);
 			}
 			CurrentConditions.RemoveAt(i);
 		}
@@ -87,6 +98,10 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 	if (!ConditionData->bCanMultiApply && CheckCondition(ConditionData->ConditionName)) {
 		RemoveCondition(ConditionData->ConditionName);
 	}
+	
+	//현재 같은 이름의 Condition이 여러개 있는지 확인 (남은 중첩이 있는지 확인)
+	bool bAlreadyHadSameCondition = HasSameConditionByName(ConditionData->ConditionName);
+
 	//중첩 가능한 Condition 이거나 플레이어에게 적용되지 않은 Condition인 경우
 	//현재 플레이어 상태이상 배열에 추가
 	FPlayerCondition NewCondition;
@@ -113,6 +128,8 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 	NewCondition.Priority = ConditionData->Priority;
 	NewCondition.bCanRemove = ConditionData->bCanRemove;
 	NewCondition.CausePlayer = CausePlayer;
+
+	NewCondition.ConditionAnimation = ConditionData->ConditionAnimation;
 	NewCondition.ConditionMontage = ConditionData->ConditionMontage;
 	
 	NewCondition.JumpRule = ConditionData->JumpRule;
@@ -120,6 +137,10 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 	NewCondition.DodgeRule = ConditionData->DodgeRule;
 	NewCondition.HitRule = ConditionData->HitRule;
 	NewCondition.BigHitRule = ConditionData->BigHitRule;
+
+	NewCondition.ConditionStartEffect = ConditionData->ConditionStartEffect;
+	NewCondition.ConditionPersistEffect = ConditionData->ConditionPersistEffect;
+	NewCondition.ConditionEndEffect = ConditionData->ConditionEndEffect;
 	
 	NewCondition.NextEffectTimer = ConditionData->EffectInterval;
 	NewCondition.RemainingTickCount = ConditionData->EffectCount;
@@ -133,7 +154,14 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 	if (NewCondition.ConditionEffect) {
 		NewCondition.ConditionEffect->StartEffect(Player, this, NewCondition, CausePlayer);
 	}
+
+	PlayConditionOnceEffect(NewCondition.ConditionStartEffect, NewCondition);
+
 	CurrentConditions.Add(NewCondition);
+	
+	if (!bAlreadyHadSameCondition && NewCondition.ConditionPersistEffect.NiagaraEffect) {
+		Multicast_StartConditionLoopEffect(NewCondition.ConditionName, NewCondition.ConditionPersistEffect);
+	}
 
 	if (ConditionData->bCanMultiApply && ConditionData->MultiApplyInterval > 0.f) {
 		if (UWorld* World = GetWorld()) {
@@ -146,6 +174,9 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 void UPlayerConditionComponent::RemoveCondition(FName TargetConditionName) {
 	for (int32 i = 0; i < CurrentConditions.Num(); i++) {
 		if (CurrentConditions[i].ConditionName == TargetConditionName) {
+			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(TargetConditionName, i);
+			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(TargetConditionName);
+
 			if (CurrentConditions[i].ConditionEffect) {
 				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
 			}
@@ -162,28 +193,42 @@ void UPlayerConditionComponent::RemoveCondition(FName TargetConditionName) {
 
 //특정 Condition을 모두 제거
 void UPlayerConditionComponent::RemoveSameNameCondition(FName TargetConditionName, bool bEndEffect) {
-	for (int32 i = 0; i < CurrentConditions.Num(); i++) {
-		if (CurrentConditions[i].ConditionName == TargetConditionName) {
-			if (CurrentConditions[i].ConditionEffect) {
-				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
-			}
-			CurrentConditions.RemoveAt(i);
-			i--;
+	bool bRemovedAny = false;
+	FPlayerCondition LastRemovedCondition;
+
+	for (int32 i = CurrentConditions.Num() - 1; i >= 0; --i) {
+		if (CurrentConditions[i].ConditionName != TargetConditionName) continue;
+
+		LastRemovedCondition = CurrentConditions[i];
+		if (CurrentConditions[i].ConditionEffect) {
+			CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], bEndEffect);
 		}
+
+		CurrentConditions.RemoveAt(i);
+		bRemovedAny = true;
 	}
+
+	if (bRemovedAny) {
+		Multicast_StopConditionLoopEffect(TargetConditionName);
+		if (bEndEffect) PlayConditionOnceEffect(LastRemovedCondition.ConditionEndEffect, LastRemovedCondition);
+	}
+
 	UPlayerTransformationComponent* TransformationComp = Player->TransformationComp;
-	if (TransformationComp && TransformationComp->CurrentTransformation.TransformationName == TargetConditionName) {
-		TransformationComp->StopTransformation(false);
-	}
+	if (TransformationComp && TransformationComp->CurrentTransformation.TransformationName == TargetConditionName) TransformationComp->StopTransformation(false);
 }
 
 //특정 Condition Type을 전부 제거 (우선 순위 확인)
 void UPlayerConditionComponent::RemoveSameCategoryCondition(EPlayerConditionType TargetConditionType, bool bEndEffect, int32 priority) {
+	TSet<FName> RemovedConditionNames;
+	TMap<FName, FPlayerCondition> LastRemovedByName;
+
 	for (int32 i = CurrentConditions.Num() - 1; i >= 0; i--) {
 		if (CurrentConditions[i].ConditionType == TargetConditionType && CurrentConditions[i].Priority < priority) {
 			if (CurrentConditions[i].ConditionEffect) {
-				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
+				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], bEndEffect);
 			}
+			RemovedConditionNames.Add(CurrentConditions[i].ConditionName);
+			LastRemovedByName.Add(CurrentConditions[i].ConditionName, CurrentConditions[i]);
 			CurrentConditions.RemoveAt(i);
 		}
 	}
@@ -191,21 +236,48 @@ void UPlayerConditionComponent::RemoveSameCategoryCondition(EPlayerConditionType
 	if (TransformationComp) {
 		TryRemoveTransform(5, TargetConditionType, false);
 	}
+
+	for (const FName& RemovedName : RemovedConditionNames) {
+		if (!HasSameConditionByName(RemovedName)) {
+			Multicast_StopConditionLoopEffect(RemovedName);
+			if (bEndEffect) {
+				if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
+					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+				}
+			}
+		}
+	}
 }
 
 //우선순위보다 낮은 Condition을 전부 제거 (Priority가 5면 모두 제거)
 void UPlayerConditionComponent::RemoveLowPriorityCondition(int32 Priority, bool bEndEffect) {
+	TSet<FName> RemovedConditionNames;
+	TMap<FName, FPlayerCondition> LastRemovedByName;
+
 	for (int32 i = CurrentConditions.Num() - 1; i >= 0; i--) {
 		if (CurrentConditions[i].Priority < Priority) {
 			if (CurrentConditions[i].ConditionEffect) {
-				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
+				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], bEndEffect);
 			}
+			RemovedConditionNames.Add(CurrentConditions[i].ConditionName);
+			LastRemovedByName.Add(CurrentConditions[i].ConditionName, CurrentConditions[i]);
 			CurrentConditions.RemoveAt(i);
 		}
 	}
 	UPlayerTransformationComponent* TransformationComp = Player->TransformationComp;
 	if (TransformationComp) {
 		TryRemoveTransform(Priority, EPlayerConditionType::None, false);
+	}
+
+	for (const FName& RemovedName : RemovedConditionNames) {
+		if (!HasSameConditionByName(RemovedName)) {
+			Multicast_StopConditionLoopEffect(RemovedName);
+			if (bEndEffect) {
+				if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
+					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+				}
+			}
+		}
 	}
 }
 
@@ -254,13 +326,139 @@ void UPlayerConditionComponent::HandleConditionEvent(EPlayerConditionEvent Event
 		if (Rule == EConditionEventRule::Keep) continue;
 		if (Rule == EConditionEventRule::Remove) {
 			if (!Condition.bCanRemove) continue;
+			FName RemovedConditionName = Condition.ConditionName;
+			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(RemovedConditionName, i);
+			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(RemovedConditionName);
+			
 			if (Condition.ConditionEffect) {
 				Condition.ConditionEffect->EndFunction(Player, this, Condition, bUseEndEffect);
 			}
-		}
+			if (!bHasSameConditionAfterRemove && bUseEndEffect) PlayConditionOnceEffect(Condition.ConditionEndEffect, Condition);
 
-		CurrentConditions.RemoveAt(i);
+			CurrentConditions.RemoveAt(i);
+		}
 	}
+}
+
+void UPlayerConditionComponent::StartConditionLoopEffect_Local(FName ConditionName, const FGameEffectData& EffectData)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+
+	if (!Player) return;
+	if (ConditionName.IsNone()) return;
+	if (!EffectData.NiagaraEffect) return;
+
+	//중첩 Condition도 이펙트를 중첩하지 않음
+	if (ActiveConditionPersistEffects.Contains(ConditionName)) return;
+	
+	bool bShouldShow = Player->ShouldShowGameEffectForThisClient(EffectData);
+	FActiveConditionPersistEffect& ActiveEffect = ActiveConditionPersistEffects.Add(ConditionName);
+
+	ActiveEffect.EffectData = EffectData;
+	ActiveEffect.NiagaraComp = NewObject<UNiagaraComponent>(Player, UNiagaraComponent::StaticClass());
+	if (!ActiveEffect.NiagaraComp) {
+		ActiveConditionPersistEffects.Remove(ConditionName);
+		return;
+	}
+
+	ActiveEffect.NiagaraComp->RegisterComponent();
+	ActiveEffect.NiagaraComp->AttachToComponent(Player->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+
+	ActiveEffect.NiagaraComp->SetAsset(EffectData.NiagaraEffect);
+	ActiveEffect.NiagaraComp->SetRelativeLocation(EffectData.LocationOffset);
+	ActiveEffect.NiagaraComp->SetRelativeRotation(EffectData.RotationOffset);
+	ActiveEffect.NiagaraComp->SetRelativeScale3D(EffectData.Scale);
+
+	ActiveEffect.NiagaraComp->SetVisibility(bShouldShow, true);
+	ActiveEffect.NiagaraComp->SetHiddenInGame(!bShouldShow, true);
+
+	if (bShouldShow) ActiveEffect.NiagaraComp->Activate(true);
+	else ActiveEffect.NiagaraComp->Deactivate();
+}
+
+void UPlayerConditionComponent::StopConditionLoopEffect_Local(FName ConditionName)
+{
+	if (ConditionName.IsNone()) return;
+
+	FActiveConditionPersistEffect* ActiveEffect = ActiveConditionPersistEffects.Find(ConditionName);
+
+	if (!ActiveEffect) return;
+	if (ActiveEffect->NiagaraComp) {
+		ActiveEffect->NiagaraComp->Deactivate();
+		ActiveEffect->NiagaraComp->DestroyComponent();
+	}
+
+	ActiveConditionPersistEffects.Remove(ConditionName);
+}
+
+bool UPlayerConditionComponent::HasSameConditionExceptIndex(FName ConditionName, int32 ExceptIndex)
+{
+	if (ConditionName.IsNone()) return false;
+	for (int32 i = 0; i < CurrentConditions.Num(); ++i) {
+		if (i == ExceptIndex) continue;
+		if (CurrentConditions[i].ConditionName == ConditionName) return true;
+	}
+
+	return false;
+}
+
+bool UPlayerConditionComponent::HasSameConditionByName(FName ConditionName)
+{
+	if (ConditionName.IsNone()) return false;
+	for (int32 i = 0; i < CurrentConditions.Num(); ++i) {
+		if (CurrentConditions[i].ConditionName == ConditionName) return true;
+	}
+
+	return false;
+}
+
+void UPlayerConditionComponent::RefreshConditionLoopEffectVisibility()
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player) return;
+
+	for (auto& Pair : ActiveConditionPersistEffects) {
+		FActiveConditionPersistEffect& ActiveEffect = Pair.Value;
+
+		if (!ActiveEffect.NiagaraComp) continue;
+
+		bool bShouldShow = Player->ShouldShowGameEffectForThisClient(ActiveEffect.EffectData);
+
+		ActiveEffect.NiagaraComp->SetVisibility(bShouldShow, true);
+		ActiveEffect.NiagaraComp->SetHiddenInGame(!bShouldShow, true);
+
+		if (bShouldShow) {
+			if (!ActiveEffect.NiagaraComp->IsActive()) ActiveEffect.NiagaraComp->Activate(true);
+		}
+		else ActiveEffect.NiagaraComp->Deactivate();
+	}
+}
+
+void UPlayerConditionComponent::PlayConditionOnceEffect(const FGameEffectData& EffectData, const FPlayerCondition& Condition)
+{
+	if (!Player) return;
+	if (!Player->HasAuthority()) return;
+	if (!Player->EffectManagerComp) return;
+
+	if (!EffectData.NiagaraEffect && !EffectData.Sound) return;
+
+	FGameEffectContext Context;
+	Context.SourceActor = Player;
+	Context.SourceComponent = Player->GetRootComponent();
+	Context.WorldLocation = Player->GetActorLocation();
+	Context.WorldRotation = Player->GetActorRotation();
+	
+	Player->EffectManagerComp->PlayGameEffect_Multicast(EffectData, Context);
+}
+
+void UPlayerConditionComponent::Multicast_StartConditionLoopEffect_Implementation(FName ConditionName, FGameEffectData EffectData)
+{
+	StartConditionLoopEffect_Local(ConditionName, EffectData);
+}
+
+void UPlayerConditionComponent::Multicast_StopConditionLoopEffect_Implementation(FName ConditionName)
+{
+	StopConditionLoopEffect_Local(ConditionName);
 }
 
 void UPlayerConditionComponent::TryRemoveTransform(int32 Priority, EPlayerConditionType Type, bool bEndEffect) {
@@ -313,6 +511,9 @@ bool UPlayerConditionComponent::TryGetVisualSlotForCondition(const FPlayerCondit
 		}
 	}
 
+	TSet<FName> RemovedConditionNames;
+	TMap<FName, FPlayerCondition> LastRemovedConditions;
+
 	for (int32 i = CurrentConditions.Num() - 1; i >= 0; --i) {
 		FPlayerCondition& Condition = CurrentConditions[i];
 		if (!Condition.HasConditionAnimation()) continue;
@@ -320,9 +521,23 @@ bool UPlayerConditionComponent::TryGetVisualSlotForCondition(const FPlayerCondit
 			if (Condition.ConditionEffect){
 				Condition.ConditionEffect->EndFunction(Player, this, Condition, bEndEffect);
 			}
+			RemovedConditionNames.Add(Condition.ConditionName);
+			LastRemovedConditions.Add(Condition.ConditionName, Condition);
+
 			CurrentConditions.RemoveAt(i);
 		}
 	}
+	for (const FName& RemovedName : RemovedConditionNames) {
+		if (!HasSameConditionByName(RemovedName)) {
+			Multicast_StopConditionLoopEffect(RemovedName);
+			if (bEndEffect) {
+				if (FPlayerCondition* RemovedCondition = LastRemovedConditions.Find(RemovedName)) {
+					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+				}
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -340,6 +555,9 @@ void UPlayerConditionComponent::RemoveAnimationConditionsForTransformation(int32
 {
 	if (!Player) return;
 
+	TSet<FName> RemovedConditionNames;
+	TMap<FName, FPlayerCondition> LastRemovedConditions;
+
 	for (int32 i = CurrentConditions.Num() - 1; i >= 0; --i) {
 		FPlayerCondition& condition = CurrentConditions[i];
 		if (!condition.HasConditionAnimation()) continue;
@@ -348,7 +566,20 @@ void UPlayerConditionComponent::RemoveAnimationConditionsForTransformation(int32
 			if (condition.ConditionEffect) {
 				condition.ConditionEffect->EndFunction(Player, this, condition, bEndEffect);
 			}
+			RemovedConditionNames.Add(condition.ConditionName);
+			LastRemovedConditions.Add(condition.ConditionName, condition);
 			CurrentConditions.RemoveAt(i);
+		}
+	}
+
+	for (const FName& RemovedName : RemovedConditionNames) {
+		if (!HasSameConditionByName(RemovedName)) {
+			Multicast_StopConditionLoopEffect(RemovedName);
+			if (bEndEffect) {
+				if (FPlayerCondition* RemovedCondition = LastRemovedConditions.Find(RemovedName)) {
+					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+				}
+			}
 		}
 	}
 }

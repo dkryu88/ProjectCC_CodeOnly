@@ -9,6 +9,7 @@
 class UBoxComponent;
 class UStaticMeshComponent;
 class AMapConstructor;
+class UNiagaraComponent;
 
 UCLASS()
 class PROJECTCC_API ADamageBlock : public AActor
@@ -35,6 +36,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UBoxComponent* DamageCollider;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Effect")
+	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
 	float DamageAmount = 10.f;

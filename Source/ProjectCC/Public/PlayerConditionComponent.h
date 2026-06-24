@@ -10,6 +10,18 @@
 #include "PlayerConditionComponent.generated.h"
 
 class APlayer_Character;
+class UNiagaraComponent;
+
+USTRUCT()
+struct FActiveConditionPersistEffect {
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TObjectPtr<UNiagaraComponent> NiagaraComp = nullptr;
+
+	UPROPERTY()
+	FGameEffectData EffectData;
+};
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class PROJECTCC_API UPlayerConditionComponent : public UActorComponent
@@ -26,6 +38,12 @@ protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StartConditionLoopEffect(FName ConditionName, FGameEffectData EffectData);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StopConditionLoopEffect(FName ConditionName);
+
 	UPROPERTY()
 	APlayer_Character* Player = nullptr;
 
@@ -34,6 +52,9 @@ protected:
 
 	UPROPERTY()
 	TMap<FName, float> MultiApplyIntervalMap;
+
+	UPROPERTY()
+	TMap<FName, FActiveConditionPersistEffect> ActiveConditionPersistEffects;
 
 public:	
 	void ApplyCondition(UPlayerConditionDataAsset* ConditionData, APlayer_Character* CauseCharacter, float CustomDuration, bool bUseCustomValue = false, float CustomValue = 0.f);
@@ -53,4 +74,12 @@ public:
 	void ResumeCurrentConditionAnimation();
 
 	void HandleConditionEvent(EPlayerConditionEvent Event, bool bUseEndEffect);
+
+	void StartConditionLoopEffect_Local(FName ConditionName, const FGameEffectData& EffectData);
+	void StopConditionLoopEffect_Local(FName ConditionName);
+	bool HasSameConditionExceptIndex(FName ConditionName, int32 ExceptIndex);
+	bool HasSameConditionByName(FName ConditionName);
+	void RefreshConditionLoopEffectVisibility();
+
+	void PlayConditionOnceEffect(const FGameEffectData& EffectData, const FPlayerCondition& Condition);
 };

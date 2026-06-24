@@ -33,13 +33,11 @@ public:
 	void Server_SubmitData(const FString& nickname, int32 portraitId);
 
 protected:
-	//[4인]수정
-	UPROPERTY(EditDefaultsOnly, Category="UI")
-	TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass_2P;	//_2P 텍스트 추가
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass2P;
 
-	//[4인]추가-4인용 위젯클래스 참조
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass_4P;
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UReady_LoadingWidget> Ready_LoadingWidgetClass4P;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UReady_LoadingWidget> Ready_LoadingWidget;
@@ -50,5 +48,4 @@ protected:
 	bool bReadyToTravelSent = false;
 
 	FTimerHandle TravelCheckTimerHandle;
-
 };

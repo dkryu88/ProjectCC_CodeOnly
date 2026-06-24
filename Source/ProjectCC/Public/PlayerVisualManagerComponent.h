@@ -10,6 +10,7 @@ class UMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UVisualMaterialLibraryDataAsset;
+class APlayer_Character;
 
 UENUM(BlueprintType)
 enum class EVisualMaterialSource : uint8
@@ -66,25 +67,25 @@ USTRUCT(BlueprintType)
 struct FVisualScalarParameter {
 	GENERATED_BODY()
 	//적용 Condition/Transformation 이름
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FName ParamName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	EVisualScalarRangeSource ValueMode = EVisualScalarRangeSource::Constant;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FVisualScalarRange OwnerRange;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FVisualScalarRange OtherRange;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	EVisualScalarRangeMapping MappingMode = EVisualScalarRangeMapping::Constant;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	float MinValue = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	float MaxValue = 600.f;
 
 
@@ -111,13 +112,13 @@ struct FVisualVectorParameter
 {
 	GENERATED_BODY()
 	//적용 Condition/Transformation 이름
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FName ParamName = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FLinearColor OwnerValue = FLinearColor::White;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	FLinearColor OtherValue = FLinearColor::White;
 };
 
@@ -128,19 +129,19 @@ struct FVisualEffectRequest {
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
 	int32 ApplyOrder = 0;
 	//우선순위
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
 	int32 Priority = 0;
-	
+
 	//변신 컴포넌트가 만든 Transform Mesh를 포함하는지 여부
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bAffectTransformationMesh = true;
 
 	//머터리얼 재적용 여부 확인
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Material")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Material")
 	EVisualMaterialSource MaterialSource = EVisualMaterialSource::None;
 
 	//재적용 머터리얼을 찾기 위한 키워드 (변신, Condition 이름과 동일)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Material")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Material")
 	FName MaterialSetKey = NAME_None;
 
 	//재적용 머터리얼 찾기 실패 시 사용할 머터리얼
@@ -148,10 +149,10 @@ struct FVisualEffectRequest {
 	TObjectPtr<UMaterialInterface> FallbackMaterial = nullptr;
 
 	//각 머터리얼의 Parameter들의 값 (Scalar) <ex : opacity>
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Parameters")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Parameters")
 	TArray<FVisualScalarParameter> ScalarParameters;
 	//각 머터리얼의 Parameter들의 값 (Vector) <ex : ColorTint>
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Parameters")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Parameters")
 	TArray<FVisualVectorParameter> VectorParameters;
 
 	//Visual 처리 종류
@@ -162,7 +163,7 @@ struct FVisualEffectRequest {
 	EVisualVisibilityMode OtherVisibilityMode = EVisualVisibilityMode::Keep;
 
 	//적용 대상 설정//
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Target")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Target")
 	bool bAffectPlayerMesh = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Target")
@@ -197,19 +198,19 @@ struct FVisualMeshBackup {
 
 };
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTCC_API UPlayerVisualManagerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:	
+public:
 	// Sets default values for this component's properties
 	UPlayerVisualManagerComponent();
 	// Called when the game starts
 	virtual void BeginPlay() override;
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	
+
 	//서버에 모든 클라이언트에 대해 EffectName Visual 효과 추가 요청
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_AddVisualEffect(FName EffectName, FVisualEffectRequest EffectData);
@@ -226,8 +227,8 @@ public:
 	void RefreshVisuals();
 	void RefreshPortraitMaterials();
 	void RestoreOriginalMaterials();
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Material")
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual|Material")
 	TObjectPtr<UVisualMaterialLibraryDataAsset> MaterialLibrary = nullptr;
 
 protected:
@@ -237,10 +238,10 @@ protected:
 	UPROPERTY()
 	TMap<TObjectPtr<UMeshComponent>, FVisualMeshBackup> OriginalMaterialsMap;
 
-	UPROPERTY(EditDefaultsOnly, Category="Portrait Material")
+	UPROPERTY(EditDefaultsOnly, Category = "Portrait Material")
 	FName PortraitIdParamName = TEXT("PortraitId");
 
-	UPROPERTY(EditDefaultsOnly, Category="Portrait Material")
+	UPROPERTY(EditDefaultsOnly, Category = "Portrait Material")
 	FName UsingPortraitColorParamName = TEXT("UsingPortraitColor");
 
 	int32 VisualApplyOrder = 0;

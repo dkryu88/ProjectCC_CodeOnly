@@ -24,7 +24,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Area")
 	TObjectPtr<UBoxComponent> AreaDetectCollider;
 	//차후에 이펙트로 실질적 처리 (이펙트 제작 후 매쉬 제거)
@@ -39,9 +38,19 @@ protected:
 	float AreaDuration = 0.5f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AreaDetail")
 	float AreaEffectInterval = 0.25;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AreaDetail")
+	float AreaDestroyDelayForEffect = 1.f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AreaDetail")
+	FName AreaDurationParamName = TEXT("User.AreaDuration");
 	UPROPERTY(EditDefaultsOnly)
 	FIntVector GridLocation = FIntVector::ZeroValue;
-	
+	UPROPERTY()
+	bool bPendingDestroyAfterEffect = false;
+	UPROPERTY()
+	bool bApplyOutEffectOnEndPlay = true;
+
+	FTimerHandle DestroyAfterEffectTimerHandle;
+	FTimerHandle AreaDurationTimerHandle;
 public:
 	//Area 공용 정보
 	UPROPERTY()
@@ -77,7 +86,6 @@ public:
 
 	// Area 생성 시 이미 안에 있는 액터 등록
 	void RegisterInitialOverlaps();
-
 protected:
 	UFUNCTION()
 	void OnAreaBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -89,6 +97,15 @@ protected:
 	void ApplyOutAreaEffect(AActor* OtherActor);
 	UFUNCTION(BlueprintNativeEvent, Category = "AreaEffect")
 	void ApplyStayAreaEffect(AActor* OtherActor);
+
+	UFUNCTION()
+	void BeginSoftDestroyAreaByDuration();
+	UFUNCTION()
+	void BeginSoftDestroyArea(bool bApplyOutEffect = true);
+	UFUNCTION()
+	void FinalDestroyArea();
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_BeginSoftDestroyAreaVisual();
 
 public:	
 	//Spawn 가능한 Grid 좌표인지 확인

@@ -178,7 +178,9 @@ protected:
 	void CheckCoinWave(int32 RemainingTime);
 	UFUNCTION()
 	void CoinWave();
-	/* ------------------------Supply---------------------------- */
+
+/* ------------------------Supply---------------------------- */
+public:
 	/*-----------È®·ü------------*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category =" Supply")
 	int32 PercentOfB = 60;
@@ -187,6 +189,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Supply")
 	int32 PercentOfS = 10;
 	/*-----------------------------*/
+	UPROPERTY(BlueprintReadWrite, Category = "Supply")
+	bool bCanSupplyWeaponSpawn = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Supply")
 	float SupplyCheckInterval = 10.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Supply")
@@ -221,6 +226,8 @@ protected:
 	bool SpawnSupplyItem();
 	UFUNCTION(BlueprintCallable, Category = "Supply")
 	bool SpawnSupplyObjects();
+	
+
 public:
 	UFUNCTION(BlueprintCallable)
 	AMapConstructor* GetCurrentMap() { return CurrentMap; }

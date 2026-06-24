@@ -12,6 +12,7 @@
 #include "MapConstructor.h"
 #include "BlockType.h"
 #include "Objects.h"
+#include "NiagaraComponent.h"
 
 // Sets default values
 ADamageBlock::ADamageBlock()
@@ -48,6 +49,12 @@ ADamageBlock::ADamageBlock()
 
 	DamageCollider->OnComponentBeginOverlap.AddDynamic(this, &ADamageBlock::OnDamageTriggerBeginOverlap);
 	DamageCollider->OnComponentEndOverlap.AddDynamic(this, &ADamageBlock::OnDamageTriggerEndOverlap);
+
+	//상시 이펙트 담당 컴포넌트
+	LifeTimeEffectComp = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Effect"));
+	LifeTimeEffectComp->SetupAttachment(Root);
+	LifeTimeEffectComp->bAutoActivate = false;
+	LifeTimeEffectComp->SetAutoDestroy(false);
 
 }
 

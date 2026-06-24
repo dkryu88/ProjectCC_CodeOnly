@@ -10,6 +10,7 @@
 #include "WeaponStats.h"
 #include "ETC/AttackPreviewGuide.h"
 #include "Objects.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
@@ -72,7 +73,9 @@ void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AWeapon, NowUseCount);
 	DOREPLIFETIME(AWeapon, bHaveThrowDamage);
+	DOREPLIFETIME(AWeapon, bFixUseCount);
 	DOREPLIFETIME(AWeapon, ThrowDamage);
+	DOREPLIFETIME(AWeapon, bCreatedByEvent);
 }
 
 void AWeapon::OnRep_NowUseCount()
@@ -115,13 +118,71 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 	if (OtherActor == EquippedPlayer) return;
 
 	APlayer_Character* HitPlayer = Cast<APlayer_Character>(OtherActor);
-	AObjects* HitObject = Cast<AObjects>(OtherActor);
+	AObjects* HitObjects = Cast<AObjects>(OtherActor);
 
 	if (HitPlayer) {
-		HitPlayer->ApplyDamageInternal(ThrowDamage, EquippedPlayer, this, true, false);
+		HitPlayer->ApplyDamageInternal(ThrowDamage, EquippedPlayer, this, true, true, false);
+		ApplyHitEffect(HitPlayer, Hit);
+
+		if (HitPlayer->EffectManagerComp) {
+			FGameEffectData* ThrowEffect = nullptr;	//[버그] nullptr추가
+			FGameEffectContext Context;
+			if (WeaponData->Stats.AttackType != EAttackType::Shoot_HS) {
+				ThrowEffect = &WeaponData->HitEffect;
+
+			}
+			else {
+				ThrowEffect = WeaponData->CustomEffects.Find(FName(TEXT("ThrowHitEffect")));
+			}
+			if (ThrowEffect) {
+				Context.SourceActor = HitPlayer;
+				Context.SourceComponent = HitPlayer->GetMesh();
+				Context.HitPoint = Hit.ImpactPoint;
+				Context.HitNormal = Hit.ImpactNormal;
+				Context.WorldLocation = Hit.ImpactPoint;
+				Context.WorldRotation = Hit.ImpactNormal.Rotation();
+				HitPlayer->EffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);	//[버그] if문 안으로 올림
+			}
+		}
 	}
-	else if (HitObject) {
-		HitObject->ApplyDamageInternal(ThrowDamage, EquippedPlayer, this, true, false);
+	else if (HitObjects) {
+		HitObjects->ApplyDamageInternal(ThrowDamage, EquippedPlayer, this, true, false);
+		ApplyHitEffect(HitObjects, Hit);
+		if (HitObjects->ObjectsEffectManagerComp) {
+			FGameEffectData* ThrowEffect;
+			FGameEffectContext Context;
+			if (WeaponData->Stats.AttackType != EAttackType::Shoot_HS) {
+				ThrowEffect = &WeaponData->HitEffect;
+
+			}
+			else {
+				ThrowEffect = WeaponData->CustomEffects.Find(FName(TEXT("ThrowHitEffect")));
+			}
+			if (ThrowEffect) {
+				Context.SourceActor = HitObjects;
+				Context.SourceComponent = HitObjects->Mesh;
+				Context.HitPoint = Hit.ImpactPoint;
+				Context.HitNormal = Hit.ImpactNormal;
+				Context.WorldLocation = Hit.ImpactPoint;
+				Context.WorldRotation = Hit.ImpactNormal.Rotation();
+			}
+			HitObjects->ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);
+		}
+	}
+
+	//파괴 이펙트 생성
+	if (WeaponData && EffectManagerComp) {
+		FGameEffectData& EffectData = WeaponData->DestroyEffect;
+		if (EffectData.NiagaraEffect || EffectData.Sound) {
+			FGameEffectContext Context;
+			Context.SourceActor = this;
+			Context.SourceComponent = Mesh;
+			Context.WorldLocation = GetActorLocation();
+			Context.WorldRotation = FRotator::ZeroRotator;
+			Context.HitPoint = FVector::ZeroVector;
+			Context.HitNormal = FVector::UpVector;
+			EffectManagerComp->PlayGameEffect_Multicast(EffectData, Context);
+		}
 	}
 
 	Destroy();
@@ -206,17 +267,6 @@ void AWeapon::EndWeaponThrow() {
 	bHaveThrowDamage = false;
 }
 
-//무기 적중 효과 발동 처리
-void AWeapon::ApplyHitEffect(AActor* Target) {
-	if (!HasAuthority()) return;
-	HitEffect(EquippedPlayer, Target);
-}
-
-//무기 사용 효과 발동 처리
-bool AWeapon::ApplyUseEffect() {
-	return UseEffect(EquippedPlayer);
-}
-
 //무기 사용횟수 검사
 bool AWeapon::CheckUseCounting() {
 	if (!WeaponData) return false;
@@ -230,8 +280,9 @@ void AWeapon::UseWeapon() {
 	if (!WeaponData) return;
 	//NowUseCount의 최소값을 -1로 지정 (-2는 초기화 전 최초 생성값)
 	if (NowUseCount > -1) {
-		NowUseCount -= 1;
+		if (!bFixUseCount) NowUseCount -= 1;
 		OnWeaponUseCountChanged.Broadcast();
+
 		ForceNetUpdate();
 	}
 	//사용 횟수 차감
@@ -255,13 +306,28 @@ void AWeapon::UseWeapon() {
 	}
 }
 
+//무기 적중 효과 발동 처리
+void AWeapon::ApplyHitEffect(AActor* Target, const FHitResult& AttackHit) {
+	if (!HasAuthority()) return;
+
+	//적중 이펙트 실행
+	PlayWeaponHitEffect(Target, AttackHit);
+
+	//적중 효과 실행
+	HitEffect(EquippedPlayer, Target);
+}
+
+//무기 사용 효과 발동 처리
+bool AWeapon::ApplyUseEffect() {
+	return UseEffect(EquippedPlayer);
+}
 //무기 발사
 void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	if (!HasAuthority()) return;
 	if (!Player || !WeaponData || !CheckUseCounting()) return;
 	//투척/발사 물체가 있는 경우에만 함수 기능 적용 (Melee와 HitScan은 없음)
 	if (!WeaponData->Bullet) return;
-	
+
 	FObjectLaunchData LaunchData;
 
 	if (!BuildBulletLaunchData(Player, TargetPoint, LaunchData)) return;
@@ -291,7 +357,7 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	FRotator SpawnRotation = FRotator::ZeroRotator;
 	if (WeaponData->Stats.AttackType == EAttackType::Shoot) {
 		SpawnRotation = SpawnDir.Rotation();
-		SpawnRotation += FRotator(0.f, 90.f, 0.f);
+		SpawnRotation += FRotator(0.f, -90.f, 0.f);
 	}
 	else if (WeaponData->Stats.AttackType == EAttackType::Throw) {
 		SpawnRotation = FRotator(FMath::RandRange(-180.f, 180.f), FMath::RandRange(-180.f, 180.f), FMath::RandRange(-180.f, 180.f));
@@ -300,7 +366,7 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	AObjects* Bullet = World->SpawnActor<AObjects>(WeaponData->Bullet, LaunchData.StartLocation, SpawnRotation, SpawnParams);
 	if (!Bullet) return;
 
-	
+
 	//스폰된 물체와 스폰 무기 간의 충돌 무시
 	if (Bullet->GetObjectPhysicsCollider()) {
 		Bullet->GetObjectPhysicsCollider()->IgnoreActorWhenMoving(this, true);
@@ -330,6 +396,31 @@ UPrimitiveComponent* AWeapon::GetweaponCollider()
 {
 	return WeaponCollider;
 }
+void AWeapon::SetWeaponEventMode(bool bEnable)
+{
+	if (!HasAuthority()) return;
+
+	bCreatedByEvent = bEnable;
+
+	if (bEnable) {
+		Tags.AddUnique(TEXT("EventCreated"));
+	}
+	else {
+		Tags.Remove(TEXT("EventCreated"));
+	}
+
+	ForceNetUpdate();
+}
+
+void AWeapon::SetFixUseCount(bool bEnable)
+{
+	if (!HasAuthority()) return;
+	bFixUseCount = bEnable;
+
+	ForceNetUpdate();
+	OnWeaponUseCountChanged.Broadcast();
+}
+
 //Weapon Collider 크기를 계산
 void AWeapon::SetSizeofWeaponColliderwithMesh(UBoxComponent* Box)
 {
@@ -462,13 +553,13 @@ bool AWeapon::BuildBulletLaunchData(APlayer_Character* Player, const FVector& Th
 	if (!Player->NowMap)return false;
 
 	AObjects* Bullet = WeaponData->Bullet->GetDefaultObject<AObjects>();
-	
+
 	if (!Bullet || !Bullet->ObjectsData) return false;
-	
+
 	UObjectsDataAsset* BulletData = Bullet->ObjectsData;
 
 	float AttackRange = Player->AStat.AttackRange * Player->NowMap->BlockSize;
-	
+
 	FVector StartLocation = GetBulletSpawnLocation(Player);
 	FVector StandardLocation = Player->GetActorLocation();
 	StandardLocation.Z = 0.f;
@@ -481,7 +572,7 @@ bool AWeapon::BuildBulletLaunchData(APlayer_Character* Player, const FVector& Th
 	if (BulletData->Type == EObjectsType::Throwable)
 	{
 		OutLaunchData.bUseGravity = true;
-		OutLaunchData.LaunchVelocity = CalculateThrowLaunchVelocity(StartLocation, TargetLocation, 100.f);	
+		OutLaunchData.LaunchVelocity = CalculateThrowLaunchVelocity(StartLocation, TargetLocation, 100.f);
 	}
 	else if (BulletData->Type == EObjectsType::Projectile)
 	{
@@ -566,13 +657,13 @@ FVector AWeapon::CalculateThrowLaunchVelocity(const FVector& TheStartLocation, c
 FVector AWeapon::EvaluateLaunchLocation(FObjectLaunchData& LaunchData, float Time)
 {
 	FVector Gravity = FVector::ZeroVector;
-	if (LaunchData.bUseGravity){
-		if (UWorld* World = GetWorld()){
+	if (LaunchData.bUseGravity) {
+		if (UWorld* World = GetWorld()) {
 			Gravity = FVector(0.f, 0.f, World->GetGravityZ());
 		}
 	}
 
-	return LaunchData.StartLocation + LaunchData.LaunchVelocity * Time + 0.5f * Gravity * Time * Time;	
+	return LaunchData.StartLocation + LaunchData.LaunchVelocity * Time + 0.5f * Gravity * Time * Time;
 }
 
 float AWeapon::GetBulletMeshRadius(float TheRadius)
@@ -641,7 +732,7 @@ bool AWeapon::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualDa
 			PreviewData.bShowAttackPath = true;
 			PreviewData.PathRadius = FMath::Max(Stats.AttackRadius, 1.f);
 		}
-		else{
+		else {
 			PreviewData.bShowAttackSector = true;
 			PreviewData.bOnlySameHeight = true;
 		}
@@ -718,6 +809,120 @@ bool AWeapon::CheckCustomAdditionalAnimation(EFunctionInterActionReason Reason, 
 	return true;
 }
 
+
+/*무기 이펙트 관련 함수들 모음*/
+void AWeapon::PlayWeaponHitEffect(AActor* Target, const FHitResult& AttackHit)
+{
+	if (!HasAuthority()) return;
+	if (!WeaponData) return;
+	if (!EquippedPlayer) return;
+	if (!WeaponData->HitEffect.NiagaraEffect && !WeaponData->HitEffect.Sound) return;
+	if (!EquippedPlayer->EffectManagerComp) return;
+
+	FVector HitLocation = AttackHit.ImpactPoint;
+	//HitLocation이 제대로 잡히지 않았을 경우 FallBack
+	if (HitLocation.IsNearlyZero()) HitLocation = AttackHit.Location;
+	if (HitLocation.IsNearlyZero() && Target) {
+		HitLocation = Target->GetActorLocation();
+		if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
+			HitLocation = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 35.f);
+		}
+		else if (AObjects* TargetObjects = Cast<AObjects>(Target)) {
+			HitLocation = TargetObjects->PhysicsCollider->Bounds.Origin;
+		}
+	}
+
+	//히트 이펙트를 대상 쪽으로 약간 밀어넣음 (공중에 뜨는것 방지)
+	float HitInsideDistance = 10.f;
+	if (Target) {
+		FVector TargetCenter = Target->GetActorLocation();
+		if (APlayer_Character* TargetPlayer = Cast<APlayer_Character>(Target)) {
+			TargetCenter = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		}
+		else if (AObjects* TargetObjects = Cast<AObjects>(Target)) {
+			TargetCenter = TargetObjects->PhysicsCollider->Bounds.Origin;
+		}
+
+		FVector InwardDir = TargetCenter - HitLocation;
+
+		if (!InwardDir.IsNearlyZero()) HitLocation += InwardDir.GetSafeNormal() * HitInsideDistance;
+	}
+
+	FVector HitNormal = AttackHit.ImpactNormal;
+	if (HitNormal.IsNearlyZero()) {
+		if (Target) {
+			HitNormal = EquippedPlayer->GetActorLocation() - Target->GetActorLocation();
+			HitNormal.Z = 0.f;
+			HitNormal = HitNormal.GetSafeNormal();
+		}
+	}
+	if (HitNormal.IsNearlyZero()) {
+		HitNormal = FVector::UpVector;
+	}
+
+	FGameEffectData* EffectData = GetWeaponHitEffectData();
+
+	if (!EffectData) return;
+
+	FVector AttackDir = HitLocation - EquippedPlayer->GetActorLocation();
+	AttackDir.Z = 0.f;
+
+	FRotator HitRotation = AttackDir.IsNearlyZero() ? EquippedPlayer->GetActorRotation() : AttackDir.GetSafeNormal().Rotation();
+
+	FGameEffectContext Context;
+	Context.SourceActor = EquippedPlayer;
+	Context.SourceComponent = EquippedPlayer->GetCapsuleComponent();
+	Context.WorldLocation = HitLocation;
+	Context.WorldRotation = HitRotation;
+	Context.HitPoint = HitLocation;
+	Context.HitNormal = HitNormal;
+
+	EquippedPlayer->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context);
+}
+void AWeapon::PlayAttackEffectByNotify(APlayer_Character* Player)
+{
+	if (!Player) return;
+	if (!WeaponData) return;
+	if (!Player->EffectManagerComp) return;
+
+	FGameEffectData& EffectData = WeaponData->AttackEffect;
+
+	if (!EffectData.NiagaraEffect && !EffectData.Sound) return;
+
+	FGameEffectContext Context;
+	Context.SourceActor = Player;
+	Context.SourceComponent = Player->GetMesh();
+
+	bool bHasWeaponAttackPointSocket = Mesh && Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"));
+	if (bHasWeaponAttackPointSocket) {
+		Context.SourceActor = this;
+		Context.SourceComponent = Mesh;
+		Context.OverrideSocketName = TEXT("SK_WeaponAttackPoint");
+		Context.WorldLocation = Mesh->GetSocketLocation(TEXT("SK_WeaponAttackPoint"));
+		Context.WorldRotation = Mesh->GetSocketRotation(TEXT("SK_WeaponAttackPoint"));
+
+		EffectData.SpawnLocationType = EGameEffectSpawnLocationType::SocketLocation;
+		EffectData.SpawnRotationType = EGameEffectSpawnRotationType::SocketRotation;
+	}
+	else {
+		Context.SourceActor = Player;
+		Context.SourceComponent = Player->GetMesh();
+		Context.WorldLocation = Player->GetActorLocation();
+		Context.WorldRotation = Player->GetActorRotation();
+		EffectData.SpawnLocationType = EGameEffectSpawnLocationType::ActorLocation;
+		EffectData.SpawnRotationType = EGameEffectSpawnRotationType::ActorRotation;
+	}
+
+
+	Player->EffectManagerComp->PlayGameEffect_Local(EffectData, Context);
+}
+
+FGameEffectData* AWeapon::GetWeaponHitEffectData()
+{
+	return &WeaponData->HitEffect;
+}
+
+//---------------------------------------------------------------------------------------------//
 //무기가 가진 자체 공격 전처리 메커니즘 함수
 bool AWeapon::BeforeAttackWeaponFunction()
 {

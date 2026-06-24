@@ -48,7 +48,7 @@ void AKillPlane::OnKillPlaneBeginOverlap(UPrimitiveComponent* OverlappedComponen
 	if (APlayer_Character* Player = Cast<APlayer_Character>(OtherActor)) {
 		Player->SinkSpeed = 10.f;
 		Player->AddInputBlockController("KillPlane", true, true, true, true);
-		Player->ApplyDamageInternal(200.0f, nullptr, nullptr, false, false, true);
+		Player->ApplyDamageInternal(200.0f, nullptr, nullptr, false, false, false, true);
 		return;
 	}
 	else if (OtherActor->ActorHasTag(TEXT("NonDestroy"))) {

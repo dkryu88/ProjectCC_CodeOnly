@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Effect/FGameEffectData.h"
 #include "Coin.generated.h"
 
 class USphereComponent;
@@ -43,6 +44,9 @@ protected:
 	//상시 이펙트 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Effect")
 	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
+	//코인 획득 시 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effect")
+	FGameEffectData PickedEffect;
 	//현재 매치에서 사용 중인 맵
 	UPROPERTY()
 	TObjectPtr<AMapConstructor> NowMap = nullptr;

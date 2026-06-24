@@ -78,6 +78,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Visual", meta = (EditCondition = "bUseVisualManager"))
 	FVisualEffectRequest VisualData;
 
+	//변신 이펙트 관련 -------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
+	FGameEffectData TransformStartEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData TransformPersistEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameEffectData TransformEndEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	bool bHidePlayerEffectsFromOthers = false;
+
 	//변신 중 플레이어 Input에 따른 결과 설정
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
 	EPlayerInputResult MoveRule = EPlayerInputResult::CanAction;
@@ -90,6 +100,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
 	EPlayerInputResult AttackRule = EPlayerInputResult::StopTransform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
+	EPlayerInputResult AimRule = EPlayerInputResult::CanAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transformation Input")
 	EPlayerInputResult InteractionRule = EPlayerInputResult::CanAction;

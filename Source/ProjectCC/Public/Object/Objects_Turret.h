@@ -35,6 +35,9 @@ public:
 	UPROPERTY()
 	AActor* CurrentTarget = nullptr;
 
+	FHitResult CurrentTargetHitResult;
+	bool bSuccessTargetHit = false;
+
 	AObjects_Turret(const FObjectInitializer& ObjectInitializer);
 
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -45,9 +48,13 @@ public:
 
 	void UpdateHeadAim(float DeltaTime);
 	bool IsHeadFacingTarget(AActor* Target);
-	void FireAtTarget(AActor* Target);
+	void FireAtTarget(AActor* Target,const FHitResult& Hit);
 	void ApplyTurretHeadYaw(float NewYaw);
 	bool IsValidTurretTarget(AActor* Target);
+
+	bool BuildActualHitResultToTarget(AActor* Target, FHitResult& OutHit);
+	FVector GetTurretTraceStartLocation();
+	FVector GetTurretTargetTracePoint(AActor* Target);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret")
 	UBoxComponent* AttackRangeBox;
@@ -55,6 +62,7 @@ public:
 	UPROPERTY(ReplicatedUsing=OnRep_TurretHeadYaw)
 	float TurretHeadYaw = 0.f;
 
+	bool bFirstSocketAttacked = false;
 protected:
 	UFUNCTION()
 	void OnAttackBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);

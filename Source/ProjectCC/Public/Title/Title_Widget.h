@@ -13,10 +13,13 @@ class UEditableTextBox;
 class UButton;
 class UTextBlock;
 class UThrobber;
+class UImage;
+class UOverlay;
 
 //FOnTitlePlayRequested 이벤트 타입 선언
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTitlePlayRequested, FString, NickName, EMatchMode, MatchMode);	//[4인]수정- OneParam->TwoParams, 인자 추가
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTitlePlayRequested, FString, NickName, EMatchMode, MatchMode);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTitleCancelRequested);
+
 
 UCLASS()
 class PROJECTCC_API UTitle_Widget : public UUserWidget
@@ -78,16 +81,47 @@ public:
 	float CurrentStatusVisibleTIme = 0.f;
 
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Title UI")
+	EMatchMode SelectedMatchMode;
+
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> EditableTextBox_Nickname;
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Button_Play2P;	//[4인]수정-Button_Play->Button_Play2P
+	TObjectPtr<UButton> Button_Play;
 
-	//[4인]추가-4인플레이 버튼
+	//2인-4인플레이 전환 버튼
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Button_Play4P;
+	TObjectPtr<UButton> Button_TwoPlayer;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Button_FourPlayer;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> Image_TwoPlayerButton;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> Image_FourPlayerButton;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> Overlay_TwoPlayer;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> Overlay_FourPlayer;
+
+	//매치모드 선택 프레임
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> Image_SelectedFrame;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Title UI")
+	FLinearColor UnSelectedButtonTint = FLinearColor(0.5f, 0.5f, 0.5f, 1.f);
+
+	//프레임 이동 속도
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Title UI")
+	float FrameMoveSpeed = 20.f;
+	//프레임 위치 오프셋
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Title UI|Match Mode Visual")
+	FVector2D FramePositionOffset = FVector2D(0.f, 0.f);
+	//프레임 이동 중 여부
+	bool bFrameMoving = false;
+	//프레임 목표 위치
+	FVector2D TargetFramePosition = FVector2D::ZeroVector;
 
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
@@ -104,21 +138,31 @@ public:
 
 	//Play버튼 클릭 시 호출
 	UFUNCTION()
-	void Handle2PlayButtonClicked();	//[4인]수정-HandlePlayButtonClicked->Handle2PlayButtonClicked
-
-	//[4인]추가-4인Play버튼 클릭 시 호출
-	UFUNCTION()
-	void Handle4PlayButtonClicked();
-
+	void HandlePlayButtonClicked();
 	UFUNCTION()
 	void HandleCancelButtonClicked();
 	UFUNCTION()
 	void HandleExitButtonClicked();
 
+	//매치모드 전환 버튼 클릭 시 호출
+	UFUNCTION()
+	void HandleTwoPlayerButtonClicked();
+	UFUNCTION()
+	void HandleFourPlayerButtonClicked();
+
 	//닉네임 입력 박스 텍스트 변경 시 갱신
 	UFUNCTION()
 	void HandleNickNameTextChanged(const FText& NewText);
 
+	UFUNCTION(BlueprintCallable, Category="Title UI")
+	void SetMatchMode(EMatchMode TheMatchMode);
+
 	//닉네임 입력 박스 갱신
 	void RefreshNicknameBox();
+
+	//매치모드 버튼 프레임 갱신
+	void ApplyMatchMode(EMatchMode NewMatchMode, bool bInstant);
+	void RefreshMatchModeButtons();
+	void UpdateSelectedFrameTargetPosition();
+	void SnapSelectedFrameToTargetLocation();
 };

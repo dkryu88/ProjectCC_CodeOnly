@@ -8,6 +8,7 @@
 
 float AWeapon_BambooSpear::OnPreHit(APlayer_Character* Target, bool& bSkipRotation)
 {
+	bBigHitTarget = false;
 	if (!Target) return 1.f;
 
 	APlayer_State* PlayerState = Cast<APlayer_State>(EquippedPlayer->GetPlayerState());
@@ -22,8 +23,20 @@ float AWeapon_BambooSpear::OnPreHit(APlayer_Character* Target, bool& bSkipRotati
 	//Target의 코인과 장착자의 코인이 특정 개수 이상이고, 장착자의 코인이 특정 개수 이하일때 공격 배수 적용
 	if (TargetCoin - PlayerCoin >= 30 && PlayerCoin <= 10) {
 		Magnification = AttackMagnification;
+		bBigHitTarget = true;
 	}
 
 	//뒤가 아닌곳을 공격 시 일반 데미지, 회전 적용
 	return Magnification;
+}
+
+FGameEffectData* AWeapon_BambooSpear::GetWeaponHitEffectData()
+{
+	if (!WeaponData) return nullptr;
+	if (bBigHitTarget) {
+		bBigHitTarget = false;
+		return WeaponData->CustomEffects.Find(FName(TEXT("BigHitEffect")));
+	}
+
+	return Super::GetWeaponHitEffectData();
 }

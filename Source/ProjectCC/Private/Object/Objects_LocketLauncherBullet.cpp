@@ -33,6 +33,17 @@ void AObjects_LocketLauncherBullet::Func_Destroy_Implementation()
 
 		DrawDebugBox(GetWorld(), ExplosionCenter, BoxExtent, FColor::Magenta, false, 2.f, 0, 3.f);
 
+		//이펙트 파라미터 설정 및 재생
+		FGameEffectContext EffectContext;
+		EffectContext.SourceActor = this;
+		EffectContext.SourceComponent = GetRootComponent();
+		EffectContext.WorldLocation = ExplosionCenter;
+		EffectContext.WorldRotation = FRotator::ZeroRotator;
+		EffectContext.HitPoint = ExplosionCenter;
+		EffectContext.HitNormal = FVector::UpVector;
+
+		PlayObjectsEffect(EEffectType::Destroy, EffectContext);
+
 		FCollisionObjectQueryParams ObjParams;
 		ObjParams.AddObjectTypesToQuery(ECC_Pawn);
 		ObjParams.AddObjectTypesToQuery(ECC_GameTraceChannel4);
@@ -45,7 +56,7 @@ void AObjects_LocketLauncherBullet::Func_Destroy_Implementation()
 				AObjects* TargetObjects = Cast<AObjects>(Result.GetActor());
 				if (Victim && !DamagedActors.Contains(Victim)) {
 					DamagedActors.Add(Victim);
-					Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, false);
+					Victim->ApplyDamageInternal(DamageAmount, OwnPlayer, this, true, true, true, false);
 				}
 				if (TargetObjects && !DamagedActors.Contains(TargetObjects)) {
 					DamagedActors.Add(Victim);

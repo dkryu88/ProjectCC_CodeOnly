@@ -11,9 +11,18 @@ class AActor;
 class USceneComponent;
 
 UENUM(BlueprintType)
+enum class EEffectShowTarget : uint8 
+{
+	EveryOne,
+	OnlyMyself,
+	OnlyOthers
+};
+
+UENUM(BlueprintType)
 enum class EEffectType : uint8
 {
 	Spawn,
+	Attack,
 	Hit,
 	Destroy,
 	Custom
@@ -187,6 +196,9 @@ struct FGameEffectData {
 	EEffectType Type = EEffectType::Spawn;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	EEffectShowTarget Target = EEffectShowTarget::EveryOne;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EGameEffectSpawnLocationType SpawnLocationType = EGameEffectSpawnLocationType::WorldLocation;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
@@ -203,4 +215,29 @@ struct FGameEffectData {
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FVector Scale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bOverrideNiagaraColor = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bOverrideNiagaraColor"))
+	FName NiagaraColorParamName = TEXT("User.EffectColor");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bOverrideNiagaraColor"))
+	FName SubEffectColorParamName = TEXT("User.SubEffectColor");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bOverrideNiagaraColor"))
+	FLinearColor NiagaraColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bOverrideNiagaraColor"))
+	FLinearColor SubNiagaraColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bAttachToSourceWhenSpawned = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bKeepWorldRotationWhenAttached = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bFollowSourceTranslationOnly = false;
+
 };
