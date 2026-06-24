@@ -3603,15 +3603,19 @@ void APlayer_Character::StartRecoverReaction()
 		if (!bIsRecoverReaction) return;
 		if (bIsOut || bEndMatchState) return;
 
+		//[크래쉬]
+		UWorld* World = GetWorld();
+		if (!World) return;
+
 		Multicast_SetReactionUseNoArms(bHitReactionUseNoArms);
 		Multicast_PlayRecoverReaction();
 
 		float RecoverDuration = 0.3f;
 		if (RecoverMontage) {
-			RecoverDuration = RecoverMontage->GetPlayLength();
+			RecoverDuration = FMath::Max(0.01f, RecoverMontage->GetPlayLength());	//[크래쉬]
 		}
 
-		GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);
+		//GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);	//[크래쉬]
 		GetWorldTimerManager().SetTimer(BigHitRecoverTimerHandle, this, &APlayer_Character::EndBigHitReaction, RecoverDuration, false);
 
 		}), EndDuration, false);

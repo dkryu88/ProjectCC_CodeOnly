@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -9,10 +9,10 @@
 #include "AllPlayMode_SessionSubsystem.generated.h"
 
 /**
- * ¸ÖÆ¼ ÇÃ·¹ÀÌ
+ * ë©€í‹° í”Œë ˆì´
  */
 
-//ÇöÀç ÇÃ·¹ÀÌ¾î ¸ÖÆ¼ÇÃ·¹ÀÌ »óÅÂ
+//í˜„ì¬ í”Œë ˆì´ì–´ ë©€í‹°í”Œë ˆì´ ìƒíƒœ
 UENUM(BlueprintType)
 enum class ESessionUIState : uint8 {
 	None,
@@ -33,27 +33,36 @@ class PROJECTCC_API UAllPlayMode_SessionSubsystem : public UGameInstanceSubsyste
 	
 public:
 	UAllPlayMode_SessionSubsystem();
-	//Play¸¦ À§ÇÑ ¸ÅÄª ½ÃÀÛ
+
+	//[ë²„ê·¸]í˜¸ìŠ¤íŠ¸ì˜ ê²Œì„ì¤‘ ê°•ì œì¢…ë£Œì‹œ í´ë¼ì´ì–¸íŠ¸ì˜ ì´ˆê¸°í™”
+	// Subsystem ì´ˆê¸°í™” ë° í•´ì œ ì˜¤ë²„ë¼ì´ë“œ
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+	// ë„¤íŠ¸ì›Œí¬ ì—ëŸ¬(ë°©ì¥ íŠ•ê¹€, ëœì„  ë½‘í˜ ë“±) ê°ì§€ í•¨ìˆ˜
+	void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
+	bool bIsNetworkError = false;
+
+	//Playë¥¼ ìœ„í•œ ë§¤ì¹­ ì‹œì‘
 	UFUNCTION(BlueprintCallable)
 	void QuickMatchLAN();
-	//¸ÅÄª Ãë¼Ò
+	//ë§¤ì¹­ ì·¨ì†Œ
 	UFUNCTION(BlueprintCallable)
 	void CancelQuickMatchLAN();
 
 	UFUNCTION(BlueprintCallable)
 	void LeaveCurrentSession();
 
-	//ÇÃ·¹ÀÌ¾î°¡ Join ÇßÀ½À» ¾Ë¸²(Host)
+	//í”Œë ˆì´ì–´ê°€ Join í–ˆìŒì„ ì•Œë¦¼(Host)
 	UFUNCTION()
 	void NotifyHostPlayerJoin();
-	//ÇÃ·¹ÀÌ¾î°¡ JoinÁßÀÓÀ» ¾Ë¸²(Host)
+	//í”Œë ˆì´ì–´ê°€ Joinì¤‘ì„ì„ ì•Œë¦¼(Host)
 	UFUNCTION()
 	void NotifyHostPlayerJoining();
 
 	UPROPERTY(BlueprintAssignable)
 	FOnSessionStateChanged OnSessionStateChanged;
 
-	//ºí·¢¸®½ºÆ® ÃÊ±âÈ­ ÁÖ±â
+	//ë¸”ë™ë¦¬ìŠ¤íŠ¸ ì´ˆê¸°í™” ì£¼ê¸°
 	UPROPERTY(BlueprintReadWrite)
 	float ResetBlackListTerm = 180.f;
 
@@ -93,16 +102,16 @@ protected:
 
 	TSharedPtr<FOnlineSessionSearchResult> PendingJoinResult;
 
-	//Session ºí·¢¸®½ºÆ® (½ÇÆĞÇÑ Session HostTicket ¸ğÀ½)
+	//Session ë¸”ë™ë¦¬ìŠ¤íŠ¸ (ì‹¤íŒ¨í•œ Session HostTicket ëª¨ìŒ)
 	TSet<int32> IgnoredHostTickets;
 	TSharedPtr<FOnlineSessionSearchResult> LastTriedJoinResult;
 	FTimerHandle ResetBlackListTimerHandle;
 
-	//¸ÅÄª Ãë¼Ò ¿äÃ»ÀÌ µé¾î¿Ô´ÂÁö È®ÀÎ
+	//ë§¤ì¹­ ì·¨ì†Œ ìš”ì²­ì´ ë“¤ì–´ì™”ëŠ”ì§€ í™•ì¸
 	bool bCancelRequested = false;
-	//Host SessionÀÎÁö È®ÀÎ
+	//Host Sessionì¸ì§€ í™•ì¸
 	bool bIsHostingSession = false;
-	//Á¤ÇØÁø Host°¡ Á¸ÀçÇØ¼­ Host SessionÁ¦°Å ÈÄ Âü¿©ÇÒ °ÍÀÎÁö È®ÀÎ
+	//ì •í•´ì§„ Hostê°€ ì¡´ì¬í•´ì„œ Host Sessionì œê±° í›„ ì°¸ì—¬í•  ê²ƒì¸ì§€ í™•ì¸
 	bool bJoinAfterDestroy = false;
 	bool bFindInProgress = false;
 	bool bJoinInProgress = false;
@@ -110,16 +119,16 @@ protected:
 	bool bPendingHostAfterFindComplete = false;
 	bool bPendingStartHostMergeCheck = false;
 
-	//È£½ºÆ®¿¡ ´Ù¸¥ ÇÃ·¹ÀÌ¾î°¡ JoinÇß´ÂÁö ¿©ºÎ
+	//í˜¸ìŠ¤íŠ¸ì— ë‹¤ë¥¸ í”Œë ˆì´ì–´ê°€ Joiní–ˆëŠ”ì§€ ì—¬ë¶€
 	bool bGuestJoinedWhenHost = false;
-	//¸ÅÄª ¿Ï·á ¾Ë¸² Áßº¹ ¹æÁö
+	//ë§¤ì¹­ ì™„ë£Œ ì•Œë¦¼ ì¤‘ë³µ ë°©ì§€
 	bool bHostMatchedBroadCasted = false;
 
-	//Àç°Ë»ö È½¼ö
+	//ì¬ê²€ìƒ‰ íšŸìˆ˜
 	int32 FindRetryCount = 0;
-	//Àç°Ë»ö ÃÖ´ë È½¼ö
+	//ì¬ê²€ìƒ‰ ìµœëŒ€ íšŸìˆ˜
 	int32 MaxFindRetryCount = 1;
-	//ÇÃ·¹ÀÌ¾îÀÇ HostTicket
+	//í”Œë ˆì´ì–´ì˜ HostTicket
 	int32 LocalHostTicket = 0;
 
 	int32 HostMergeMissCount = 0;
@@ -128,25 +137,25 @@ protected:
 	double LastHostStateChangeTime = 0.f;
 
 
-	//Host Session »ı¼º µô·¹ÀÌ ÃÖ¼Ú°ª
+	//Host Session ìƒì„± ë”œë ˆì´ ìµœì†Ÿê°’
 	float HostCreateDelayMin = 0.2f;
-	//Host Session »ı¼º µô·¹ÀÌ ÃÖ´ñ°ª
+	//Host Session ìƒì„± ë”œë ˆì´ ìµœëŒ“ê°’
 	float HostCreateDelayMax = 1.5f;
 
-	//Host Session »ı¼º µô·¹ÀÌ Å¸ÀÌ¸Ó
+	//Host Session ìƒì„± ë”œë ˆì´ íƒ€ì´ë¨¸
 	FTimerHandle DelayedHostTimerHandle;
-	//Host º´ÇÕ Ã¼Å© Å¸ÀÌ¸Ó
+	//Host ë³‘í•© ì²´í¬ íƒ€ì´ë¨¸
 	FTimerHandle HostMergeCheckTimerHandle;
 
 
 
 protected:
-	//ÇÃ·¹ÀÌ¾îÀÇ ¼¼¼Ç ½Ã½ºÅÛÀÌ ÁØºñµÇ¾ú´ÂÁö È®ÀÎ
+	//í”Œë ˆì´ì–´ì˜ ì„¸ì…˜ ì‹œìŠ¤í…œì´ ì¤€ë¹„ë˜ì—ˆëŠ”ì§€ í™•ì¸
 	bool EnsureSessionInterface();
-	//ÇöÀç ÇÃ·¹ÀÌ¾î ¼¼¼Ç »óÅÂ¸¦ ÀüÆÄ
+	//í˜„ì¬ í”Œë ˆì´ì–´ ì„¸ì…˜ ìƒíƒœë¥¼ ì „íŒŒ
 	void BroadcastState(ESessionUIState State, const FString& Message);
 
-	//LAN ¼¼¼Ç(·ÎÄÃ ¸ÖÆ¼ÇÃ·¹ÀÌ) Ã£±â ½ÃÀÛ
+	//LAN ì„¸ì…˜(ë¡œì»¬ ë©€í‹°í”Œë ˆì´) ì°¾ê¸° ì‹œì‘
 	void FindLANSessions();
 	void HostLANSession();
 	void JoinLANSession(const FOnlineSessionSearchResult& result);

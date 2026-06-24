@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "AllPlayMode_SessionSubsystem.h"
@@ -7,22 +7,45 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "HAL/PlatformTime.h"
+#include "Title/Title_PlayerController.h"	//[ë§¤ì¹­ìˆ˜ì •]
 
 UAllPlayMode_SessionSubsystem::UAllPlayMode_SessionSubsystem()
 {
-	//°¢ »óÈ² º° Session Delegate ¹ÙÀÎµù
+	//ê° ìƒí™© ë³„ Session Delegate ë°”ì¸ë”©
 	CreateSessionCompleteDelegate = FOnCreateSessionCompleteDelegate::CreateUObject(this, &UAllPlayMode_SessionSubsystem::OnCreateSessionCompleted);
 	FindSessionsCompleteDelegate = FOnFindSessionsCompleteDelegate::CreateUObject(this, &UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted);
 	JoinSessionCompleteDelegate = FOnJoinSessionCompleteDelegate::CreateUObject(this, &UAllPlayMode_SessionSubsystem::OnJoinSessionCompleted);
 	DestroySessionCompleteDelegate = FOnDestroySessionCompleteDelegate::CreateUObject(this, &UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted);
 
 }
+
+//[ë²„ê·¸]
+void UAllPlayMode_SessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	// ì—”ì§„ì˜ ë„¤íŠ¸ì›Œí¬ ì‹¤íŒ¨(ëŠê¹€) ì´ë²¤íŠ¸ì— ì´ˆê¸°í™” í•¨ìˆ˜ë¥¼ ì—°ê²°
+	if (GEngine) {
+		GEngine->OnNetworkFailure().AddUObject(this, &UAllPlayMode_SessionSubsystem::HandleNetworkFailure);
+	}
+}
+
+//[ë²„ê·¸]
+void UAllPlayMode_SessionSubsystem::Deinitialize()
+{
+	// ì„œë¸Œì‹œìŠ¤í…œì´ êº¼ì§ˆ ë•Œ ì—°ê²°í–ˆë˜ ì´ë²¤íŠ¸ë¥¼ ì•ˆì „í•˜ê²Œ í•´ì œ
+	if (GEngine) {
+		GEngine->OnNetworkFailure().RemoveAll(this);
+	}
+
+	Super::Deinitialize();
+}
 /*
-* IOnlineSubsystem -> ¿Â¶óÀÎ °ü·Ã ÀüÃ¼¸¦ ´ã´ç
-* SessionInterface -> ¼¼¼Ç °Ë»ö/»ı¼º/Âü¿©/ÆÄ±«¸¦ ´ã´ç
+* IOnlineSubsystem -> ì˜¨ë¼ì¸ ê´€ë ¨ ì „ì²´ë¥¼ ë‹´ë‹¹
+* SessionInterface -> ì„¸ì…˜ ê²€ìƒ‰/ìƒì„±/ì°¸ì—¬/íŒŒê´´ë¥¼ ë‹´ë‹¹
 */
 
-//ÇÃ·¹ÀÌ¾îÀÇ ¼¼¼Ç ÀÎÅÍÆäÀÌ½º°¡ ÁØºñµÇ¾ú´ÂÁö È®ÀÎ
+//í”Œë ˆì´ì–´ì˜ ì„¸ì…˜ ì¸í„°í˜ì´ìŠ¤ê°€ ì¤€ë¹„ë˜ì—ˆëŠ”ì§€ í™•ì¸
 bool UAllPlayMode_SessionSubsystem::EnsureSessionInterface() {
 	if (SessionInterface.IsValid()) return true;
 
@@ -41,20 +64,23 @@ bool UAllPlayMode_SessionSubsystem::EnsureSessionInterface() {
 	return true;
 }
 
-//ÇöÀç ¼¼¼Ç »óÅÂ¸¦ ÀüÆÄ (Title Widget¿¡¼­ »ç¿ë)
+//í˜„ì¬ ì„¸ì…˜ ìƒíƒœë¥¼ ì „íŒŒ (Title Widgetì—ì„œ ì‚¬ìš©)
 void UAllPlayMode_SessionSubsystem::BroadcastState(ESessionUIState State, const FString& Message)
 {
+	//[ë²„ê·¸]
+	if (bIsNetworkError) return;
+
 	LastUIState = State;
 	LastUIMessage = Message;
 
 	OnSessionStateChanged.Broadcast(State, Message);
 
 	if (GEngine) {
-		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, Message);
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Black, Message);
 	}
 }
 
-//¸ÅÄ¡ ½ÃÀÛ ½Ã ¼¼¼Ç »óÅÂ °»½Å
+//ë§¤ì¹˜ ì‹œì‘ ì‹œ ì„¸ì…˜ ìƒíƒœ ê°±ì‹ 
 void UAllPlayMode_SessionSubsystem::MarkSessionInGame()
 {
 	if (!EnsureSessionInterface()) return;
@@ -66,11 +92,11 @@ void UAllPlayMode_SessionSubsystem::MarkSessionInGame()
 	NewSettings.bAllowJoinInProgress = false;
 	NewSettings.Set(FName(TEXT("SessionPhase")), FString(TEXT("InGame")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	NewSettings.Set(FName(TEXT("CanQuickMatch")), false, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-	
+
 	SessionInterface->UpdateSession(SessionName, NewSettings, true);
 }
 
-//¼¼¼ÇÀÌ °¡µæÃ¡À» ¶§ ¼¼¼Ç »óÅÂ °»½Å
+//ì„¸ì…˜ì´ ê°€ë“ì°¼ì„ ë•Œ ì„¸ì…˜ ìƒíƒœ ê°±ì‹ 
 void UAllPlayMode_SessionSubsystem::MarkSessionInFullLoby()
 {
 	if (!EnsureSessionInterface()) return;
@@ -85,7 +111,7 @@ void UAllPlayMode_SessionSubsystem::MarkSessionInFullLoby()
 	SessionInterface->UpdateSession(SessionName, NewSettings, true);
 }
 
-//Play¸¦ À§ÇÑ ¸ÅÄª ½ÃÀÛ
+//Playë¥¼ ìœ„í•œ ë§¤ì¹­ ì‹œì‘
 void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 {
 	if (!EnsureSessionInterface()) return;
@@ -112,19 +138,19 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 	if (World) {
 		World->GetTimerManager().ClearTimer(DelayedHostTimerHandle);
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
-		//¸ÅÄª ½ÃÀÛ°ú µ¿½Ã¿¡ ÁÖ±âÀûÀ¸·Î BlackList ÃÊ±âÈ­
+		//ë§¤ì¹­ ì‹œì‘ê³¼ ë™ì‹œì— ì£¼ê¸°ì ìœ¼ë¡œ BlackList ì´ˆê¸°í™”
 		World->GetTimerManager().ClearTimer(ResetBlackListTimerHandle);
 		World->GetTimerManager().SetTimer(ResetBlackListTimerHandle, this, &UAllPlayMode_SessionSubsystem::ResetSessionBlackList, ResetBlackListTerm, true, 0.f);
 	}
 
-	//ÀÌÀü ¼¼¼ÇÀÌ ³²¾ÆÀÖ´Â °æ¿ì Á¤¸®
+	//ì´ì „ ì„¸ì…˜ì´ ë‚¨ì•„ìˆëŠ” ê²½ìš° ì •ë¦¬
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		BroadcastState(ESessionUIState::Searching, TEXT("Destroy existing session first"));
 		LeaveCurrentSession();
 		return;
 	}
 
-	
+
 	FindLANSessions();
 }
 
@@ -156,7 +182,7 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 		SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteHandle);
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteHandle);
 	}
-	
+
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		LeaveCurrentSession();
 	}
@@ -165,7 +191,7 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	}
 }
 
-//LAN ¼¼¼Ç(·ÎÄÃ ¸ÖÆ¼ÇÃ·¹ÀÌ) Ã£±â ½ÃÀÛ
+//LAN ì„¸ì…˜(ë¡œì»¬ ë©€í‹°í”Œë ˆì´) ì°¾ê¸° ì‹œì‘
 void UAllPlayMode_SessionSubsystem::FindLANSessions() {
 	if (!EnsureSessionInterface()) return;
 	if (bFindInProgress) return;
@@ -187,7 +213,7 @@ void UAllPlayMode_SessionSubsystem::FindLANSessions() {
 	}
 }
 
-//Session °Ë»ö Á÷ÈÄ ·£´ıÇÑ ½Ã°£ÀÌ Áö³­ ´ÙÀ½ ÇÑ¹ø ´õ Session °Ë»ö
+//Session ê²€ìƒ‰ ì§í›„ ëœë¤í•œ ì‹œê°„ì´ ì§€ë‚œ ë‹¤ìŒ í•œë²ˆ ë” Session ê²€ìƒ‰
 void UAllPlayMode_SessionSubsystem::ScheduleDelayedHost()
 {
 	if (UWorld* World = GetWorld()) {
@@ -201,13 +227,13 @@ void UAllPlayMode_SessionSubsystem::ScheduleDelayedHost()
 }
 
 
-//Host Session »ı¼º Àü ÇÑ¹ø ´õ Session °Ë»ö 
+//Host Session ìƒì„± ì „ í•œë²ˆ ë” Session ê²€ìƒ‰ 
 void UAllPlayMode_SessionSubsystem::DelayedHostAfterSecondSearch()
 {
 	FindLANSessions();
 }
 
-//ÀÚ½ÅÀÌ Host°¡ µÊ (¼¼¼Ç °Ë»ö ½ÇÆĞ½Ã/Join ½ÇÆĞ½Ã È£Ãâ)
+//ìì‹ ì´ Hostê°€ ë¨ (ì„¸ì…˜ ê²€ìƒ‰ ì‹¤íŒ¨ì‹œ/Join ì‹¤íŒ¨ì‹œ í˜¸ì¶œ)
 void UAllPlayMode_SessionSubsystem::HostLANSession() {
 	if (!EnsureSessionInterface()) return;
 
@@ -218,7 +244,7 @@ void UAllPlayMode_SessionSubsystem::HostLANSession() {
 
 	ResetFindStateForHosting(TEXT("HostLANSession"));
 
-	//Listen ¸ÊÀ¸·Î ÀÌµ¿ÇÏ¹Ç·Î ±âÁ¸ Timerµé Á¤¸®
+	//Listen ë§µìœ¼ë¡œ ì´ë™í•˜ë¯€ë¡œ ê¸°ì¡´ Timerë“¤ ì •ë¦¬
 	if (UWorld* World = GetWorld()) {
 		World->GetTimerManager().ClearTimer(DelayedHostTimerHandle);
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
@@ -258,27 +284,27 @@ void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 
 	LocalHostTicket = FMath::RandRange(1, 10000000);
 
-	//¸ÅÄª ÃÖ´ë ÀÎ¿ø¼ö ¹× ¸ÅÄª ¸ğµå Á¤º¸ È¹µæ
+	//ë§¤ì¹­ ìµœëŒ€ ì¸ì›ìˆ˜ ë° ë§¤ì¹­ ëª¨ë“œ ì •ë³´ íšë“
 	int32 MaxPlayers = GameInstance ? GameInstance->GetMaxPlayersByMode() : 2;
 	int32 MatchModeInt = GameInstance ? (int32)GameInstance->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
 
 	FOnlineSessionSettings Settings;
 	Settings.bIsLANMatch = true;
-	Settings.NumPublicConnections = 2;
-	//¼¼¼ÇÀÇ °Ë»ö Çã¿ë À¯¹«
+	Settings.NumPublicConnections = MaxPlayers;	//[ë²„ê·¸] ê¸°ì¡´ 2ì—ì„œ ë³€ê²½
+	//ì„¸ì…˜ì˜ ê²€ìƒ‰ í—ˆìš© ìœ ë¬´
 	Settings.bShouldAdvertise = true;
-	//°ÔÀÓ ÁøÇà Áß¿¡µµ ¼¼¼Ç¿¡ ºóÀÚ¸®°¡ ÀÖÀ¸¸é Âü¿© Çã¿ë À¯¹«
+	//ê²Œì„ ì§„í–‰ ì¤‘ì—ë„ ì„¸ì…˜ì— ë¹ˆìë¦¬ê°€ ìˆìœ¼ë©´ ì°¸ì—¬ í—ˆìš© ìœ ë¬´
 	Settings.bAllowJoinInProgress = true;
-	//Presence/Lobby ¹æ½Ä »ç¿ë À¯¹«
+	//Presence/Lobby ë°©ì‹ ì‚¬ìš© ìœ ë¬´
 	Settings.bUsesPresence = false;
 
-	//°¢ ÇÃ·¹ÀÌ¾îÀÇ ¼¼¼ÇÀ» ¼¼ÆÃ (°Ë»ö ÇÊÅÍ Ãß°¡)
+	//ê° í”Œë ˆì´ì–´ì˜ ì„¸ì…˜ì„ ì„¸íŒ… (ê²€ìƒ‰ í•„í„° ì¶”ê°€)
 	Settings.Set(FName(TEXT("MatchType")), FString(TEXT("ProjectCC_LAN")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	Settings.Set(FName(TEXT("HostTicket")), LocalHostTicket, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	Settings.Set(FName(TEXT("SessionPhase")), FString(TEXT("LV_Title")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	Settings.Set(FName(TEXT("CanQuickMatch")), true, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-	//¸ÅÄª ¸ğµå ¼¼¼Ç ¼¼ÆÃ (2ÀÎ 4ÀÎ ±¸º°¿ë)
+	//ë§¤ì¹­ ëª¨ë“œ ì„¸ì…˜ ì„¸íŒ… (2ì¸ 4ì¸ êµ¬ë³„ìš©)
 	Settings.Set(FName(TEXT("MatchMode")), MatchModeInt, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	CreateSessionCompleteHandle = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
@@ -292,7 +318,7 @@ void UAllPlayMode_SessionSubsystem::ResetFindStateForHosting(const TCHAR* Reason
 	bPendingHostAfterFindComplete = false;
 
 	SessionSearch.Reset();
-	//È£½ºÆ®·Î ÀüÈ¯ÇÏ¸é¼­ ºí·¢¸®½ºÆ® ÃÊ±âÈ­ (¸ğÁ¾ÀÇ ÀÌÀ¯·Î Á¤»ó Session¿¡ ¿¬°á ½ÇÆĞ °¡´É¼º ¿ì·Á)
+	//í˜¸ìŠ¤íŠ¸ë¡œ ì „í™˜í•˜ë©´ì„œ ë¸”ë™ë¦¬ìŠ¤íŠ¸ ì´ˆê¸°í™” (ëª¨ì¢…ì˜ ì´ìœ ë¡œ ì •ìƒ Sessionì— ì—°ê²° ì‹¤íŒ¨ ê°€ëŠ¥ì„± ìš°ë ¤)
 	IgnoredHostTickets.Reset();
 
 	if (SessionInterface.IsValid()) {
@@ -305,7 +331,7 @@ void UAllPlayMode_SessionSubsystem::ResetFindStateForHosting(const TCHAR* Reason
 	}
 }
 
-//´Ù¸¥ Host ¼¼¼Ç¿¡ Âü¿©
+//ë‹¤ë¥¸ Host ì„¸ì…˜ì— ì°¸ì—¬
 void UAllPlayMode_SessionSubsystem::JoinLANSession(const FOnlineSessionSearchResult& result)
 {
 	if (!EnsureSessionInterface()) return;
@@ -318,14 +344,14 @@ void UAllPlayMode_SessionSubsystem::JoinLANSession(const FOnlineSessionSearchRes
 	}
 
 	bJoinInProgress = true;
-	
-	//Join Delegate µî·Ï
+
+	//Join Delegate ë“±ë¡
 	BroadcastState(ESessionUIState::Joining, TEXT("Joining Session..."));
 	JoinSessionCompleteHandle = SessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
 	SessionInterface->JoinSession(0, SessionName, result);
 }
 
-//ÇöÀç ¼¼¼Ç¿¡¼­ ¹ş¾î³² (¼¼¼ÇÀÌ ºñÁ¤»óÀûÀ¸·Î ²¿ÀÎ °æ¿ì)
+//í˜„ì¬ ì„¸ì…˜ì—ì„œ ë²—ì–´ë‚¨ (ì„¸ì…˜ì´ ë¹„ì •ìƒì ìœ¼ë¡œ ê¼¬ì¸ ê²½ìš°)
 void UAllPlayMode_SessionSubsystem::LeaveCurrentSession()
 {
 	if (!EnsureSessionInterface()) return;
@@ -343,9 +369,22 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoin()
 	if (!bIsHostingSession) return;
 	if (bHostMatchedBroadCasted) return;
 
+	// [ë²„ê·¸ ìˆ˜ì •: ì„£ë¶€ë¥¸ ë¬¸ ë‹«í˜ ë°©ì–´ ë¡œì§]
+	// GameMode ìª½ì—ì„œ ì¸ì›ìˆ˜ ê³„ì‚° ì˜¤ë¥˜ë¡œ ë°©ì„ ì¼ì° ë‹«ìœ¼ë ¤ê³  ì‹œë„í•˜ë”ë¼ë„,
+	// ì‹¤ì œ ì–¸ë¦¬ì–¼ ì„¸ì…˜ ì‹œìŠ¤í…œ(SessionInterface)ì— ë¹ˆìë¦¬ê°€ ë‚¨ì•„ìˆë‹¤ë©´ ë‹«ì§€ ëª»í•˜ê²Œ ê°•ì œë¡œ ì«“ì•„ëƒ…ë‹ˆë‹¤!
+	if (EnsureSessionInterface()) {
+		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
+		if (MySession) {
+			// ë¹ˆìë¦¬ê°€ 1ëª…ì´ë¼ë„ ë‚¨ì•„ìˆë‹¤ë©´ ë¬´ì‹œ (ë¬¸ ì•ˆ ë‹«ìŒ)
+			if (MySession->NumOpenPublicConnections > 0) {
+				return;
+			}
+		}
+	}
+
 	bGuestJoinedWhenHost = true;
 	bHostMatchedBroadCasted = true;
-	
+
 	if (UWorld* World = GetWorld()) {
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 		World->GetTimerManager().ClearTimer(ResetBlackListTimerHandle);
@@ -355,7 +394,7 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoin()
 	BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
 }
 
-//Host¿¡ ÇÃ·¹ÀÌ¾î°¡ JoinÁßÀÓÀ» ¾Ë¸² (UI ¹İ¿µ)
+//Hostì— í”Œë ˆì´ì–´ê°€ Joinì¤‘ì„ì„ ì•Œë¦¼ (UI ë°˜ì˜)
 void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoining()
 {
 	if (!bIsHostingSession) return;
@@ -367,37 +406,52 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoining()
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 	}
 
-	UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	/*UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
 
 	if (MaxPlayers > 2) BroadcastState(ESessionUIState::Hosting, TEXT("Player Joined! Wait for More"));
-	else BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
+	else BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));*/
+
+	// [ë²„ê·¸ ìˆ˜ì •: UI í…ìŠ¤íŠ¸ ì¶œë ¥ êµì°¨ ê²€ì¦]
+	// ì§„ì§œë¡œ ë¹ˆìë¦¬ê°€ ë‚¨ì•„ìˆëŠ”ì§€ ì„¸ì…˜ì„ í™•ì¸í•´ì„œ ì •í™•í•˜ê²Œ ê¸€ìë¥¼ ë„ì›Œì¤ë‹ˆë‹¤.
+	if (EnsureSessionInterface()) {
+		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
+		if (MySession && MySession->NumOpenPublicConnections <= 0) {
+			bHostMatchedBroadCasted = true; // ë°©ì´ ì°¼ìœ¼ë¯€ë¡œ ê°±ì‹  ë°©ì§€
+			MarkSessionInFullLoby();
+			BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
+			return;
+		}
+	}
+
+	// ë¹ˆìë¦¬ê°€ ë‚¨ì•„ìˆë‹¤ë©´ ê¸°ë‹¤ë¦°ë‹¤ëŠ” ë©”ì‹œì§€ ì¶œë ¥
+	BroadcastState(ESessionUIState::Hosting, TEXT("Player Joined! Wait for More"));
 }
 
-//¼¼¼Ç °Ë»ö¿¡ ¼º°øÇÏ¿´À» °æ¿ì
+//ì„¸ì…˜ ê²€ìƒ‰ì— ì„±ê³µí•˜ì˜€ì„ ê²½ìš°
 void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 {
 	bFindInProgress = false;
 
-	//Find DelegateÇØÁ¦
+	//Find Delegateí•´ì œ
 	if (SessionInterface.IsValid()) {
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
 	}
-	//Host ¿¹¾à »óÅÂ¶ó¸é °Ë»öÀÌ ³¡³ª¸é Host°¡ µÊ
+	//Host ì˜ˆì•½ ìƒíƒœë¼ë©´ ê²€ìƒ‰ì´ ëë‚˜ë©´ Hostê°€ ë¨
 	if (bPendingHostAfterFindComplete) {
 		bPendingHostAfterFindComplete = false;
 		HostLANSession();
 		return;
 	}
 
-	//Host Merge ¿¹¾à »óÅÂ¶ó¸é ¿©±â¼­ Host Merge
+	//Host Merge ì˜ˆì•½ ìƒíƒœë¼ë©´ ì—¬ê¸°ì„œ Host Merge
 	if (bPendingStartHostMergeCheck) {
 		bPendingStartHostMergeCheck = false;
 		StartHostMergeCheck();
 		return;
 	}
 
-	//°Ë»ö ½ÇÆĞ ½Ã ÀÏÁ¤ ½Ã°£ ´ë±â ÈÄ Àç°Ë»ö
+	//ê²€ìƒ‰ ì‹¤íŒ¨ ì‹œ ì¼ì • ì‹œê°„ ëŒ€ê¸° í›„ ì¬ê²€ìƒ‰
 	if (!bWasSuccessful || !SessionSearch.IsValid()) {
 		if (bIsHostingSession) {
 			BroadcastState(ESessionUIState::Failed, TEXT("Host merge check find failed"));
@@ -409,56 +463,176 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		return;
 	}
 
-	//ÀÚ½ÅÀÌ HostÀÎ °æ¿ì ´Ù¸¥ Host¿Í Ãæµ¹ Ã¼Å©
+	////ìì‹ ì´ Hostì¸ ê²½ìš° ë‹¤ë¥¸ Hostì™€ ì¶©ëŒ ì²´í¬
+	//if (bIsHostingSession) {
+	//	//ë‹¤ë¥¸ í”Œë ˆì´ì–´ê°€ Joiní•œ ê²½ìš° return
+	//	if (bGuestJoinedWhenHost) return;
+	//	bool bHasGuest = false;
+	//	const FOnlineSessionSearchResult* BestOtherHost = nullptr;
+	//	int32 BestOtherTicket = MAX_int32;
+
+	//	// [ë²„ê·¸] ë‚´ ë§¤ì¹˜ ëª¨ë“œì˜ ìµœëŒ€ ì¸ì›ìˆ˜ êµ¬í•˜ê¸°
+	//	UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	//	int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
+
+	//	//ê²€ìƒ‰ì— ì„±ê³µí•˜ë©´ ê²°ê³¼ ëª©ë¡ í™•ì¸
+	//	for (const FOnlineSessionSearchResult& Result : SessionSearch->SearchResults) {
+	//		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ê°™ì€ ê²Œì„ì˜ ì„¸ì…˜ë§Œ ë“±ë¡
+	//		FString MatchType;
+	//		Result.Session.SessionSettings.Get(FName(TEXT("MatchType")), MatchType);
+	//		if (MatchType != TEXT("ProjectCC_LAN")) continue;
+
+	//		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ì„¸ì…˜ì˜ í˜„ì¬ ê²Œì„ ìƒíƒœ í™•ì¸ (Titleë§Œ í›„ë³´ì— ë“±ë¡)
+	//		FString SessionPhase;
+	//		Result.Session.SessionSettings.Get(FName(TEXT("SessionPhase")), SessionPhase);
+	//		if (SessionPhase != TEXT("LV_Title")) continue;
+
+	//		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ì„¸ì…˜ì˜ í˜„ì¬ ìƒíƒœê°€ í€µë§¤ì¹˜ ê°€ëŠ¥ ìƒíƒœì¸ì§€ í™•ì¸
+	//		bool bCanQuickMatch = false;
+	//		Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
+	//		if (!bCanQuickMatch) continue;
+
+	//		//í˜¸ìŠ¤íŠ¸ë¼ë¦¬ ë°©ì„ í•©ì¹˜ê¸° ìœ„í•œ í‹°ì¼“ ë¹„êµ ì „ ì¸ì›ìˆ˜ ë§¤ì¹˜ëª¨ë“œ ê²€ì‚¬ (2ì¸ ì´ìƒ)
+	//		int32 SessionMatchMode = 0;
+	//		Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
+	//		//UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());	//ìœ„ì—ì„œ ì„ ì–¸ë¨ -> ì£¼ì„ì²˜ë¦¬
+	//		int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
+	//		if (SessionMatchMode != MyMatchMode) continue;
+
+	//		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ë‹¤ë¥¸ í”Œë ˆì´ì–´ì˜ HostTicket í™•ì¸
+	//		int32 OtherHostTicket = 0;
+	//		Result.Session.SessionSettings.Get(FName(TEXT("HostTicket")), OtherHostTicket);
+
+	//		if (OtherHostTicket == 0 || OtherHostTicket == LocalHostTicket) continue;
+
+	//		// [ë²„ê·¸] ìˆ˜ì • ë¡œì§ - ìƒëŒ€ë°© ë°©ì— ì´ë¯¸ ë‹¤ë¥¸ ì†ë‹˜ì´ ìˆëŠ”ì§€ í™•ì¸!
+	//		int32 OpenSlots = Result.Session.NumOpenPublicConnections;
+	//		// [ë²„ê·¸]ë¹ˆìë¦¬ê°€ MaxPlayers - 1 ë³´ë‹¤ ì ë‹¤ë©´, ëˆ„êµ°ê°€ ì´ë¯¸ ì ‘ì†í•´ ìˆë‹¤ëŠ” ëœ»ì…ë‹ˆë‹¤.
+	//		bool bOtherHasGuest = (OpenSlots < (MaxPlayers - 1));
+
+	//		if (bOtherHasGuest || OtherHostTicket < BestOtherTicket) {	//[ë²„ê·¸]ì¡°ê±´ ì¶”ê°€
+	//			BestOtherTicket = OtherHostTicket;
+	//			BestOtherHost = &Result;
+	//			//[ë²„ê·¸]ì¶”ê°€
+	//			if (bOtherHasGuest) {
+	//				bHasGuest = true;
+	//				break;
+	//			}
+	//		}
+	//	}
+	//	//HostTicketì´ ë” ì‘ì€ Hostê°€ ìˆë‹¤ë©´ ê·¸ìª½ìœ¼ë¡œ Session ì´ë™
+	//	if (BestOtherHost && (bHasGuest || BestOtherTicket < LocalHostTicket)) {	//[ë²„ê·¸]ì¡°ê±´ ì¶”ê°€
+	//		BroadcastState(ESessionUIState::Joining, TEXT("Go To Other Player's Room"));	
+	//		bIsHostingSession = false;
+
+	//		if (UWorld* World = GetWorld()) {
+	//			World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
+	//		}
+
+	//		PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(*BestOtherHost);
+	//		bJoinAfterDestroy = true;
+	//		LeaveCurrentSession();
+	//		return;
+	//	}
+
+	//	StartHostMergeCheck();
+	//	return;
+	//}
+
+	//[ë§¤ì¹­ìˆ˜ì •]
+	// ìì‹ ì´ Hostì¸ ê²½ìš° ë‹¤ë¥¸ Hostì™€ ì¶©ëŒ ì²´í¬
 	if (bIsHostingSession) {
-		//´Ù¸¥ ÇÃ·¹ÀÌ¾î°¡ JoinÇÑ °æ¿ì return
-		if (bGuestJoinedWhenHost) return;
-		bool bHasGuest = false;
+
+		// 1. í˜„ì¬ ë‚´ ë°©ì˜ ìƒíƒœ íŒŒì•…
+		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
+		if (!MySession) return;
+
+		UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+		int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
+
+		int32 MyOpenSlots = MySession->NumOpenPublicConnections;
+		int32 MyPlayerCount = MaxPlayers - MyOpenSlots;
+
+		// ë°©ì–´ ì½”ë“œ : ë‚´ ë°©ì´ ì´ë¯¸ ìµœëŒ€ ì¸ì›ì´ë©´ êµ³ì´ ë‹¤ë¥¸ ë°©ìœ¼ë¡œ ì´ë™í•˜ì§€ ì•ŠìŒ
+		if (MyOpenSlots <= 0) return;
+
 		const FOnlineSessionSearchResult* BestOtherHost = nullptr;
 		int32 BestOtherTicket = MAX_int32;
+		int32 BestOtherPlayerCount = -1;
 
-		//°Ë»ö¿¡ ¼º°øÇÏ¸é °á°ú ¸ñ·Ï È®ÀÎ
+		// ê²€ìƒ‰ì— ì„±ê³µí•˜ë©´ ê²°ê³¼ ëª©ë¡ í™•ì¸
 		for (const FOnlineSessionSearchResult& Result : SessionSearch->SearchResults) {
-			//°Ë»ö ¸ñ·Ï Áß °°Àº °ÔÀÓÀÇ ¼¼¼Ç¸¸ µî·Ï
 			FString MatchType;
 			Result.Session.SessionSettings.Get(FName(TEXT("MatchType")), MatchType);
 			if (MatchType != TEXT("ProjectCC_LAN")) continue;
 
-			//°Ë»ö ¸ñ·Ï Áß ¼¼¼ÇÀÇ ÇöÀç °ÔÀÓ »óÅÂ È®ÀÎ (Title¸¸ ÈÄº¸¿¡ µî·Ï)
 			FString SessionPhase;
 			Result.Session.SessionSettings.Get(FName(TEXT("SessionPhase")), SessionPhase);
 			if (SessionPhase != TEXT("LV_Title")) continue;
 
-			//°Ë»ö ¸ñ·Ï Áß ¼¼¼ÇÀÇ ÇöÀç »óÅÂ°¡ Äü¸ÅÄ¡ °¡´É »óÅÂÀÎÁö È®ÀÎ
 			bool bCanQuickMatch = false;
 			Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
 			if (!bCanQuickMatch) continue;
 
-			//È£½ºÆ®³¢¸® ¹æÀ» ÇÕÄ¡±â À§ÇÑ Æ¼ÄÏ ºñ±³ Àü ÀÎ¿ø¼ö ¸ÅÄ¡¸ğµå °Ë»ç (2ÀÎ ÀÌ»ó)
 			int32 SessionMatchMode = 0;
 			Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
-			UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 			int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
 			if (SessionMatchMode != MyMatchMode) continue;
 
-			//°Ë»ö ¸ñ·Ï Áß ´Ù¸¥ ÇÃ·¹ÀÌ¾îÀÇ HostTicket È®ÀÎ
 			int32 OtherHostTicket = 0;
 			Result.Session.SessionSettings.Get(FName(TEXT("HostTicket")), OtherHostTicket);
-
 			if (OtherHostTicket == 0 || OtherHostTicket == LocalHostTicket) continue;
 
-			if (OtherHostTicket < BestOtherTicket) {
-				BestOtherTicket = OtherHostTicket;
-				BestOtherHost = &Result;
+
+			// 2. ìƒëŒ€ë°© ë°©ì˜ ìƒíƒœ íŒŒì•…
+			int32 OtherOpenSlots = Result.Session.NumOpenPublicConnections;
+			int32 OtherPlayerCount = MaxPlayers - OtherOpenSlots;
+
+			// ë‚´ê°€ ë“¤ì–´ê°ˆ ë¹ˆìë¦¬ê°€ 1ê°œë¼ë„ ì—†ìœ¼ë©´ ë¬´ì‹œ
+			if (OtherOpenSlots < 1) continue;
+
+			// 3. í•©ë³‘ ë¡œì§ : ëˆ„ê°€ ìì‹ ì˜ ë°©ì„ ê¹° ê²ƒì¸ê°€?
+			bool bShouldISurrender = false;
+
+			// ì¡°ê±´ A: ìƒëŒ€ë°© ë°©ì˜ ì¸ì›ì´ ë‚´ ë°©ë³´ë‹¤ ë§ë‹¤ë©´ ë‚´ê°€ í•©ë¥˜í•¨
+			if (OtherPlayerCount > MyPlayerCount) {
+				bShouldISurrender = true;
+			}
+			// ì¡°ê±´ B: ì¸ì›ìˆ˜ê°€ ë˜‘ê°™ë‹¤ë©´ í‹°ì¼“ ë²ˆí˜¸ ìš°ì„ ìˆœìœ„ë¡œ ê²°ì •í•¨
+			else if (OtherPlayerCount == MyPlayerCount) {
+				if (OtherHostTicket < LocalHostTicket) {
+					bShouldISurrender = true;
+				}
+			}
+
+			// ë‚´ê°€ ì´ë™í•´ì•¼ í•œë‹¤ë©´, ê°€ì¥ ì¡°ê±´ì´ ì¢‹ì€ ë°©ì„ íƒ€ê²Ÿìœ¼ë¡œ ì €ì¥
+			if (bShouldISurrender) {
+				if (OtherPlayerCount > BestOtherPlayerCount ||
+					(OtherPlayerCount == BestOtherPlayerCount && OtherHostTicket < BestOtherTicket)) {
+					BestOtherPlayerCount = OtherPlayerCount;
+					BestOtherTicket = OtherHostTicket;
+					BestOtherHost = &Result;
+				}
 			}
 		}
-		//HostTicketÀÌ ´õ ÀÛÀº Host°¡ ÀÖ´Ù¸é ±×ÂÊÀ¸·Î Session ÀÌµ¿
-		if (BestOtherHost && BestOtherTicket < LocalHostTicket) {
+
+		// 4. ì´ë™í•  íƒ€ê²Ÿ ë°©ì´ ì •í•´ì¡Œë‹¤ë©´ ì¦‰ì‹œ ì´ë™ ì²˜ë¦¬
+		if (BestOtherHost) {
 			BroadcastState(ESessionUIState::Joining, TEXT("Go To Other Player's Room"));
 			bIsHostingSession = false;
 
 			if (UWorld* World = GetWorld()) {
 				World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
+
+				// [í´ë¼ì´ì–¸íŠ¸ ìë™ ì¬ë§¤ì¹­ì„ ìœ„í•œ í•µì‹¬ ì¶”ê°€ ì½”ë“œ]
+				// ë‚´ ë°©ì„ ë¶€ìˆ˜ê¸° ì „ì—, ë‚´ ë°©ì— ì ‘ì†í•´ ìˆë˜ ì†ë‹˜ë“¤ì—ê²Œ ê°•ì œ í‡´ì¥(ìë™ ì¬ë§¤ì¹­) ëª…ë ¹ì„ ë³´ëƒ…ë‹ˆë‹¤!
+				for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It) {
+					ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(It->Get());
+					// ìì‹ (ë°©ì¥)ì´ ì•„ë‹Œ ìˆœìˆ˜ í´ë¼ì´ì–¸íŠ¸ë“¤ì—ê²Œë§Œ ëª…ë ¹ ì „ì†¡
+					if (PC && PC->IsLocalController() == false) {
+						PC->Client_KickedByHost();
+					}
+				}
 			}
 
 			PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(*BestOtherHost);
@@ -471,29 +645,29 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		return;
 	}
 
-	//ÀÌ¹Ì Join ÁßÀÌ¶ó¸é Áßº¹ ¹æÁö
+	//ì´ë¯¸ Join ì¤‘ì´ë¼ë©´ ì¤‘ë³µ ë°©ì§€
 	if (bJoinInProgress) {
 		return;
 	}
 
-	//ÀÚ½ÅÀÌ Host°¡ ¾Æ´Ñ °æ¿ì ÇÊÅÍ Àû¿ë Session °Ë»ö ÈÄ Join
+	//ìì‹ ì´ Hostê°€ ì•„ë‹Œ ê²½ìš° í•„í„° ì ìš© Session ê²€ìƒ‰ í›„ Join
 	for (const FOnlineSessionSearchResult& Result : SessionSearch->SearchResults) {
-		//°Ë»ö ¸ñ·Ï Áß °°Àº °ÔÀÓÀÇ ¼¼¼Ç¸¸ µî·Ï
+		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ê°™ì€ ê²Œì„ì˜ ì„¸ì…˜ë§Œ ë“±ë¡
 		FString MatchType;
 		Result.Session.SessionSettings.Get(FName(TEXT("MatchType")), MatchType);
 		if (MatchType != TEXT("ProjectCC_LAN")) continue;
 
-		//°Ë»ö ¸ñ·Ï Áß ¼¼¼ÇÀÇ ÇöÀç °ÔÀÓ »óÅÂ È®ÀÎ (Title¸¸ ÈÄº¸¿¡ µî·Ï)
+		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ì„¸ì…˜ì˜ í˜„ì¬ ê²Œì„ ìƒíƒœ í™•ì¸ (Titleë§Œ í›„ë³´ì— ë“±ë¡)
 		FString SessionPhase;
 		Result.Session.SessionSettings.Get(FName(TEXT("SessionPhase")), SessionPhase);
 		if (SessionPhase != TEXT("LV_Title")) continue;
 
-		//°Ë»ö ¸ñ·Ï Áß ¼¼¼ÇÀÇ ÇöÀç »óÅÂ°¡ Äü¸ÅÄ¡ °¡´É »óÅÂÀÎÁö È®ÀÎ
+		//ê²€ìƒ‰ ëª©ë¡ ì¤‘ ì„¸ì…˜ì˜ í˜„ì¬ ìƒíƒœê°€ í€µë§¤ì¹˜ ê°€ëŠ¥ ìƒíƒœì¸ì§€ í™•ì¸
 		bool bCanQuickMatch = false;
 		Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
 		if (!bCanQuickMatch) continue;
 
-		//¸ÅÄª ¸ğµå°¡ ¼­·Î ´Ù¸£¸é ¹«½Ã
+		//ë§¤ì¹­ ëª¨ë“œê°€ ì„œë¡œ ë‹¤ë¥´ë©´ ë¬´ì‹œ
 		int32 SessionMatchMode = 0;
 		Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
 		UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
@@ -512,7 +686,7 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		return;
 	}
 
-	//°Ë»ö ½ÇÆĞ ½Ã ÃÖ´ë °Ë»ö È½¼ö°¡ µÉ ¶§ ±îÁö Àç°Ë»ö
+	//ê²€ìƒ‰ ì‹¤íŒ¨ ì‹œ ìµœëŒ€ ê²€ìƒ‰ íšŸìˆ˜ê°€ ë  ë•Œ ê¹Œì§€ ì¬ê²€ìƒ‰
 	if (FindRetryCount < MaxFindRetryCount) {
 		FindRetryCount++;
 		ScheduleDelayedHost();
@@ -521,10 +695,11 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 
 	HostLANSession();
 }
-//¼¼¼Ç »ı¼º¿¡ ¼º°øÇÏ¿´À» °æ¿ì
+
+//ì„¸ì…˜ ìƒì„±ì— ì„±ê³µí•˜ì˜€ì„ ê²½ìš°
 void UAllPlayMode_SessionSubsystem::OnCreateSessionCompleted(FName sessionName, bool bWasSuccessful)
 {
-	//Create Delegate ÇØÁ¦
+	//Create Delegate í•´ì œ
 	if (SessionInterface.IsValid()) {
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteHandle);
 	}
@@ -539,7 +714,7 @@ void UAllPlayMode_SessionSubsystem::OnCreateSessionCompleted(FName sessionName, 
 	}
 	bIsHostingSession = true;
 
-	//Hosting »óÅÂ¸¦ BroadCast
+	//Hosting ìƒíƒœë¥¼ BroadCast
 	BroadcastState(ESessionUIState::Hosting, TEXT("Session created, Waiting for the match to complete"));
 
 	if (bFindInProgress) {
@@ -555,12 +730,12 @@ void UAllPlayMode_SessionSubsystem::OnCreateSessionCompleted(FName sessionName, 
 	}
 }
 
-//Host Ãæµ¹ È®ÀÎ
+//Host ì¶©ëŒ í™•ì¸
 void UAllPlayMode_SessionSubsystem::StartHostMergeCheck()
 {
 	if (UWorld* World = GetWorld()) {
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
-		//Host Ãæµ¹ÀÌ ¹ß»ıÇß´ÂÁö Âª°Ô Àç°Ë»ö
+		//Host ì¶©ëŒì´ ë°œìƒí–ˆëŠ”ì§€ ì§§ê²Œ ì¬ê²€ìƒ‰
 		World->GetTimerManager().SetTimer(HostMergeCheckTimerHandle, this, &UAllPlayMode_SessionSubsystem::HostMergeCheckTick, FMath::RandRange(0.5f, 2.5f), false);
 	}
 }
@@ -569,7 +744,7 @@ void UAllPlayMode_SessionSubsystem::HostMergeCheckTick()
 {
 	if (!EnsureSessionInterface() || !bIsHostingSession) return;
 	if (bFindInProgress) return;
-	if (bGuestJoinedWhenHost) return;
+	//if (bGuestJoinedWhenHost) return;	//[ë§¤ì¹­ìˆ˜ì •]
 
 	SessionSearch = MakeShared<FOnlineSessionSearch>();
 	SessionSearch->bIsLanQuery = true;
@@ -583,16 +758,16 @@ void UAllPlayMode_SessionSubsystem::HostMergeCheckTick()
 		bFindInProgress = false;
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
 	}
-	
+
 }
 
-//Join ½ÇÆĞ ºí·¢¸®½ºÆ® ÃÊ±âÈ­
+//Join ì‹¤íŒ¨ ë¸”ë™ë¦¬ìŠ¤íŠ¸ ì´ˆê¸°í™”
 void UAllPlayMode_SessionSubsystem::ResetSessionBlackList()
 {
 	IgnoredHostTickets.Reset();
 }
 
-//¼¼¼Ç Âü¿©¿¡ ¼º°øÇÏ¿´À» °æ¿ì
+//ì„¸ì…˜ ì°¸ì—¬ì— ì„±ê³µí•˜ì˜€ì„ ê²½ìš°
 void UAllPlayMode_SessionSubsystem::OnJoinSessionCompleted(FName sessionName, EOnJoinSessionCompleteResult::Type Result)
 {
 	if (SessionInterface.IsValid()) {
@@ -659,7 +834,7 @@ void UAllPlayMode_SessionSubsystem::OnJoinSessionCompleted(FName sessionName, EO
 	}
 }
 
-//¼¼¼ÇÀÌ Á¾·áµÇ¾úÀ» °æ¿ì (Âü¿© ¼¼¼ÇÀÌ ºñÁ¤»óÀûÀ¸·Î ²¿¿´À» °æ¿ì)
+//ì„¸ì…˜ì´ ì¢…ë£Œë˜ì—ˆì„ ê²½ìš° (ì°¸ì—¬ ì„¸ì…˜ì´ ë¹„ì •ìƒì ìœ¼ë¡œ ê¼¬ì˜€ì„ ê²½ìš°)
 void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName, bool bWasSuccessful)
 {
 	if (SessionInterface.IsValid()) {
@@ -672,15 +847,20 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 		return;
 	}
 
+	//[ë§¤ì¹­ìˆ˜ì •]
+	if (bJoinAfterDestroy) {
+		return;
+	}
+
 	BroadcastState(ESessionUIState::None, TEXT("Session destroyed"));
 
-	//Host°¡ HostTicketÀ¸·Î Á¤ÇØÁ³À» °æ¿ì Á¤ÇØÁø Host·Î Áï½Ã Join
+	//Hostê°€ HostTicketìœ¼ë¡œ ì •í•´ì¡Œì„ ê²½ìš° ì •í•´ì§„ Hostë¡œ ì¦‰ì‹œ Join
 	if (bJoinAfterDestroy && PendingJoinResult.IsValid()) {
 		bJoinAfterDestroy = false;
 		FOnlineSessionSearchResult SavedResult = *PendingJoinResult;
 		PendingJoinResult.Reset();
 		JoinLANSession(SavedResult);
-		
+
 		return;
 	}
 
@@ -690,8 +870,36 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 		return;
 	}
 
-	//»õ·Î¿î ¼¼¼ÇÀ» °Ë»ö
+	//ìƒˆë¡œìš´ ì„¸ì…˜ì„ ê²€ìƒ‰
 	FindLANSessions();
 }
 
+void UAllPlayMode_SessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
+{
+	// 1. ì—ëŸ¬ê°€ ì—°ì†ìœ¼ë¡œ 2ë²ˆ í„°ì ¸ì„œ ë¡œê·¸ê°€ 2ë²ˆ ì°íˆëŠ” ê²ƒì„ ë°©ì§€
+	if (bIsNetworkError) return;
 
+	// 2. ìŒì†Œê±° ëª¨ë“œ ON! (ì´ ì•„ë˜ë¶€í„°ëŠ” UIë‚˜ ë¡œê·¸ì— ì•„ë¬´ê²ƒë„ ëœ¨ì§€ ì•ŠìŒ)
+	bIsNetworkError = true;
+
+	CancelQuickMatchLAN();
+	bCancelRequested = false;
+
+	// 3. ì„œë¸Œì‹œìŠ¤í…œì˜ ë‡Œ ì† ì°Œêº¼ê¸°ë¥¼ ì™„ë²½í•˜ê²Œ ë¹ˆì¹¸ìœ¼ë¡œ ê°•ì œ ì²­ì†Œ
+	LastUIState = ESessionUIState::None;
+	LastUIMessage = TEXT("");
+
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+	}
+
+	// 4. ë³µêµ¬ ë° ì²­ì†Œê°€ ëë‚¬ìœ¼ë¯€ë¡œ ë‹¤ìŒ í”„ë ˆì„ì— ì•ˆì „í•˜ê²Œ ìŒì†Œê±° í•´ì œ
+	if (World) {
+		World->GetTimerManager().SetTimerForNextTick([this]() {
+			bIsNetworkError = false;
+			});
+	}
+	else {
+		bIsNetworkError = false;
+	}
+}

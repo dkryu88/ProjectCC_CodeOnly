@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Result/Result_PlayerController.h"
@@ -58,7 +58,7 @@ void AResult_PlayerController::OnPressedExitToTitle()
 {
 	if (!bCanExitMatch) return;
 
-	//¸ÅÄ¡ Á¾·á ÈÄ °á°úÃ¢¿¡¼­ Å¸ÀÌÆ² È­¸éÀ¸·Î µ¹¾Æ°¥ ¶§ ±âÁ¸ ¼¼¼ÇÀ» Á¾·á
+	//[ë²„ê·¸]ë§¤ì¹˜ ì¢…ë£Œ í›„ ê²°ê³¼ì°½ì—ì„œ íƒ€ì´í‹€ í™”ë©´ìœ¼ë¡œ ëŒì•„ê°ˆ ë•Œ ê¸°ì¡´ ì„¸ì…˜ì„ ì¢…ë£Œ
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->CancelQuickMatchLAN();

@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -9,8 +9,8 @@
 class UGameAudioDataAsset;
 
 /**
- * °ÔÀÓÀÌ ½ÇÇàµÇ´Â µ¿¾È °è¼Ó »ì¾ÆÀÖ´Â Å¬·¡½º
- * °ÔÀÓ ÀüÃ¼¿¡ ¿µÇâÀ» ¹ÌÄ¥ °ÍµéÀ» ÀúÀå
+ * ê²Œì„ì´ ì‹¤í–‰ë˜ëŠ” ë™ì•ˆ ê³„ì† ì‚´ì•„ìˆëŠ” í´ë˜ìŠ¤
+ * ê²Œì„ ì „ì²´ì— ì˜í–¥ì„ ë¯¸ì¹  ê²ƒë“¤ì„ ì €ì¥
  */
 
 USTRUCT(BlueprintType)
@@ -59,22 +59,22 @@ UCLASS()
 class PROJECTCC_API UAllPlayMode_GameInstance : public UGameInstance
 {
 	GENERATED_BODY()
-	
+
 
 public:
-	//°¢ ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÒ ´Ğ³×ÀÓ ¼³Á¤
+	//ê° í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•  ë‹‰ë„¤ì„ ì„¤ì •
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void SetLocalPlayerNickname(const FString& NewNickName);
 
-	//°¢ ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÏ´Â ´Ğ³×ÀÓ È¹µæ
+	//ê° í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•˜ëŠ” ë‹‰ë„¤ì„ íšë“
 	UFUNCTION(BlueprintPure, Category = "Title")
 	FString GetPlayerLocalNickname();
-	//°¢ ÇÃ·¹ÀÌ¾îÀÇ ÃÊ»óÈ­ ¹øÈ£ È¹µæ/¼³Á¤
+	//ê° í”Œë ˆì´ì–´ì˜ ì´ˆìƒí™” ë²ˆí˜¸ íšë“/ì„¤ì •
 	UFUNCTION(BlueprintCallable)
 	void SetLocalPortraitId(int32 PortraitId) { LocalPortraitId = PortraitId; }
 	UFUNCTION(BlueprintPure)
 	int32 GetLocalPortraitId() { return LocalPortraitId; }
-	//ÇÃ·¹ÀÌ¾îÀÇ ÇöÀç °ÔÀÓ Èå¸§ »óÅÂ È¹µæ/¼³Á¤
+	//í”Œë ˆì´ì–´ì˜ í˜„ì¬ ê²Œì„ íë¦„ ìƒíƒœ íšë“/ì„¤ì •
 	UFUNCTION(BlueprintCallable)
 	void SetMatchFlowState(EMatchFlowState State) { MatchFlowState = State; }
 	UFUNCTION(BlueprintPure)
@@ -92,7 +92,7 @@ public:
 	void SetSelectedMatchMode(EMatchMode Mode) { SelectedMatchMode = Mode; }
 	UFUNCTION()
 	EMatchMode GetSelectedMatchMode() { return SelectedMatchMode; }
-	
+
 	int32 GetMaxPlayersByMode() {
 		switch (SelectedMatchMode) {
 		case EMatchMode::TwoPlayers: return 2;
@@ -102,14 +102,19 @@ public:
 		}
 	}
 
+	//[ë²„ê·¸]
+	//í´ë¼ì´ì–¸íŠ¸ê°€ í˜¸ìŠ¤íŠ¸ì˜ ë§¤ì¹­ì·¨ì†Œë¡œ íŠ•ê²¼ì„ ë•Œ ìë™ ë§¤ì¹­ ì‹œë„í•˜ëŠ” í”Œë˜ê·¸
+	UPROPERTY(BlueprintReadWrite)
+	bool bAutoRestartMatch = false;
+
 protected:
-	//°¢ ÇÃ·¹ÀÌ¾îµéÀÇ ´Ğ³×ÀÓ
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Title")
+	//ê° í”Œë ˆì´ì–´ë“¤ì˜ ë‹‰ë„¤ì„
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Title")
 	FString LocalPlayerNickName;
-	//°¢ ÇÃ·¹ÀÌ¾îÀÇ ÃÊ»óÈ­ ¹øÈ£
+	//ê° í”Œë ˆì´ì–´ì˜ ì´ˆìƒí™” ë²ˆí˜¸
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	int32 LocalPortraitId = 0;
-	//ÇÃ·¹ÀÌ¾îÀÇ ÇöÀç °ÔÀÓ Èå¸§ »óÅÂ
+	//í”Œë ˆì´ì–´ì˜ í˜„ì¬ ê²Œì„ íë¦„ ìƒíƒœ
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	EMatchFlowState MatchFlowState = EMatchFlowState::Idle;
 
@@ -119,8 +124,9 @@ protected:
 	UPROPERTY()
 	TArray<FMatchResultData> MatchResults;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Match")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Match")
 	EMatchMode SelectedMatchMode = EMatchMode::TwoPlayers;
+
 };
 
-//BlueprintPure : ½ÇÇà ÇÉ ¾øÀÌ ´Ü¼øÈ÷ °ª¸¸ ReturnÇÏ´Â ÇÔ¼ö
+//BlueprintPure : ì‹¤í–‰ í•€ ì—†ì´ ë‹¨ìˆœíˆ ê°’ë§Œ Returní•˜ëŠ” í•¨ìˆ˜
