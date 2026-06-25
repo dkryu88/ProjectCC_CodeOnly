@@ -58,10 +58,10 @@ void AResult_PlayerController::OnPressedExitToTitle()
 {
 	if (!bCanExitMatch) return;
 
-	//[버그]매치 종료 후 결과창에서 타이틀 화면으로 돌아갈 때 기존 세션을 종료
+	//[머지][버그]매치 종료 후 결과창에서 타이틀 화면으로 돌아갈 때 기존 세션을 종료
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
-			SessionSubsystem->CancelQuickMatchLAN();
+			SessionSubsystem->ReturnToTitle();
 		}
 	}
 

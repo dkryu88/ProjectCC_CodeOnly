@@ -33,7 +33,7 @@ public:
 	UFUNCTION()
 	void ConfirmQuitGame();
 
-	//[버그] 호스트가 매칭 중 취소버튼을 눌러 방을 깰 때, 참여해있던 클라이언트를 퇴장시키는 함수
+	//[머지][버그] 호스트가 매칭 중 취소버튼을 눌러 방을 깰 때, 참여해있던 클라이언트를 퇴장시키는 함수
 	UFUNCTION(Client, Reliable)
 	void Client_KickedByHost();
 
@@ -104,6 +104,6 @@ protected:
 	//닉네임이 유효한지 검사
 	bool ValidateNickname(const FString& nickname, FString& OutSanitized, FText& OutErrorText);
 
-	//[버그] 자동매칭 대기시간 관리 타이머핸들
+	//[머지][버그] 자동매칭 대기시간 관리 타이머핸들
 	FTimerHandle AutoRestartTimerHandle;
 };

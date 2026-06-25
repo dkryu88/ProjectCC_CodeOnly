@@ -207,7 +207,7 @@ void AMatch_PlayerController::ApplyUIInputMode()
 	if (UGameViewportClient* GameViewportClient = GetWorld() ? GetWorld()->GetGameViewport() : nullptr) {
 		//GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown);
 		//GameViewportClient->SetMouseLockMode(EMouseLockMode::LockAlways);
-		GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);	//[버그]사망 후 리스폰 대기 상태에서 마우스 포인터 미출력 해결(상점 이이콘 클릭 가능하게)
+		GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);	//[머지][버그]사망 후 리스폰 대기 상태에서 마우스 포인터 미출력 해결(상점 이이콘 클릭 가능하게)
 		GameViewportClient->SetMouseLockMode(EMouseLockMode::LockAlways);
 	}
 }

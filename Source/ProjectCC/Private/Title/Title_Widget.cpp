@@ -62,7 +62,7 @@ void UTitle_Widget::NativeConstruct() {
 	}
 
 	//ApplyMatchMode(EMatchMode::TwoPlayers, true);
-	//[버그] 매치모드 선택한 걸 가져와서 Image_SelectedFrame이 유지되도록
+	//[머지][버그] 매치모드 선택한 걸 가져와서 Image_SelectedFrame이 유지되도록
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	if (GameInstance) {
 		EMatchMode SavedMatchMode = GameInstance->GetSelectedMatchMode();
@@ -186,7 +186,7 @@ void UTitle_Widget::SetJoinCompleteMode()
 		Button_CancelMatch->SetIsEnabled(false);
 	}
 
-	//[버그] 클라이언트가 Matching Complete 방송하면서 4인방 인원모집 대기중일 때 2인/4인버튼 선택되는 버그 수정
+	//[머지][버그] 클라이언트가 Matching Complete 방송하면서 4인방 인원모집 대기중일 때 2인/4인버튼 선택되는 버그 수정
 	if (Button_TwoPlayer) {
 		Button_TwoPlayer->SetIsEnabled(false);
 	}

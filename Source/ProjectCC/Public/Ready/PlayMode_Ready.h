@@ -26,6 +26,9 @@ public:
 
 	FTimerHandle MatchStartTimerHandle;
 
+	//[추가머지]난입방지
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Ready")
 	int32 MaxPlayers = 2;

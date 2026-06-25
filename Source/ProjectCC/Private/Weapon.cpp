@@ -125,7 +125,7 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 		ApplyHitEffect(HitPlayer, Hit);
 
 		if (HitPlayer->EffectManagerComp) {
-			FGameEffectData* ThrowEffect = nullptr;	//[버그] nullptr추가
+			FGameEffectData* ThrowEffect = nullptr;	//[머지][버그] nullptr추가
 			FGameEffectContext Context;
 			if (WeaponData->Stats.AttackType != EAttackType::Shoot_HS) {
 				ThrowEffect = &WeaponData->HitEffect;
@@ -141,7 +141,7 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 				Context.HitNormal = Hit.ImpactNormal;
 				Context.WorldLocation = Hit.ImpactPoint;
 				Context.WorldRotation = Hit.ImpactNormal.Rotation();
-				HitPlayer->EffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);	//[버그] if문 안으로 올림
+				HitPlayer->EffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);	//[머지][버그] if문 안으로 올림
 			}
 		}
 	}

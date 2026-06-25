@@ -35,6 +35,8 @@ APlayMode_Match::APlayMode_Match()
 	CoinWaveTime = { 300, 200, 100 };
 }
 
+
+
 // Called when the game starts or when spawned
 void APlayMode_Match::BeginPlay()
 {
@@ -1687,4 +1689,34 @@ bool APlayMode_Match::SpawnSupplyObjects()
 		}
 	}
 	return false;
+}
+
+//[추가머지]난입방지
+void APlayMode_Match::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+
+	if (!HasAuthority()) return;
+	if (!ErrorMessage.IsEmpty()) return;
+
+	//온라인 서브시스템의 세션 간판을 직접 확인
+	IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+	if (OSS) {
+		IOnlineSessionPtr SessionInterface = OSS->GetSessionInterface();
+		if (SessionInterface.IsValid()) {
+			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
+			if (Session && Session->SessionSettings.bAllowJoinInProgress == false) {
+				ErrorMessage = TEXT("Match : Game is already running!");
+				UE_LOG(LogTemp, Warning, TEXT("Intruder blocked in Match: Session is closed."));
+				return;
+			}
+		}
+	}
+	//보험
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		if (GetNumPlayers() >= GameInstance->GetMaxPlayersByMode()) {
+			ErrorMessage = TEXT("Match : Room is Full!");
+			return;
+		}
+	}
 }

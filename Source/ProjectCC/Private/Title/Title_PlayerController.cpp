@@ -44,25 +44,32 @@ void ATitle_PlayerController::BeginPlay()
 			SessionSubsystem->OnSessionStateChanged.AddDynamic(this, &ATitle_PlayerController::HandleSessionStateChanged);
 			HandleSessionStateChanged(SessionSubsystem->LastUIState, SessionSubsystem->LastUIMessage);
 
-			//[버그]Result에서 Title로 넘어갈 때 세션을 종료시키기 위해 사용한 CancelQuickMatchLAN함수에 의해 Matching Cancelled! 가 보여지는것 없애기
+			//[머지][버그]Result에서 Title로 넘어갈 때 세션을 종료시키기 위해 사용한 CancelQuickMatchLAN함수에 의해 Matching Cancelled! 가 보여지는것 없애기
 			if (SessionSubsystem->LastUIState == ESessionUIState::None) {
 				SessionSubsystem->LastUIMessage = TEXT("");	//최초 실행때 처럼 아무것도 없는걸로 보임
 			}
 
-			//[버그]자동매칭 로직 추가
+			//[머지][버그]자동매칭 로직 추가
 			if (GameInstance->bAutoRestartMatch) {
 				GameInstance->bAutoRestartMatch = false;	//플레그 끄기
 
 				if (TitleWidgetInstance) {
-					TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Host Canceled. ReMatching...")));
+					TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Connection Lost. ReMatching...")));	//[추가머지]텍스트 수정 : 호스트캔슬 + 입구컷
 					TitleWidgetInstance->SetMatchingMode(true);	// 이 때 취소버튼 누를 수 있게 활성화
 				}
 
-				//2초 뒤 매칭 시작
-				GetWorld()->GetTimerManager().SetTimer(AutoRestartTimerHandle, FTimerDelegate::CreateLambda([GameInstance]() {
+				//[자동매칭버그수정][머지]2초 뒤 매칭 시작
+				GetWorld()->GetTimerManager().SetTimer(AutoRestartTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, GameInstance]() {
+					
+					if(!AutoRestartTimerHandle.IsValid()) {
+						UE_LOG(LogTemp, Warning, TEXT("AutoRematch was cancelled by User."));
+						return;
+					}
+					
 					if (UAllPlayMode_SessionSubsystem* Subsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 						// 매칭 시도
 						Subsystem->QuickMatchLAN();
+						UE_LOG(LogTemp, Warning, TEXT("AutoRematch Start!"));
 					}
 					}), 2.f, false);
 			}
@@ -337,6 +344,10 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 
 void ATitle_PlayerController::HandleCancelRequested()
 {
+	//[자동매칭버그수정]추가-타이머핸들 클리어
+	GetWorld()->GetTimerManager().ClearTimer(AutoRestartTimerHandle);
+	AutoRestartTimerHandle.Invalidate();
+
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	if (!GameInstance) return;
 
@@ -345,10 +356,10 @@ void ATitle_PlayerController::HandleCancelRequested()
 
 	SessionSubsystem->CancelQuickMatchLAN();
 
-	//자동매칭 1.5초 대기 중 취소버튼을 눌렀다면, 타이머핸들 삭제->자동매칭 안함
+	//[머지]자동매칭 1.5초 대기 중 취소버튼을 눌렀다면, 타이머핸들 삭제->자동매칭 안함
 	GetWorld()->GetTimerManager().ClearTimer(AutoRestartTimerHandle);
 
-	//[버그]내가 호스트일때(풀방이 아닐때) 취소버튼을 눌러 방을 깼을 때
+	//[머지][버그]내가 호스트일때(풀방이 아닐때) 취소버튼을 눌러 방을 깼을 때
 	// 참여중이던 클라이언트를 내보내는 로직
 	if (HasAuthority() && GetWorld()->GetNetMode() == NM_ListenServer) {
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It) {
@@ -409,7 +420,7 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		if (GameInstance) {
 			GameInstance->SetMatchFlowState(EMatchFlowState::None);
 
-			//[버그]강제 종료에 의해 클라이언트가 타이틀로 돌아갈 때 닉네임 표시(이거 없으면 공란이 나왔음)
+			//[머지][버그]강제 종료에 의해 클라이언트가 타이틀로 돌아갈 때 닉네임 표시(이거 없으면 공란이 나왔음)
 			FString SavedNickname = GameInstance->GetPlayerLocalNickname();
 			if (!SavedNickname.IsEmpty() && TitleWidgetInstance) {
 				TitleWidgetInstance->SetNicknameText(SavedNickname);
@@ -459,7 +470,7 @@ bool ATitle_PlayerController::ValidateNickname(const FString& nickname, FString&
 	return true;
 }
 
-// [버그]크라이언트가 호스트의 취소버튼클릭에 의해 퇴장당할 때 실행하는 함수	//HandleCancelRequested함수안에서 실행됨
+// [머지][버그]크라이언트가 호스트의 취소버튼클릭에 의해 퇴장당할 때 실행하는 함수	//HandleCancelRequested함수안에서 실행됨
 void ATitle_PlayerController::Client_KickedByHost_Implementation()
 {
 	// 매칭상태를 Joining에서 None으로 변경 -> 재동매칭을 위해 Searching으로 수정

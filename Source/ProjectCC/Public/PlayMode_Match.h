@@ -62,6 +62,9 @@ class PROJECTCC_API APlayMode_Match : public AGameMode
 public:
 	APlayMode_Match();
 
+	//[추가머지]난입방지
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+
 protected:
 	virtual void BeginPlay() override;
 

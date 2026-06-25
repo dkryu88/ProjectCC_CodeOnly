@@ -102,7 +102,7 @@ public:
 		}
 	}
 
-	//[버그]
+	//[머지][버그]
 	//클라이언트가 호스트의 매칭취소로 튕겼을 때 자동 매칭 시도하는 플래그
 	UPROPERTY(BlueprintReadWrite)
 	bool bAutoRestartMatch = false;

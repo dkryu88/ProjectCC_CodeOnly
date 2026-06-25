@@ -34,11 +34,11 @@ class PROJECTCC_API UAllPlayMode_SessionSubsystem : public UGameInstanceSubsyste
 public:
 	UAllPlayMode_SessionSubsystem();
 
-	//[버그]호스트의 게임중 강제종료시 클라이언트의 초기화
+	//[머지][버그]호스트의 게임중 강제종료시 클라이언트의 초기화
 	// Subsystem 초기화 및 해제 오버라이드
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
-	// 네트워크 에러(방장 튕김, 랜선 뽑힘 등) 감지 함수
+	// [머지]네트워크 에러(방장 튕김, 랜선 뽑힘 등) 감지 함수
 	void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
 	bool bIsNetworkError = false;
 
@@ -82,6 +82,10 @@ public:
 
 	ESessionUIState LastUIState = ESessionUIState::None;
 	FString LastUIMessage;
+
+	//[머지][매칭수정] 결과창에서 타이틀로 돌아갈 때 세션초기화 시키는 함수
+	UFUNCTION(BlueprintCallable)
+	void ReturnToTitle();
 
 protected:
 	IOnlineSessionPtr SessionInterface;

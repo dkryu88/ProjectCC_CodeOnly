@@ -377,7 +377,9 @@ void APlayer_Character::RefreshInputBlockState(bool bStopMovementOnBlock, bool b
 	bCanControl = !bShouldBlockMove;
 	bCanCamControl = !bShouldBlockCam;
 
-	if (bPrevCanControl && !bCanControl && bStopMovementOnBlock) {
+	//if (bPrevCanControl && !bCanControl && bStopMovementOnBlock) {
+	// [버그]용암사망 다이빙 [수정] BigHit Killplane 상태 버그 수정
+	if (bStopMovementOnBlock && !bCanControl && (bPrevCanControl || bIsOnLiquid)) {
 		ApplyInputBlockInternal(bIsOnLiquid);
 	}
 
