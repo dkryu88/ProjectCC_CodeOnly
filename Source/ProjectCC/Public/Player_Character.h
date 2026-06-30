@@ -38,6 +38,7 @@ class AEquipment;
 class AWeapon;
 class AItem;
 class AActor;
+class UFootStepDataAsset;	//[사운드]발소리
 
 USTRUCT(BlueprintType)
 struct FSpeedController {
@@ -824,4 +825,13 @@ public:
 	FVector VisualMeshLocation = FVector::ZeroVector;
 	FVector DefaultCamLocation = FVector::ZeroVector;
 	FVector VisualCamLocation = FVector::ZeroVector;
+
+	//[사운드]발소리
+public:
+	FORCEINLINE UFootStepDataAsset* GetFootStepData() const { return FootStepData; }
+private:
+	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UFootStepDataAsset> FootStepData;
+
+	virtual void OnJumped_Implementation() override;
 };

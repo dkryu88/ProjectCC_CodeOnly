@@ -44,6 +44,7 @@
 #include "Coin.h"
 #include "KillPlane.h"
 #include "Objects.h"
+#include "Sound/FootStepDataAsset.h"	//[추가]
 //디버그 헤더
 #include "DrawDebugHelpers.h"
 
@@ -195,6 +196,11 @@ void APlayer_Character::PossessedBy(AController* NewController)
 void APlayer_Character::PawnClientRestart() {
 	Super::PawnClientRestart();
 	InitPlayerWidget();
+
+	//[사운드]
+	if (APlayerController* PC = Cast<APlayerController>(GetController())) {
+		PC->SetAudioListenerOverride(GetCapsuleComponent(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
 }
 
 void APlayer_Character::OnRep_MoveSpeed()
@@ -4656,6 +4662,10 @@ void APlayer_Character::Client_Out_Implementation()
 			springArmComp->CameraLagSpeed = 3.f;
 			springArmComp->CameraLagMaxDistance = 100.f;
 		}
+		//[사운드]
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) {
+			PC->ClearAudioListenerOverride();
+		}
 	}
 }
 
@@ -4683,6 +4693,13 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 	if (AdditionalImageWidget) {
 		AdditionalImageWidget->PlayFadeOutAndRemove();
 		AdditionalImageWidget = nullptr;
+	}
+}
+
+void APlayer_Character::OnJumped_Implementation() {
+	Super::OnJumped_Implementation();
+	if (FootStepData && FootStepData->JumpSound) {
+		UGameplayStatics::PlaySoundAtLocation(this, FootStepData->JumpSound, GetActorLocation());
 	}
 }
 

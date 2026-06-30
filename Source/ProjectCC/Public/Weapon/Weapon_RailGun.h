@@ -61,7 +61,7 @@ public:
 	float MinGauge = 25.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
-	float ChargeSpeedPerSecond = 5.f;
+	float ChargeSpeedPerSecond = 2.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
 	float ChargeAmountPerSecond = 5.f;
@@ -131,4 +131,26 @@ public:
 	FName GetAnimationSlotName();
 	//재생중인 애니메이션 슬롯 전환
 	void RefreshRailGunAnimationSlot();
+
+	//[추가]
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+
+	UPROPERTY(Transient)
+	USoundBase* CachedChargeSound = nullptr;
+
+	UPROPERTY(Transient)
+	USoundBase* CachedFireLoopSound = nullptr;
+
+	UPROPERTY(Transient)
+	USoundBase* CachedPowerDownSound = nullptr;
+
+	UPROPERTY(Transient)
+	UAudioComponent* ChargeAudioComp;
+
+	UPROPERTY(Transient)
+	UAudioComponent* FireAudioComp;
+
+	bool bWasChargingSoundPlaying = false;
+	bool bWasFiringSoundPlaying = false;
 };

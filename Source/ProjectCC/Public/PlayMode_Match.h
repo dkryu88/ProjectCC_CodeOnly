@@ -71,7 +71,7 @@ protected:
 protected:
 	//매치 진행 시간 (60 * 5 = 300 <-- 5분)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
-	int32 MatchDuration = 300;
+	int32 MatchDuration = 240;
 	//매치 진행 시간 관리
 	FTimerHandle MatchTimerHandle;
 	//매치 시작 딜레이 타이머

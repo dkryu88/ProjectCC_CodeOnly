@@ -12,6 +12,86 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"	//[추가]
+#include "WeaponDataAsset.h"	//[추가]
+
+void AWeapon_RailGun::BeginPlay()	//[추가]
+{
+	Super::BeginPlay();
+
+	if (WeaponData)
+	{
+		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_Charge"))) CachedChargeSound = Data->Sound.Get();
+		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_Fire"))) CachedFireLoopSound = Data->Sound.Get();
+		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_End"))) CachedPowerDownSound = Data->Sound.Get();
+	}
+}
+
+void AWeapon_RailGun::Tick(float DeltaTime)	//[추가]
+{
+	Super::Tick(DeltaTime);
+
+	if (bRailGunCharging) {
+		if (ChargeGauge < 25.f)
+		{
+			if (bWasFiringSoundPlaying) {
+				if (FireAudioComp) FireAudioComp->Stop();
+				bWasFiringSoundPlaying = false;
+			}
+
+			if (!bWasChargingSoundPlaying && CachedChargeSound) {
+				if (!ChargeAudioComp) {
+					ChargeAudioComp = UGameplayStatics::SpawnSoundAttached(CachedChargeSound, WeaponCollider);
+				}
+				else {
+					ChargeAudioComp->Play();
+				}
+				bWasChargingSoundPlaying = true;
+			}
+
+			//일관적인 소리의 에셋을 사용할 때 볼륨과 피치를 조절하는 코드
+			/*if (ChargeAudioComp) {
+				float ChargeRatio = FMath::Clamp(ChargeGauge / 25.f, 0.f, 1.f);
+				ChargeAudioComp->SetVolumeMultiplier(ChargeRatio);
+				ChargeAudioComp->SetPitchMultiplier(0.5f + (ChargeRatio * 0.5f));
+			}*/
+		}
+
+		else {
+			// [구간 2] 발사 중
+			if (bWasChargingSoundPlaying)
+			{
+				if (ChargeAudioComp) ChargeAudioComp->Stop();
+				bWasChargingSoundPlaying = false;
+			}
+
+			if (!bWasFiringSoundPlaying && CachedFireLoopSound)
+			{
+				if (!FireAudioComp) {
+					FireAudioComp = UGameplayStatics::SpawnSoundAttached(CachedFireLoopSound, WeaponCollider);
+				}
+				else {
+					FireAudioComp->Play();
+				}
+				bWasFiringSoundPlaying = true;
+			}
+		}
+	}
+	else {
+		// [구간 3] 플레이어가 입력을 멈췄을 때, 100% 유지시간이 끝나 강제 종료되었을 때
+		if ((bWasChargingSoundPlaying || bWasFiringSoundPlaying)) {
+			if (ChargeAudioComp) ChargeAudioComp->Stop();
+			if (FireAudioComp) FireAudioComp->Stop();
+
+			if (bMaxChargeFired && CachedPowerDownSound) {
+				UGameplayStatics::SpawnSoundAttached(CachedPowerDownSound, WeaponCollider.Get());
+			}
+			bWasChargingSoundPlaying = false;
+			bWasFiringSoundPlaying = false;
+		}
+	}
+}
+
 
 void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 {
@@ -68,7 +148,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 			bRailGunCharging = false;
 			bWaitingRepress = true;
 			bMaxChargeFired = true;
-			
+
 			ChargeGauge = 0.f;
 			PendingDamage = 0.f;
 			PendingRadius = 0.f;
@@ -158,7 +238,7 @@ void AWeapon_RailGun::InstantHideRailGunPreview(float Duration)
 	GetWorldTimerManager().SetTimer(InstantHideRailGunPreviewTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
 		bNoShowingRailGunPreview = false;
 		ForceNetUpdate();
-	}), FMath::Max(0.05f, Duration), false);
+		}), FMath::Max(0.05f, Duration), false);
 }
 
 void AWeapon_RailGun::PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32 LoopCount)
@@ -197,7 +277,7 @@ void AWeapon_RailGun::StopRailGunAnimation()
 
 void AWeapon_RailGun::OnRep_RailGunCharging()
 {
-	if(bRailGunCharging){
+	if (bRailGunCharging) {
 		bLocalNoShowingRailGunPreview = true;
 
 		if (bRailGunCharging && EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
@@ -385,6 +465,8 @@ bool AWeapon_RailGun::InteractionWeaponFunction(EFunctionInterActionReason Reaso
 	case EFunctionInterActionReason::Jump:
 		// 레일건은 점프로 취소하지 않음
 		return true;
+	case EFunctionInterActionReason::Aim:	//[추가] 공격 중 우클릭 조준하면 공격 애니메이션 끊김
+		if (bRailGunCharging) return false;
 	default:
 		return true;
 	}
@@ -519,7 +601,7 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 		ObjectTypes,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::ForDuration,
+		EDrawDebugTrace::ForOneFrame,//ForDuration,	[추가] 수정 - 기존 5초에서 프레임으로 변경
 		TraceHits,
 		true
 	);
@@ -563,75 +645,75 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 		if (!TargetPlayer) return;
 		TargetPlayer->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, WeaponData->bApplyKnockBack, WeaponData->bApplyRotation, WeaponData->bUsingHitAction, false);
 		ApplyHitEffect(TargetPlayer);
-	};
+		};
 
 	auto ApplyToObjects = [&](AObjects* TargetObject) {
 		if (!TargetObject) return;
 		TargetObject->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, true, false);
 		ApplyHitEffect(TargetObject);
-	};
+		};
 
 	switch (WeaponData->Stats.AttackTargetType)
 	{
-		case EAttackTargetType::SingleTarget:
+	case EAttackTargetType::SingleTarget:
+	{
+		AActor* ClosestActor = nullptr;
+		float ClosestDistSq = TNumericLimits<float>::Max();
+
+		for (APlayer_Character* Player : TargetPlayers)
 		{
-			AActor* ClosestActor = nullptr;
-			float ClosestDistSq = TNumericLimits<float>::Max();
+			const float DistSq = FVector::DistSquared(
+				EquippedPlayer->GetActorLocation(),
+				Player->GetActorLocation()
+			);
 
-			for (APlayer_Character* Player : TargetPlayers)
+			if (DistSq < ClosestDistSq)
 			{
-				const float DistSq = FVector::DistSquared(
-					EquippedPlayer->GetActorLocation(),
-					Player->GetActorLocation()
-				);
-
-				if (DistSq < ClosestDistSq)
-				{
-					ClosestDistSq = DistSq;
-					ClosestActor = Player;
-				}
+				ClosestDistSq = DistSq;
+				ClosestActor = Player;
 			}
-
-			for (AObjects* Obj : TargetObjects)
-			{
-				const float DistSq = FVector::DistSquared(
-					EquippedPlayer->GetActorLocation(),
-					Obj->GetActorLocation()
-				);
-
-				if (DistSq < ClosestDistSq)
-				{
-					ClosestDistSq = DistSq;
-					ClosestActor = Obj;
-				}
-			}
-
-			if (APlayer_Character* Player = Cast<APlayer_Character>(ClosestActor))
-			{
-				ApplyToPlayer(Player);
-			}
-			else if (AObjects* Obj = Cast<AObjects>(ClosestActor))
-			{
-				ApplyToObjects(Obj);
-			}
-
-			break;
 		}
 
-		case EAttackTargetType::MultiTarget:
+		for (AObjects* Obj : TargetObjects)
 		{
-			for (APlayer_Character* Player : TargetPlayers)
-			{
-				ApplyToPlayer(Player);
-			}
+			const float DistSq = FVector::DistSquared(
+				EquippedPlayer->GetActorLocation(),
+				Obj->GetActorLocation()
+			);
 
-			for (AObjects* Obj : TargetObjects)
+			if (DistSq < ClosestDistSq)
 			{
-				ApplyToObjects(Obj);
+				ClosestDistSq = DistSq;
+				ClosestActor = Obj;
 			}
-
-			break;
 		}
+
+		if (APlayer_Character* Player = Cast<APlayer_Character>(ClosestActor))
+		{
+			ApplyToPlayer(Player);
+		}
+		else if (AObjects* Obj = Cast<AObjects>(ClosestActor))
+		{
+			ApplyToObjects(Obj);
+		}
+
+		break;
+	}
+
+	case EAttackTargetType::MultiTarget:
+	{
+		for (APlayer_Character* Player : TargetPlayers)
+		{
+			ApplyToPlayer(Player);
+		}
+
+		for (AObjects* Obj : TargetObjects)
+		{
+			ApplyToObjects(Obj);
+		}
+
+		break;
+	}
 	}
 
 }
