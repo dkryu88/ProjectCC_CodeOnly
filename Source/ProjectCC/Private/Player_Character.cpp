@@ -44,7 +44,6 @@
 #include "Coin.h"
 #include "KillPlane.h"
 #include "Objects.h"
-#include "Sound/FootStepDataAsset.h"	//[추가]
 //디버그 헤더
 #include "DrawDebugHelpers.h"
 
@@ -196,11 +195,6 @@ void APlayer_Character::PossessedBy(AController* NewController)
 void APlayer_Character::PawnClientRestart() {
 	Super::PawnClientRestart();
 	InitPlayerWidget();
-
-	//[사운드]
-	if (APlayerController* PC = Cast<APlayerController>(GetController())) {
-		PC->SetAudioListenerOverride(GetCapsuleComponent(), FVector::ZeroVector, FRotator::ZeroRotator);
-	}
 }
 
 void APlayer_Character::OnRep_MoveSpeed()
@@ -225,6 +219,8 @@ void APlayer_Character::BeginPlay()
 		DefaultMeshLocation = GetMesh()->GetRelativeLocation();
 		//잔상 제거
 		GetMesh()->SetBoundsScale(1.5f);
+
+		SearchPlayerDefaultOverlayMaterial();
 	}
 	if (springArmComp)
 	{
@@ -383,9 +379,7 @@ void APlayer_Character::RefreshInputBlockState(bool bStopMovementOnBlock, bool b
 	bCanControl = !bShouldBlockMove;
 	bCanCamControl = !bShouldBlockCam;
 
-	//if (bPrevCanControl && !bCanControl && bStopMovementOnBlock) {
-	// [버그]용암사망 다이빙 [수정] BigHit Killplane 상태 버그 수정
-	if (bStopMovementOnBlock && !bCanControl && (bPrevCanControl || bIsOnLiquid)) {
+	if ((bPrevCanControl || bIsOnLiquid)&& !bCanControl && bStopMovementOnBlock) {
 		ApplyInputBlockInternal(bIsOnLiquid);
 	}
 
@@ -410,14 +404,14 @@ void APlayer_Character::OnRep_HP()
 
 void APlayer_Character::OnRep_bIsOut()
 {
+	if (bIsOut) CancelAimState();
 	SetPlayerWidgetVisibility(false);
 }
 
 void APlayer_Character::OnRep_NowWeapon()
 {
 	AStat = GetWeaponStat();
-	HideAimPoint();
-	HideAimPreview();
+	CancelAimState();
 	if (bIsAiming) SetAimInternal(false);
 	OnWeaponChanged.Broadcast();
 }
@@ -425,8 +419,7 @@ void APlayer_Character::OnRep_NowWeapon()
 void APlayer_Character::OnRep_NowObjects()
 {
 	AStat = GetWeaponStat();
-	HideAimPoint();
-	HideAimPreview();
+	CancelAimState();
 	if (bIsAiming) SetAimInternal(false);
 	OnWeaponChanged.Broadcast();
 }
@@ -448,11 +441,18 @@ void APlayer_Character::ApplyInputBlockInternal(bool bIsOnLiquid)
 	if (GetCharacterMovement()) {
 		if (bIsOnLiquid) {
 			bIsOnLiquidWhenOut = bIsOnLiquid;
-			GetCharacterMovement()->GravityScale = 0.f;
-			GetCharacterMovement()->Velocity = FVector(0.f, 0.f, bEndMatchState ? -SinkSpeed : 0.f);
+
+			UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+
+			if (MoveComp) {
+				MoveComp->GravityScale = 0.f;
+				MoveComp->SetMovementMode(MOVE_Falling);
+				MoveComp->Velocity = FVector(0.f, 0.f, -SinkSpeed);
+			}
 		}
 		else {
-			GetCharacterMovement()->Velocity = FVector(0.f, 0.f, GetCharacterMovement()->Velocity.Z);
+			UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+			if (MoveComp) MoveComp->Velocity = FVector(0.f, 0.f, MoveComp->Velocity.Z);
 		}
 	}
 }
@@ -660,6 +660,8 @@ void APlayer_Character::SetPlayerEndMatchState()
 	bNowHoldingAttack = false;
 	bHavingCurrentAimTargetPoint = false;
 	CurrentAimTargetPoint = FVector::ZeroVector;
+
+	Multicast_SetPlayerOverlayMaterialNoShowing();
 
 	GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
 
@@ -900,6 +902,7 @@ bool APlayer_Character::BuildCurrentAttackPreviewData(FAimPreviewVisualData& Out
 {
 	OutData.Reset();
 	if (!NowMap) return false;
+	if (NowObjects) return false;
 	if (NowWeapon) return NowWeapon->BuildAimPreviewData(this, OutData);
 	float BlockSize = NowMap->BlockSize;
 
@@ -1720,9 +1723,9 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 
 //조준 해제 서버 요청
 void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
-	if (!bCanControl) return;
-	if (bIsOut) return;
-	if (!HasAuthority()) {
+	bool bWasAiming = bIsAiming;
+
+	if (!HasAuthority() && bWasAiming) {
 		Server_Aim(false);
 	}
 
@@ -1731,9 +1734,8 @@ void APlayer_Character::AimStop(const struct FInputActionValue& inputValue) {
 
 void APlayer_Character::CancelAimState()
 {
-	if (!bIsAiming) return;
-
-	SetAimInternal(false);
+	bool bWasAiming = bIsAiming;
+	if(bWasAiming) SetAimInternal(false);
 
 	bHavingCurrentAimTargetPoint = false;
 	CurrentAimTargetPoint = FVector::ZeroVector;
@@ -1913,7 +1915,10 @@ void APlayer_Character::HideAimPoint()
 void APlayer_Character::UpdateAimPreview(float DeltaTime)
 {
 	if (!IsLocallyControlled()) return;
-	if (!bIsAiming) return;
+	if (!bIsAiming || bIsOut || NowObjects) {
+		HideAimPreview();
+		return;
+	}
 
 	if (!NowMap) {
 		NowMap = Cast<AMapConstructor>(UGameplayStatics::GetActorOfClass(GetWorld(), AMapConstructor::StaticClass()));
@@ -2215,6 +2220,9 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 	ARangeEnd = ARangeStart + Forward * AdjustedRange;
 
 	TArray<FHitResult> Hits;
+	bool bPendingHitScanEffect = false;
+	FVector PendingHSTraceStart = FVector::ZeroVector;
+	FVector PendingHSTraceEnd = FVector::ZeroVector;
 
 	//디버그 용
 	TArray<AActor*>ActorsToIgnore;
@@ -2397,6 +2405,10 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 			HitActors.Add(HitActor);
 			Hits.Add(Hit);
 		}
+
+		bPendingHitScanEffect = true;
+		PendingHSTraceStart = TraceStart;
+		PendingHSTraceEnd = TraceEnd;
 	}
 	//원거리 투사체 물체 생성
 	else if (AStat.AttackType == EAttackType::Shoot) {
@@ -2517,6 +2529,11 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 		}
 	}
 
+	//무기가 히트스캔 타입이면 히트스캔 추가 이펙트 재생 (적중/비적중 상관 없음)
+	if (bPendingHitScanEffect && NowWeapon) {
+		NowWeapon->PlayHitScanAdditionalAttackEffect(this, PendingHSTraceStart, PendingHSTraceEnd, AStat.AttackTargetType, TargetPlayerHits, TargetObjectsHits);
+	}
+
 	//공격 비적중시 공격 효과 발생
 	if (TargetPlayerHits.Num() == 0 && TargetObjectsHits.Num() == 0) {
 		LastAttackTime = GetWorld()->GetTimeSeconds();
@@ -2573,8 +2590,18 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 			bApplyKnockBack = NowWeapon->WeaponData->bApplyKnockBack;
 		}
 
+		FVector HitLocation = AttackHit.ImpactPoint;
+		if (HitLocation.IsNearlyZero()) {
+			HitLocation = AttackHit.Location;
+		}
+
+		FVector HitNormal = AttackHit.ImpactNormal;
+		if (HitNormal.IsNearlyZero()) {
+			HitNormal = FVector::UpVector;
+		}
+
 		//여기서 데미지 적용 함수 호출
-		HittedObject->ApplyDamageInternal(Damage, this, this, bApplyKnockBack, false);
+		HittedObject->ApplyDamageInternal(Damage, this, this, bApplyKnockBack, false, -1.f, true, HitLocation, HitNormal);
 		if (NowWeapon) {
 			NowWeapon->ApplyHitEffect(HittedObject, AttackHit);
 		}
@@ -2667,17 +2694,12 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	if (!HasAuthority()) return 0.f;
 	if (bIsOut) return 0.f;
 	if (bEndMatchState && !bForceDamage) return 0.f;
+	//강한 피격으로 인한 Reaction 재생 중에는 피해 x
 	if (bIsBigHitReaction && !bForceDamage) return 0.f;
 	if (Damage < 0) return 0.f;
-
-	/*플레이어가 무적 상태이고, bForceDamage가 false일 때 데미지 적용 x 구현부*/
-	if (ConditionComp && !bForceDamage) {
-		bool bHasDamageImmunity = ConditionComp->CheckCondition(FName("NoDamage"));
-		bool bHasInvincibility = ConditionComp->CheckCondition(FName("Invincible"));
-
-		if (bHasDamageImmunity || bHasInvincibility) {
-			return 0.f;
-		}
+	/*플레이어가 무적 상태이고, bForceDamage가 false일 때 데미지 적용 x*/
+	if (!bForceDamage && HavingDamageImmunity()){
+		return 0.f;
 	}
 
 	FVector AttackDir = FVector::ZeroVector;
@@ -2686,6 +2708,8 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	float KnockBackScale = 0.f;
 	int32 CurrentCoin = GetThePlayerState()->GetPlayerCoin();
 	float FinalDamage = FMath::Max(0.f, Damage);
+
+	bool bWasBigHitReaction = bIsBigHitReaction;
 
 	HP = FMath::Clamp(HP - FinalDamage, 0.0f, BaseStats.Max_HP);
 	OnRep_HP();
@@ -2708,7 +2732,26 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 			Server_SpawnLostCoin(dropCoinAmount);
 			LastLoseCoinHP = HP;
 		}
-		Multicast_PlayHitReaction(FinalDamage, true, false, AttackDir, false);
+
+		bool bBigHitOut = bWasBigHitReaction && bForceDamage;
+		if (bBigHitOut && BigHittedMontage) {
+			GetWorldTimerManager().ClearTimer(HittedResetTimerHandle);
+			GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);
+
+			bIsBigHitReaction = true;
+			bIsRecoverReaction = false;
+			bIsHitted = true;
+
+			bHitReactionUseNoArms = false;
+			Multicast_SetReactionUseNoArms(false);
+
+			Multicast_StopSlotAnimation(FName(TEXT("UpperBody")), 0.03f);
+
+			Multicast_HoldBigHitDeathPose();
+		}
+		else {
+			Multicast_PlayHitReaction(FinalDamage, true, false, AttackDir, false);
+		}
 		Out(AttackPlayer);
 		return FinalDamage;
 	}
@@ -2768,14 +2811,6 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("KnockBackStrength: %.1f, Scale: %.1f, Override: %.1f, Total: %.1f"),
-		KnockBackStrength,
-		KnockBackScale,
-		OverrideKnockBackStrength,
-		TotalKnockBackStrength
-	);
 
 	//플레이어 넉백 적용
 	if (AttackDir != FVector::ZeroVector && bApplyKnockBack) ApplyKnockBack(AttackDir, TotalKnockBackStrength, 0.f);
@@ -3050,9 +3085,12 @@ void APlayer_Character::SpawnCoinList(TArray<TSubclassOf<ACoin>>& CoinList, int3
 void APlayer_Character::Out(APlayer_Character* winnerplayer)
 {
 	if (bIsOut) return;
-	if (!ConditionComp) return;
 	if (!HasAuthority())return;
 	bIsOut = true;
+
+	CancelAimState();
+
+	Multicast_SetPlayerOverlayMaterialNoShowing();
 
 	//탈락하면 머리 위 위젯 제거
 	SetPlayerWidgetVisibility(false);
@@ -3063,6 +3101,10 @@ void APlayer_Character::Out(APlayer_Character* winnerplayer)
 	//변신 중이라면 즉시 변신 해제
 	if (TransformationComp && TransformationComp->IsTransformed()) {
 		TransformationComp->StopTransformation(true);
+	}
+
+	if (ConditionComp) {
+		ConditionComp->ClearAllConditionWhenPlayerOut();
 	}
 
 	//탈락시킨 플레이어와 탈락한 플레이어의 Score 변경
@@ -3382,7 +3424,174 @@ void APlayer_Character::RemoveSpeedControllerByPriority(int32 Priority)
 	UpdateMoveSpeed();
 }
 
+void APlayer_Character::AddImmunityController(FName ControllerName, EPlayerImmunityType type, int32 Priority, bool bCanEraseForce, float Duration)
+{
+	if (!HasAuthority()) return;
+	if (ControllerName.IsNone()) return;
+	if (type == EPlayerImmunityType::None) return;
 
+	//같은 이름의 컨트롤러가 들어오면 갱신
+	for (auto IT = ImmunityControllers.CreateIterator(); IT; ++IT) {
+		if (IT->ImmunityControllerName != ControllerName) continue;
+		if (IT->bCanEraseForce && !bCanEraseForce) return;
+		if (IT->ControllerTimerHandle.IsValid()) GetWorldTimerManager().ClearTimer(IT->ControllerTimerHandle);
+		IT.RemoveCurrent();
+	}
+
+	FDamageImmunityController NewController;
+	NewController.ImmunityControllerName = ControllerName;
+	NewController.Type = type;
+	NewController.Priority = Priority;
+	NewController.bCanEraseForce = bCanEraseForce;
+
+	//Duration이 0이하면 무한 지속 (직접 제거 전까지 제거 x)
+	if (Duration > 0.f) {
+		FTimerHandle NewTimerHandle;
+		GetWorldTimerManager().SetTimer(NewTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, ControllerName]() {
+			if (!IsValid(this)) return;
+			RemoveImmunityControllerByName(ControllerName, true);
+		}), Duration, false);
+	}
+
+	ImmunityControllers.Add(NewController);
+	ForceNetUpdate();
+}
+
+void APlayer_Character::RemoveImmunityControllerByName(FName ControllerName, bool EraseForce)
+{
+	if (!HasAuthority()) return;
+	if (ControllerName.IsNone()) return;
+
+	TSet<EPlayerImmunityType> ChangedTypes;
+	bool bRemovedAny = false;
+
+	for (auto IT = ImmunityControllers.CreateIterator(); IT; ++IT) {
+		if (IT->ImmunityControllerName != ControllerName) continue;
+		if(IT->bCanEraseForce && !EraseForce) continue;
+		
+		if (IT->ControllerTimerHandle.IsValid()) GetWorldTimerManager().ClearTimer(IT->ControllerTimerHandle);
+
+		ChangedTypes.Add(IT->Type);
+		IT.RemoveCurrent();
+		bRemovedAny = true;
+	}
+
+	if (!bRemovedAny) return;
+
+	for (EPlayerImmunityType ChangedType : ChangedTypes){
+		RefreshImmunityConditionEffects(ChangedType);
+	}
+
+	ForceNetUpdate();
+}
+
+void APlayer_Character::RemoveImmunityControllerByPriority(int32 priority)
+{
+	if (!HasAuthority()) return;
+
+	TSet<EPlayerImmunityType> ChangedTypes;
+	bool bRemovedAny = false;
+
+	for (auto IT = ImmunityControllers.CreateIterator(); IT; ++IT) {
+		if (IT->bCanEraseForce) continue;
+		if (IT->Priority < priority) {
+
+			if (IT->ControllerTimerHandle.IsValid()) GetWorldTimerManager().ClearTimer(IT->ControllerTimerHandle);
+
+			ChangedTypes.Add(IT->Type);
+			IT.RemoveCurrent();
+			bRemovedAny = true;
+		}
+	}
+
+	if (!bRemovedAny) return;
+
+	for (EPlayerImmunityType ChangedType : ChangedTypes) {
+		RefreshImmunityConditionEffects(ChangedType);
+	}
+
+	ForceNetUpdate();
+}
+
+void APlayer_Character::RemoveImmunityControllerByType(EPlayerImmunityType type)
+{
+	if (!HasAuthority()) return;
+	if (type == EPlayerImmunityType::None) return;
+
+	bool bRemovedAny = false;
+
+	for (auto IT = ImmunityControllers.CreateIterator(); IT; ++IT) {
+		if (IT->Type != type) continue;
+		if (IT->bCanEraseForce) continue;
+
+		if (IT->ControllerTimerHandle.IsValid()) GetWorldTimerManager().ClearTimer(IT->ControllerTimerHandle);
+
+		IT.RemoveCurrent();
+		bRemovedAny = true;
+	}
+
+	if (!bRemovedAny) return;
+
+	RefreshImmunityConditionEffects(type);
+
+	ForceNetUpdate();
+}
+
+FName APlayer_Character::GetConditionNameByImmunityType(EPlayerImmunityType type)
+{
+	switch (type)
+	{
+	case EPlayerImmunityType::DamageImmunity:
+		return FName(TEXT("NoDamage"));
+
+	case EPlayerImmunityType::DebuffImmunity:
+		return FName(TEXT("NoDebuff"));
+
+	case EPlayerImmunityType::Invincible:
+		return FName(TEXT("Invincible"));
+
+	default:
+		return NAME_None;
+	}
+}
+
+void APlayer_Character::RefreshImmunityConditionEffects(EPlayerImmunityType type)
+{
+	if (!HasAuthority()) return;
+	if (!ConditionComp) return;
+
+	if (HavingImmunity(type)) return;
+
+	FName ConditionName = GetConditionNameByImmunityType(type);
+	if (ConditionName.IsNone()) return;
+
+	// Condition이 있을 때만 제거
+	if (ConditionComp->CheckCondition(ConditionName)){
+		ConditionComp->RemoveSameNameCondition(ConditionName, false);
+	}
+}
+
+bool APlayer_Character::HavingImmunity(EPlayerImmunityType type)
+{
+	if (type == EPlayerImmunityType::None) return false;
+
+	for (const FDamageImmunityController& controller : ImmunityControllers){
+		if (controller.Type == type){
+			return true;
+		}
+	}
+	return false;
+}
+
+bool APlayer_Character::HavingDamageImmunity()
+{
+	return HavingImmunity(EPlayerImmunityType::DamageImmunity) || HavingImmunity(EPlayerImmunityType::Invincible);
+}
+
+bool APlayer_Character::HavingDebuffImmunity()
+{
+	return HavingImmunity(EPlayerImmunityType::DebuffImmunity) || HavingImmunity(EPlayerImmunityType::Invincible);
+}
 
 //현재 플레이어의 상태 데이터를 서버에서 획득
 APlayer_State* APlayer_Character::GetThePlayerState() {
@@ -3596,12 +3805,13 @@ void APlayer_Character::StartRecoverReaction()
 	Multicast_PlayOverrideMontage(BigHittedMontage, FName("End"), false, false);
 	float EndDuration = 0.5f;
 
-	int32 EndSectionIndex = BigHittedMontage->GetSectionIndex(FName("End"));
+	if (BigHittedMontage) {
+		int32 EndSectionIndex = BigHittedMontage->GetSectionIndex(FName("End"));
 
-	if (EndSectionIndex != INDEX_NONE) {
-		EndDuration = BigHittedMontage->GetSectionLength(EndSectionIndex);
+		if (EndSectionIndex != INDEX_NONE) {
+			EndDuration = BigHittedMontage->GetSectionLength(EndSectionIndex);
+		}
 	}
-
 	EndDuration = FMath::Max(0.01f, EndDuration - 0.025f);
 
 	GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);
@@ -3611,7 +3821,6 @@ void APlayer_Character::StartRecoverReaction()
 		if (!bIsRecoverReaction) return;
 		if (bIsOut || bEndMatchState) return;
 
-		//[크래쉬]
 		UWorld* World = GetWorld();
 		if (!World) return;
 
@@ -3620,10 +3829,9 @@ void APlayer_Character::StartRecoverReaction()
 
 		float RecoverDuration = 0.3f;
 		if (RecoverMontage) {
-			RecoverDuration = FMath::Max(0.01f, RecoverMontage->GetPlayLength());	//[크래쉬]
+			RecoverDuration = FMath::Max(0.01f, RecoverMontage->GetPlayLength());
 		}
 
-		//GetWorldTimerManager().ClearTimer(BigHitRecoverTimerHandle);	//[크래쉬]
 		GetWorldTimerManager().SetTimer(BigHitRecoverTimerHandle, this, &APlayer_Character::EndBigHitReaction, RecoverDuration, false);
 
 		}), EndDuration, false);
@@ -4332,6 +4540,63 @@ bool APlayer_Character::ShouldShowGameEffectForThisClient(const FGameEffectData&
 	return true;
 }
 
+void APlayer_Character::SetPlayerOverlayOpacityZero_Local()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp) return;
+
+	UMaterialInterface* CurrentOverlay = MeshComp->GetOverlayMaterial();
+
+	if (CurrentOverlay) {
+		UMaterialInstanceDynamic* CurrentMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay);
+
+		if (!CurrentMID) CurrentMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
+
+		if (CurrentMID) {
+			CurrentMID->SetScalarParameterValue(TEXT("Opacity"), 0.f);
+			MeshComp->SetOverlayMaterial(CurrentMID);
+		}
+	}
+
+	if (!PlayerDefaultOverlayMID && PlayerDefaultOverlayMaterial) {
+		PlayerDefaultOverlayMID = Cast<UMaterialInstanceDynamic>(PlayerDefaultOverlayMaterial);
+
+		if (!PlayerDefaultOverlayMID) PlayerDefaultOverlayMID = UMaterialInstanceDynamic::Create(PlayerDefaultOverlayMaterial, this);
+	}
+
+	if (PlayerDefaultOverlayMID) {
+		PlayerDefaultOverlayMID->SetScalarParameterValue(TEXT("Opacity"), 0.f);
+
+		MeshComp->SetOverlayMaterial(PlayerDefaultOverlayMID);
+	}
+	else MeshComp->SetOverlayMaterial(nullptr);
+
+	MeshComp->MarkRenderStateDirty();
+}
+
+void APlayer_Character::SearchPlayerDefaultOverlayMaterial()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp) return;
+
+	UMaterialInterface* CurrentOverlay = MeshComp->GetOverlayMaterial();
+
+	if (!CurrentOverlay) {
+		PlayerDefaultOverlayMaterial = nullptr;
+		PlayerDefaultOverlayMID = nullptr;
+		return;
+	}
+
+	PlayerDefaultOverlayMaterial = CurrentOverlay;
+	PlayerDefaultOverlayMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay);
+
+	if (!PlayerDefaultOverlayMID) PlayerDefaultOverlayMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
+	if (PlayerDefaultOverlayMID) {
+		MeshComp->SetOverlayMaterial(PlayerDefaultOverlayMID);
+		MeshComp->MarkRenderStateDirty();
+	}
+}
+
 
 /*----------------------------- RPC 모음 --------------------------------*/
 //Server RPC 모음
@@ -4629,23 +4894,92 @@ void APlayer_Character::Multicast_StopMontage_Implementation(UAnimMontage* Monta
 	AnimInstance->Montage_Stop(BlendOutTime, Montage);
 }
 
+void APlayer_Character::Multicast_HoldBigHitDeathPose_Implementation()
+{
+	if (!BigHittedMontage) return;
+
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	bHitReactionUseNoArms = false;
+
+	AnimInstance->StopSlotAnimation(0.03f, FName(TEXT("UpperBody")));
+
+	if (OutMontage) AnimInstance->Montage_Stop(0.f, OutMontage);
+	if (RecoverMontage) AnimInstance->Montage_Stop(0.f, RecoverMontage);
+
+	World->GetTimerManager().ClearTimer(BigHitDeathPauseTimerHandle);
+	float EndDuration = 0.f;
+
+	int32 EndSectionIndex = BigHittedMontage->GetSectionIndex(TEXT("End"));
+	if (EndSectionIndex != INDEX_NONE) EndDuration = FMath::Max(0.01f, EndDuration);
+
+	AnimInstance->Montage_Play(BigHittedMontage, 1.f);
+	AnimInstance->Montage_JumpToSection(TEXT("End"), BigHittedMontage);
+
+	float PauseDelay = FMath::Max(0.01f, EndDuration - 0.1f);
+
+	World->GetTimerManager().SetTimer(BigHitDeathPauseTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+		if (!BigHittedMontage) return;
+
+		UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+		if(!AnimInstance) return;
+
+		if (AnimInstance->Montage_IsPlaying(BigHittedMontage)) AnimInstance->Montage_Pause(BigHittedMontage);
+		else {
+			int32 EndSectionIndex = BigHittedMontage->GetSectionIndex(TEXT("End"));
+			if (EndSectionIndex == INDEX_NONE) return;
+
+			float SectionStartTime = 0.f;
+			float SectionEndTime = 0.f;
+
+			BigHittedMontage->GetSectionStartAndEndTime(EndSectionIndex, SectionStartTime, SectionEndTime);
+
+			float HoldPosition = FMath::Max(SectionStartTime, SectionEndTime - 0.025f);
+
+			AnimInstance->Montage_Play(BigHittedMontage, 1.f);
+			AnimInstance->Montage_SetPosition(BigHittedMontage, HoldPosition);
+			AnimInstance->Montage_Pause(BigHittedMontage);
+		}
+	}), PauseDelay, false);
+	
+}
+
 void APlayer_Character::Multicast_RefreshPersistEffectVisibility_Implementation()
 {
 	if (TransformationComp) TransformationComp->RefreshTransformLoopEffectVisibility();
 	if (ConditionComp) ConditionComp->RefreshConditionLoopEffectVisibility();
 }
 
+void APlayer_Character::Multicast_SetPlayerOverlayMaterialNoShowing_Implementation()
+{
+	SetPlayerOverlayOpacityZero_Local();
+}
+void APlayer_Character::Multicast_StopPhysicsOnKillPlane_Implementation()
+{
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement()) {
+		MoveComp->GravityScale = 0.f;
+		MoveComp->SetMovementMode(MOVE_Falling);
+		MoveComp->Velocity = FVector(0.f, 0.f, -SinkSpeed);
+	}
+}
 //Client RPC 모음
 //탈락 시 가라앉음 연출 RPC(Liquid)
 void APlayer_Character::Client_Out_Implementation()
 {
-	if (GetCharacterMovement()) {
+	CancelAimState();
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement()) {
 		if (bIsOnLiquidWhenOut) {
-			GetCharacterMovement()->GravityScale = 0.f;
-			GetCharacterMovement()->Velocity = FVector(0.f, 0.f, bEndMatchState ? -SinkSpeed : 0.f);
+			MoveComp->GravityScale = 0.f;
+			MoveComp->SetMovementMode(MOVE_Falling);
+			MoveComp->Velocity = FVector(0.f, 0.f, -SinkSpeed);
 		}
 		else {
-			GetCharacterMovement()->Velocity = FVector(0.f, 0.f, GetCharacterMovement()->Velocity.Z);
+			MoveComp->Velocity = FVector(0.f, 0.f, 0.f);
 		}
 	}
 	//로컬에서만 서버 위치(실제 위치)에 시각 보정 
@@ -4661,10 +4995,6 @@ void APlayer_Character::Client_Out_Implementation()
 			springArmComp->bEnableCameraLag = true;
 			springArmComp->CameraLagSpeed = 3.f;
 			springArmComp->CameraLagMaxDistance = 100.f;
-		}
-		//[사운드]
-		if (APlayerController* PC = Cast<APlayerController>(GetController())) {
-			PC->ClearAudioListenerOverride();
 		}
 	}
 }
@@ -4693,13 +5023,6 @@ void APlayer_Character::Client_EndAdditionalImage_Implementation()
 	if (AdditionalImageWidget) {
 		AdditionalImageWidget->PlayFadeOutAndRemove();
 		AdditionalImageWidget = nullptr;
-	}
-}
-
-void APlayer_Character::OnJumped_Implementation() {
-	Super::OnJumped_Implementation();
-	if (FootStepData && FootStepData->JumpSound) {
-		UGameplayStatics::PlaySoundAtLocation(this, FootStepData->JumpSound, GetActorLocation());
 	}
 }
 

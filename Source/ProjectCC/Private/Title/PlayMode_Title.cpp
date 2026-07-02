@@ -44,14 +44,12 @@ void APlayMode_Title::PreLogin(const FString& Options, const FString& Address, c
 
 	if (!HasAuthority()) return;
 
-	//[추가머지][버그] 뒤늦은 난입 방지
-	//인원이 꽉 차서 Ready 레벨로 넘어가는 중이라면 거부
+	//인원이 이미 가득차서 Ready로 넘어가는 중이라면 거부
 	if (bTravelingToReady) {
 		ErrorMessage = TEXT("Title : Match is already starting!");
 		return;
 	}
 	//인원수가 정원을 초과했다면 거부
-	//NumPlayers는 AGmaeModeBase가 관리하는 현재 접속 인원 변수
 	if (GetNumPlayers() >= MaxMatchPlayers) {
 		ErrorMessage = TEXT("Title : Room is Full!");
 		return;
@@ -115,7 +113,7 @@ void APlayMode_Title::CheckAutoStartReadyLevel()
 			if (UWorld* World = GetWorld()) {
 				World->ServerTravel(TravelURL);
 			}
-			});
+		});
 	}
 
 }

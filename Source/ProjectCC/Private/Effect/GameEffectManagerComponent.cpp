@@ -79,23 +79,35 @@ void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEf
 	if (!bHavingNiagara && !bHavingSound) return;
 
 	if (bHavingNiagara) {
-		UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), EffectData.NiagaraEffect, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), true, false);
+		bool bUseTranslationFollow = EffectData.bFollowSourceTranslationOnly && Context.SourceActor;
+		USceneComponent* AttachComp = Context.SourceComponent.Get();
 
-		if (NiagaraComp) {
-			bool bUseTranslationFollow = EffectData.bFollowSourceTranslationOnly && Context.SourceActor;
+		if (!AttachComp && !Context.SourceActor) AttachComp = Context.SourceActor->GetRootComponent();
+		if (!AttachComp) {
+			if (AActor* OwnerActor = GetOwner()) AttachComp = OwnerActor->GetRootComponent();
+		}
 
-			if (!bUseTranslationFollow && EffectData.bAttachToSourceWhenSpawned && Context.SourceComponent) {
-				NiagaraComp->AttachToComponent(Context.SourceComponent.Get(), FAttachmentTransformRules::KeepWorldTransform);
+		UNiagaraComponent* NiagaraComp = nullptr;
 
-				if (EffectData.bKeepWorldRotationWhenAttached) {
-					NiagaraComp->SetAbsolute(false, true, false);
-				}
+		if (!bUseTranslationFollow && EffectData.bAttachToSourceWhenSpawned && AttachComp)
+		{
+			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAttached(EffectData.NiagaraEffect, AttachComp, NAME_None, EffectData.LocationOffset, EffectData.RotationOffset, EAttachLocation::KeepRelativeOffset, true, false);
+			if (NiagaraComp) {
+				NiagaraComp->SetRelativeScale3D(EffectData.Scale);
+				if (EffectData.bKeepWorldRotationWhenAttached) NiagaraComp->SetAbsolute(false, true, false);
 			}
+		}
+		else {
+			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), EffectData.NiagaraEffect, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), true, false);
+		}
+				
+		if (NiagaraComp) {
+
 			ApplyGameEffectRuntimeParams(NiagaraComp, RuntimeParams);
 
 			if (EffectData.bOverrideNiagaraColor && !EffectData.NiagaraColorParamName.IsNone()) {
 				NiagaraComp->SetVariableLinearColor(EffectData.NiagaraColorParamName, EffectData.NiagaraColor);
-				NiagaraComp->SetVariableLinearColor(EffectData.SubEffectColorParamName, EffectData.NiagaraColor);
+				NiagaraComp->SetVariableLinearColor(EffectData.SubEffectColorParamName, EffectData.SubNiagaraColor);
 			}
 
 			if (bUseTranslationFollow) {
@@ -113,7 +125,6 @@ void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEf
 			NiagaraComp->Activate(true);
 		}
 	}
-
 	if (bHavingSound) {
 		UGameplayStatics::PlaySoundAtLocation(GetWorld(), EffectData.Sound, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator());
 	}
@@ -230,6 +241,12 @@ void UGameEffectManagerComponent::ApplyGameEffectRuntimeParams(UNiagaraComponent
 	for (const FGameEffectBoolParam& Param : RuntimeParams.BoolParams) {
 		if (!Param.ParamName.IsNone()) {
 			NiagaraComp->SetVariableBool(Param.ParamName, Param.Value);
+		}
+	}
+
+	for (const FGameEffectStaticMeshParam& Param : RuntimeParams.StaticMeshParams) {
+		if (!Param.ParamName.IsNone()) {
+			NiagaraComp->SetVariableStaticMesh(Param.ParamName, Param.Value);
 		}
 	}
 }

@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "DamageBlock.generated.h"
 
 class UBoxComponent;
@@ -39,6 +41,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Effect")
 	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<UAudioComponent> LifeTimeAudioComp;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	TObjectPtr<USoundBase> LifeTimeSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
 	float DamageAmount = 10.f;

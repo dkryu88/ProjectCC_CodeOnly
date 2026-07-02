@@ -35,6 +35,8 @@ void UPlayer_ControllerWidget::InitWidget(APlayer_Character* Player) {
 		Image_HitAlert->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
+	SetShopClosedState(false);
+
 	BindEvents();
 
 	SetMatchTime();
@@ -74,6 +76,7 @@ void UPlayer_ControllerWidget::NativeConstruct()
 		WeaponUseCountOneInside.Add(Image_WeaponUseCountOneInside);
 	}
 
+	SetShopClosedState(false);
 	HideWeaponUseCountUI();
 }
 
@@ -277,6 +280,11 @@ void UPlayer_ControllerWidget::SetShopButtonVisible(bool bVisible)
 	if (!Button_Shop) return;
 
 	Button_Shop->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
+void UPlayer_ControllerWidget::SetShopClosedState(bool bClosed)
+{
+	if (Image_ShopClosedOverlay) Image_ShopClosedOverlay->SetVisibility(bClosed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void UPlayer_ControllerWidget::SetMatchTime() {
@@ -616,28 +624,42 @@ void UPlayer_ControllerWidget::SetHPAlert(float NewHP, float MaxHP)
 	if (!Image_HitAlert) return;
 
 	if (!OwnerCharacter || OwnerCharacter->bIsOut) {
+		GetWorld()->GetTimerManager().ClearTimer(FadeTimerHandle);
 		Image_HitAlert->SetVisibility(ESlateVisibility::Collapsed);
-		return;
-	}
-
-	//데미지가 아닌 경우 보이지 않음
-	if (NewHP >= LastHitHP) {
 		LastHitHP = NewHP;
 		return;
 	}
 
-	LastHitHP = NewHP;
 	float HPPercent = MaxHP > 0.f ? FMath::Clamp(NewHP / MaxHP, 0.f, 1.f) : 0.f;
-	float FadeDuration = 0.5f;
+	float TargetOpacity = HPPercent < 3.f ? (1.f - HPPercent) : 0.f;
 
-	StartImageOpacity = HPPercent < 0.3f ? 1.f : FMath::Max(0.5f, HPPercent);
-	EndImageOpacity = HPPercent < 0.3f ? (1.f - HPPercent) : 0.f;
+	bool bDamaged = NewHP < LastHitHP;
+	bool bHealedOrSame = NewHP >= LastHitHP;
+
+	LastHitHP = NewHP;
+	GetWorld()->GetTimerManager().ClearTimer(FadeTimerHandle);
+
+	if (bDamaged) {
+		StartImageOpacity = HPPercent < 0.3f ? 1.f : FMath::Max(0.5f, HPPercent);
+		EndImageOpacity = TargetOpacity;
+	}
+	else if (bHealedOrSame) {
+		StartImageOpacity = Image_HitAlert->GetRenderOpacity();
+		EndImageOpacity = TargetOpacity;
+	}
+
+	float FadeDuration = 0.5f;
 	FadeElapsedTime = 0.f;
 
-	Image_HitAlert->SetRenderOpacity(StartImageOpacity);
-	Image_HitAlert->SetVisibility(ESlateVisibility::Visible);
+	if (StartImageOpacity <= 0.f && EndImageOpacity <= 0.f) {
+		Image_HitAlert->SetRenderOpacity(0.f);
+		Image_HitAlert->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
 
-	GetWorld()->GetTimerManager().ClearTimer(FadeTimerHandle);
+	Image_HitAlert->SetVisibility(ESlateVisibility::Visible);
+	Image_HitAlert->SetRenderOpacity(StartImageOpacity);
+
 	GetWorld()->GetTimerManager().SetTimer(FadeTimerHandle, this, &UPlayer_ControllerWidget::UpdateFadeOpacity, 0.015f, true);
 }
 

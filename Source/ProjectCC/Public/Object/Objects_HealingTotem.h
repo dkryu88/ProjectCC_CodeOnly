@@ -18,10 +18,12 @@ public:
 	AObjects_HealingTotem(const FObjectInitializer& ObjectInitializer);
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void Func_Persist_Implementation(float DeltaTime) override;
 	virtual void Func_Destroy_Implementation() override;
 	virtual void Func_ZeroLife_Implementation() override;
 	virtual void ApplyAdditionalSetting() override;
+	virtual void ApplyInteractionState(APlayer_Character* InterActionPlayer) override;
 
 	void UnifiedDestructionPath();
 
@@ -37,5 +39,23 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "HealData")
 	float HealAmount = 5.f;
 
+	UPROPERTY(EditAnywhere, Category = "Healing Totem")
+	float HealResumeCoolTime = 10.f;
+
+	UPROPERTY(EditAnywhere, Category = "Healing Totem")
+	FName HealEffectName = TEXT("HealEffect");
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SetLifeTimeEffectActive(bool bActive);
+
 	bool bIsDestroyed = false;
+	bool bHealPaused = false;
+	bool bResumeCoolDown = false;
+
+	FTimerHandle HealResumeCoolTimerHandle;
+
+	void FinishHealResumeCoolDown();
+	void PlayHealEffectOnPlayer(APlayer_Character* HealTarget);
+
+	void UpdateLifeTimeEffectActive_Local();
 };

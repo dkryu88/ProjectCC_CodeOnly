@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Match_PlayerController.h"
@@ -11,6 +11,9 @@
 #include "Shop/Match_ShopWidget.h"
 #include "Match_State.h"
 #include "EnhancedInputSubsystems.h"
+#include "AllPlayMode_SessionSubsystem.h"
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Sound/SoundDataAsset.h"
 #include "InputMappingContext.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Kismet/GameplayStatics.h"
@@ -27,6 +30,11 @@ void AMatch_PlayerController::BeginPlay() {
 
 	if (!IsLocalController()) return;
 
+	if (UAllPlayMode_SoundSubsystem* AudioSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		FString MatchMapName = UGameplayStatics::GetCurrentLevelName(this, true);
+		AudioSubsystem->PlayBGMByMapName(FName(*MatchMapName), 1.f);
+	}
+
 	GetWorldTimerManager().SetTimer(SetupRetryTimerHandle, this, &AMatch_PlayerController::TryFinishLocalSetup, SetupRetryInterval, true);
 }
 
@@ -39,19 +47,19 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 
 	TryFinishLocalSetup();
 
-	//ScreenWidgetì´ ì—†ìœ¼ë©´ ìƒˆë¡œ ìƒì„±
+	//ScreenWidgetÀÌ ¾øÀ¸¸é »õ·Î »ı¼º
 	if (Player_ControllerWidget && !ScreenWidget && GetLocalPlayer()) {
 		ScreenWidget = CreateWidget<UPlayer_ControllerWidget>(this, Player_ControllerWidget);
 		if (ScreenWidget) {
 			ScreenWidget->AddToViewport(0);
 		}
 	}
-	//ScreenWidgetì´ ìˆìœ¼ë©´ í˜„ì¬ ì†Œìœ ì¤‘ì¸ Playerë¥¼ ê¸°ì¤€ìœ¼ë¡œ ì´ˆê¸°í™”
+	//ScreenWidgetÀÌ ÀÖÀ¸¸é ÇöÀç ¼ÒÀ¯ÁßÀÎ Player¸¦ ±âÁØÀ¸·Î ÃÊ±âÈ­
 	if (ScreenWidget) {
 		APlayer_Character* player = Cast<APlayer_Character>(InPawn);
 		if (player) {
 			ScreenWidget->InitWidget(player);
-			//Shop ë²„íŠ¼ ë°”ì¸ë”©
+			//Shop ¹öÆ° ¹ÙÀÎµù
 			BindShopButton();
 		}	
 	}
@@ -76,7 +84,8 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 	UpdateShopButtonVisibility();
 
 	if (InPawn) {
-		ApplyGameInputMode();
+		if(bWaitingRespawn) ApplyUIInputMode();
+		else ApplyGameInputMode();
 	}
 
 	if (!bWaitingRespawn) {
@@ -205,9 +214,7 @@ void AMatch_PlayerController::ApplyUIInputMode()
 	SetInputMode(InputMode);
 
 	if (UGameViewportClient* GameViewportClient = GetWorld() ? GetWorld()->GetGameViewport() : nullptr) {
-		//GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown);
-		//GameViewportClient->SetMouseLockMode(EMouseLockMode::LockAlways);
-		GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);	//[ë¨¸ì§€][ë²„ê·¸]ì‚¬ë§ í›„ ë¦¬ìŠ¤í° ëŒ€ê¸° ìƒíƒœì—ì„œ ë§ˆìš°ìŠ¤ í¬ì¸í„° ë¯¸ì¶œë ¥ í•´ê²°(ìƒì  ì´ì´ì½˜ í´ë¦­ ê°€ëŠ¥í•˜ê²Œ)
+		GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);
 		GameViewportClient->SetMouseLockMode(EMouseLockMode::LockAlways);
 	}
 }
@@ -218,7 +225,7 @@ void AMatch_PlayerController::OnPressedSpaceKey()
 	if (!bWaitingRespawn) return;
 	if (!bCanRespawnNow) return;
 
-	//ë¦¬ìŠ¤í° ìš”ì²­ ì‹œ ì¦‰ì‹œ ìƒì  ë‹«ê¸°
+	//¸®½ºÆù ¿äÃ» ½Ã Áï½Ã »óÁ¡ ´İ±â
 	if (bShopOpen) {
 		CloseShop();
 	}
@@ -226,7 +233,7 @@ void AMatch_PlayerController::OnPressedSpaceKey()
 	Server_RequestRespawn();
 }
 
-//Out ìƒíƒœ UI ì „í™˜
+//Out »óÅÂ UI ÀüÈ¯
 void AMatch_PlayerController::SetOutWidget()
 {
 	if (!IsLocalPlayerController()) return;
@@ -242,7 +249,7 @@ void AMatch_PlayerController::SetOutWidget()
 		player->SetPlayerWidgetVisibility(false);
 	}
 }
-//í”Œë ˆì´ ìƒíƒœ UI ì „í™˜
+//ÇÃ·¹ÀÌ »óÅÂ UI ÀüÈ¯
 void AMatch_PlayerController::SetPlayWidget() {
 	if (!IsLocalPlayerController()) return;
 	if (!GetWorld()) return;
@@ -261,7 +268,7 @@ void AMatch_PlayerController::SetPlayWidget() {
 void AMatch_PlayerController::OpenScoreBoard()
 {
 	if (!IsLocalController()) return;
-	//ìƒì ì´ ì—´ë ¤ìˆëŠ” ìƒíƒœì—ì„œëŠ” ìŠ¤ì½”ì–´ë³´ë“œ ì—´ëŒ ë¶ˆê°€
+	//»óÁ¡ÀÌ ¿­·ÁÀÖ´Â »óÅÂ¿¡¼­´Â ½ºÄÚ¾îº¸µå ¿­¶÷ ºÒ°¡
 	if (bShopOpen) return;
 
 	if (!ScoreWidget && Match_ScoreBoardWidget) {
@@ -305,6 +312,12 @@ void AMatch_PlayerController::OpenShop()
 	if (!IsLocalController()) return;
 	if (!IsWaitingRespawn()) return;
 	if (bAlreadyPurchasedInShop) return;
+	if (bShopClosedForce) return;
+
+	//[Å¬¸¯]
+	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		AudioSub->PlayUIClickSound();
+	}
 
 	if (!ShopWidget && Match_ShopWidget) {
 		ShopWidget = CreateWidget<UMatch_ShopWidget>(this, Match_ShopWidget);
@@ -322,13 +335,13 @@ void AMatch_PlayerController::OpenShop()
 		CloseShop();
 		return;
 	}
-	//ìƒì  ì—´ê¸° ì „ì— ìŠ¤ì½”ì–´ë³´ë“œ ë‹«ê¸°
+	//»óÁ¡ ¿­±â Àü¿¡ ½ºÄÚ¾îº¸µå ´İ±â
 	CloseScoreBoard();
 
 	ShopWidget->SetVisibility(ESlateVisibility::Visible);
 	bShopOpen = true;
 
-	//Shop ë²„íŠ¼ì´ í¬ì»¤ìŠ¤ë¥¼ ë¨¹ì§€ ì•Šë„ë¡ Viewportì— í¬ì»¤ìŠ¤ ì´ë™
+	//Shop ¹öÆ°ÀÌ Æ÷Ä¿½º¸¦ ¸ÔÁö ¾Êµµ·Ï Viewport¿¡ Æ÷Ä¿½º ÀÌµ¿
 	UWidgetBlueprintLibrary::SetFocusToGameViewport();
 }
 
@@ -343,7 +356,7 @@ void AMatch_PlayerController::CloseShop()
 	UWidgetBlueprintLibrary::SetFocusToGameViewport();
 }
 
-/*--------------RPC ëª¨ìŒ -------------------*/
+/*--------------RPC ¸ğÀ½ -------------------*/
 void AMatch_PlayerController::Server_SubmitMatchData_Implementation(const FString& nickname, int32 portraitId)
 {
 	APlayer_State* Player_State = GetPlayerState<APlayer_State>();
@@ -360,13 +373,13 @@ void AMatch_PlayerController::Server_ReportMatchLoaded_Implementation()
 
 	Player_State->SetMatchLevelLoaded(true);
 
-	//ë§¤ì¹˜ ì‹œì‘ ì‹œ ë”œë ˆì´ ì„¤ì •
+	//¸ÅÄ¡ ½ÃÀÛ ½Ã µô·¹ÀÌ ¼³Á¤
 	if (APlayMode_Match* MatchMode = GetWorld()->GetAuthGameMode<APlayMode_Match>()) {
 		MatchMode->CheckAllPlayersLoadedAndStartDelay();
 	}
 }
 
-//ì„œë²„ì— ìˆ˜ë™ ë¦¬ìŠ¤í° ìš”ì²­
+//¼­¹ö¿¡ ¼öµ¿ ¸®½ºÆù ¿äÃ»
 void AMatch_PlayerController::Server_RequestRespawn_Implementation()
 {
 	APlayMode_Match* Match = GetWorld()->GetAuthGameMode<APlayMode_Match>();
@@ -375,7 +388,7 @@ void AMatch_PlayerController::Server_RequestRespawn_Implementation()
 	}
 }
 
-//ì„œë²„ì— êµ¬ë§¤ ìš”ì²­ Server RPC
+//¼­¹ö¿¡ ±¸¸Å ¿äÃ» Server RPC
 void AMatch_PlayerController::Server_Purchase_Implementation(EShopBoxs Box)
 {
 	APlayMode_Match* MatchMode = GetWorld() ? GetWorld()->GetAuthGameMode<APlayMode_Match>() : nullptr;
@@ -388,11 +401,12 @@ void AMatch_PlayerController::Server_Purchase_Implementation(EShopBoxs Box)
 	Client_ShopPurchaseResult(bSuccess);
 }
 
-//ê´€ì „ ì‹œì‘ Client RPC
+//°üÀü ½ÃÀÛ Client RPC
 void AMatch_PlayerController::Client_StartSpectating_Implementation(AActor* SpectatorTarget)
 {
 	if (!IsLocalController()) return;
 
+	ApplyUIInputMode();
 	bAutoManageActiveCameraTarget = false;
 
 	if (SpectatorTarget) {
@@ -401,29 +415,33 @@ void AMatch_PlayerController::Client_StartSpectating_Implementation(AActor* Spec
 
 	SetOutWidget();
 }
-//UI ì…ë ¥ ëª¨ë“œ Client RPC
+//UI ÀÔ·Â ¸ğµå Client RPC
 void AMatch_PlayerController::Client_ApplyUIInputMode_Implementation()
 {
 	ApplyUIInputMode();
 }
 
-//Game ì…ë ¥ ëª¨ë“œ Client RPC
+//Game ÀÔ·Â ¸ğµå Client RPC
 void AMatch_PlayerController::Client_ApplyGameInputMode_Implementation()
 {
 	ApplyGameInputMode();
 }
 
-//í˜„ì¬ ë¦¬ìŠ¤í° ë°ì´í„°ë¥¼ ì„¸íŒ… Client RPC
+//ÇöÀç ¸®½ºÆù µ¥ÀÌÅÍ¸¦ ¼¼ÆÃ Client RPC
 void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaiting, bool bCanRespawn)
 {
+	if (!IsLocalController()) return;
+
 	bWaitingRespawn = bWaiting;
 	bCanRespawnNow = bCanRespawn;
 
 	if (!bWaitingRespawn) {
 		CloseShop();
+		ApplyGameInputMode();
 	}
 	else {
 		bAlreadyPurchasedInShop = false;
+		ApplyUIInputMode();
 	}
 
 	if (!ScreenWidget) return;
@@ -432,18 +450,14 @@ void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaitin
 		ScreenWidget->SetUIState(EPlayerUIState::RespawnWaiting);
 
 		if (bCanRespawnNow) ScreenWidget->ShowCanRespawnText();
-
-		Client_ApplyUIInputMode();
 	}
 	else {
 		AMatch_State* MS = GetWorld() ? GetWorld()->GetGameState<AMatch_State>() : nullptr;
 		if (MS && MS->IsMatchStarted()) {
 			ScreenWidget->SetUIState(EPlayerUIState::Playing);
-			Client_ApplyGameInputMode();
 		}
 		else {
 			ScreenWidget->SetUIState(EPlayerUIState::StartWaiting);
-			Client_ApplyGameInputMode();
 		}
 	}
 
@@ -461,12 +475,14 @@ void AMatch_PlayerController::Client_StartSpectatingPlayer_Implementation(APlaye
 	}
 
 	SetOutWidget();
+	ApplyUIInputMode();
 }
 
 void AMatch_PlayerController::Client_StartSpectatingDefaultCamera_Implementation()
 {
 	if (!IsLocalController()) return;
 
+	ApplyUIInputMode();
 	bAutoManageActiveCameraTarget = false;
 
 	TArray<AActor*> DefaultCameras;
@@ -486,7 +502,7 @@ void AMatch_PlayerController::Client_StartSpectatingDefaultCamera_Implementation
 		SetOutWidget();
 		return;
 	}
-	//ì—†ìœ¼ë©´ í°ì¼
+	//¾øÀ¸¸é Å«ÀÏ
 	UE_LOG(LogTemp, Error, TEXT("[Spectate][Client] No Default Camera found in local world"));
 }
 
@@ -512,6 +528,21 @@ void AMatch_PlayerController::Client_UpdateCountDown_Implementation(int32 number
 		ScreenWidget->SetUIState(EPlayerUIState::Countdown);
 		ScreenWidget->SetCountdown(number);
 	}
+
+	if (number == 6) {
+		if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			if (SoundSubsystem->GetAudioData() && SoundSubsystem->GetAudioData()->CountDownSound) {
+				SoundSubsystem->StartDucking(0.3f, 0.5f);
+				SoundSubsystem->PlayOneShotSFX(SoundSubsystem->GetAudioData()->CountDownSound);
+			}
+		}
+	}
+
+	if (number == 1) {
+		if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			SoundSubsystem->StopDucking(0.5f);
+		}
+	}
 }
 
 void AMatch_PlayerController::Client_StartPlayingUI_Implementation()
@@ -533,17 +564,32 @@ void AMatch_PlayerController::Client_EndMatch_Implementation()
 	EndMatch();
 }
 
-//êµ¬ë§¤ ì„±ê³µ ì•Œë¦¼ Client RPC
+//±¸¸Å ¼º°ø ¾Ë¸² Client RPC
 void AMatch_PlayerController::Client_ShopPurchaseResult_Implementation(bool bSuccess)
 {
 	if (!IsLocalController()) return;
+
+	//[Å¬¸¯]
+	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		if (AudioSub->GetAudioData()) {
+			if (bSuccess) {
+				// ±¸¸Å ¼º°ø »ç¿îµå
+				AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->PurchaseSuccessSound);
+			}
+			else {
+				// ±¸¸Å ½ÇÆĞ »ç¿îµå
+				AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->PurchaseFailSound);
+			}
+		}
+	}
+
 	if (!bSuccess) return;
 	
-	//êµ¬ë§¤ ì™„ë£Œ ìƒíƒœë¡œ ë³€ê²½
+	//±¸¸Å ¿Ï·á »óÅÂ·Î º¯°æ
 	bAlreadyPurchasedInShop = true;
-	//ìƒì  ë‹«ê¸°
+	//»óÁ¡ ´İ±â
 	CloseShop();
-	//ìƒì  ë²„íŠ¼ ìˆ¨ê¹€ì²˜ë¦¬
+	//»óÁ¡ ¹öÆ° ¼û±èÃ³¸®
 	UpdateShopButtonVisibility();
 }
 
@@ -552,6 +598,15 @@ void AMatch_PlayerController::Client_UpdateMatchEventCountdown_Implementation(FN
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventCountdown(EventName, SecondsUntilEvent);
 	}
+
+	if (SecondsUntilEvent == 3) {
+		if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			SoundSubsystem->StartDucking(1.5f, 0.3f);
+			if (SoundSubsystem->GetAudioData() && SoundSubsystem->GetAudioData()->EventWarningSound) {
+				SoundSubsystem->PlayManagedSFX(SoundSubsystem->GetAudioData()->EventWarningSound, 1.f);
+			}
+		}
+	}
 }
 
 void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName EventName, int32 RemainSeconds)
@@ -559,10 +614,51 @@ void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName E
 	if (ScreenWidget) {
 		ScreenWidget->ShowMatchEventActive(EventName, RemainSeconds);
 	}
+
+	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		SoundSubsystem->StartDucking(1.5f, 0.3f);
+		if (SoundSubsystem->GetAudioData() && SoundSubsystem->GetAudioData()->EventWarningSound) {
+			SoundSubsystem->StopManagedSFX(SoundSubsystem->GetAudioData()->EventWarningSound);
+		}
+		//Å×½ºÆ®
+		SoundSubsystem->StopDucking(1.5f);
+		SoundSubsystem->SetBGMPitch(1.5f);
+	}
 }
 
 void AMatch_PlayerController::Client_HideMatchEventUI_Implementation() {
 	if (ScreenWidget) {
 		ScreenWidget->HideMatchEventUI();
 	}
+	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		SoundSubsystem->SetBGMPitch(1.f);
+	}
 }
+
+void AMatch_PlayerController::Client_SetShopClosed_Implementation(bool bClosed)
+{
+	if (!IsLocalController()) return;
+	bShopClosedForce = bClosed;
+	
+	if (bClosed && bShopOpen) CloseShop();
+	if (ScreenWidget) ScreenWidget->SetShopClosedState(bClosed);
+
+	UpdateShopButtonVisibility();
+}
+
+void AMatch_PlayerController::Client_FadeOutBGM_Implementation()
+{
+	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		SoundSubsystem->StopBGM(2.f);
+	}
+}
+
+//[Ãß°¡]
+void AMatch_PlayerController::Client_PlayBGM30Sec_Implementation()
+{
+	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		FString matchMapName = UGameplayStatics::GetCurrentLevelName(this, true);
+		SoundSubsystem->PlayBGM30SecByMapName(FName(*matchMapName), 2.f);
+	}
+}
+

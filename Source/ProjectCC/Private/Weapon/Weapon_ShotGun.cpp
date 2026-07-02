@@ -7,6 +7,7 @@
 #include "Objects.h"
 #include "ObjectsDataAsset.h"
 #include "WeaponDataAsset.h"
+#include "Effect/GameEffectManagerComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -14,14 +15,15 @@
 bool AWeapon_ShotGun::InteractionWeaponFunction (EFunctionInterActionReason Reason)
 {
 	if (Reason == EFunctionInterActionReason::Attack) {
-		if (FirePellets()) return false;
+		FirePellets();
+		return false;
 	}
 	return true;
 }
 
 bool AWeapon_ShotGun::FirePellets()
 {
-	if (!EquippedPlayer && !WeaponData) return false;
+	if (!EquippedPlayer || !WeaponData) return false;
 
 	bool bAnyHit = false;
 
@@ -40,6 +42,8 @@ bool AWeapon_ShotGun::FirePellets()
 		float SpreadAngle = FMath::RandRange(-WeaponData->Stats.AttackDegree * 0.5f, WeaponData->Stats.AttackDegree * 0.5f);
 		FVector PelletDir = Forward.RotateAngleAxis(SpreadAngle, FVector::UpVector).GetSafeNormal();
 		FVector PelletEnd = EquippedPlayer->GetActorLocation() + PelletDir * (WeaponData->Stats.AttackRange * EquippedPlayer->NowMap->BlockSize);
+
+		PlayBulletEffect(PelletEnd);
 
 		TArray<FHitResult> PelletHits;
 		TSet<AActor*> PelletHitActors;
@@ -63,6 +67,10 @@ bool AWeapon_ShotGun::FirePellets()
 			AActor* HitActor = Hit.GetActor();
 			// 유효하지 않거나 이미 이 탄알에 맞은 액터는 스킵
 			if (!HitActor || PelletHitActors.Contains(HitActor)) continue;
+			//발사 주체자는 제외
+			if (HitActor == EquippedPlayer) continue;
+			//발사 주체자의 Support물체는 제외
+			if (EquippedPlayer->NowSupport && HitActor == EquippedPlayer->NowSupport) continue;
 			// 중복 데미지 방지를 위해 등록
 			PelletHitActors.Add(HitActor);
 
@@ -90,6 +98,43 @@ bool AWeapon_ShotGun::FirePellets()
 			}
 		}
 	}
+	UseWeapon();
 	return bAnyHit;
+}
+
+void AWeapon_ShotGun::PlayBulletEffect(const FVector& EndPoint)
+{
+	if (!HasAuthority()) return;
+	if (!EquippedPlayer) return;
+	if (!EquippedPlayer->EffectManagerComp) return;
+	if (!WeaponData) return;
+
+	FGameEffectData* EffectData = WeaponData->CustomEffects.Find(TEXT("BulletEffect"));
+	if (!EffectData) return;
+
+	FTransform SocketTransform = GetActorTransform();
+	if (Mesh) {
+		if (Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"))) {
+			SocketTransform = Mesh->GetSocketTransform(TEXT("SK_WeaponAttackPoint"), RTS_World);
+		}
+		else SocketTransform = Mesh->GetComponentTransform();
+	}
+
+	FVector SocketStart = SocketTransform.GetLocation();
+
+	FVector BulletDir = EndPoint - SocketStart;
+	BulletDir = BulletDir.GetSafeNormal();
+	if (BulletDir.IsNearlyZero()) return;
+
+	FGameEffectContext Context;
+	Context.SourceActor = this;
+	Context.SourceComponent = Mesh;
+	Context.WorldLocation = SocketStart;
+	Context.WorldRotation = BulletDir.Rotation();
+
+	FGameEffectRuntimeParams Params;
+	Params.AddVectorParam(TEXT("User.Direction"), BulletDir);
+
+	EquippedPlayer->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params);
 }
 

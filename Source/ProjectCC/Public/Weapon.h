@@ -45,6 +45,12 @@ public:
 	//각 무기 데이터
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WeaponData")
 	TObjectPtr<UWeaponDataAsset> WeaponData;
+	//무기 오버레이 머터리얼의 다이나믹 머터리얼 인스턴스
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> WeaponOverlayMID;
+	//무기 오버레이 머터리얼 데이터
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> TheWeaponOverlayMaterial;
 	//남은 사용 횟수 (서버에서 관리)
 	UPROPERTY(ReplicatedUsing = OnRep_NowUseCount)
 	int32 NowUseCount = -2;
@@ -94,6 +100,12 @@ public:
 	UFUNCTION()
 	void OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 	FTimerHandle ThrowDamageClearTimerHandle;
+	//-------------------------------------------
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SetWeaponOverlayOpacity(float opacity);
+	//--------------------------------------------
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayHitScanAdditionalAttackEffect_Local(FVector_NetQuantize10 WorldEnd, FVector_NetQuantizeNormal WorldDirection);
 public:
 	//현재 무기를 세팅
 	void SetWeapon(TSubclassOf<AWeapon> InClass) { Weapon = InClass; }
@@ -182,6 +194,13 @@ public:
 	void PlayWeaponHitEffect(AActor* Target, const FHitResult& AttackHit);
 	void PlayAttackEffectByNotify(APlayer_Character* Player);
 	virtual FGameEffectData* GetWeaponHitEffectData();
+
+	bool GetHitScanEffectStartLocation(FVector& StartLocation);
+	void PlayHitScanAdditionalAttackEffect(APlayer_Character* Player, const FVector& TraceStart, const FVector& TraceEnd, EAttackTargetType AttackTargetType, const TArray<FHitResult>& TargetPlayerHits, const TArray<FHitResult>& TargetObjectsHits);
+
+	//무기 오버레이 머터리얼 관련
+	void SetWeaponOverlayOpacity_Local(float opacity);
+	UMaterialInstanceDynamic* GetOrCreateWeaponOverlayMID();
 };
 
 //효과 구현은 Equipment에 있는 효과 함수를 Override 하여 사용

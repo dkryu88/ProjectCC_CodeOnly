@@ -28,5 +28,8 @@ public:
 	// AttackInternal에서 Cast 후 호출 — 탄알별 LineTrace 수행 후 피격 여부 반환
 	bool FirePellets();
 
+	void PlayBulletEffect(const FVector& EndPoint);
+	
+
 	virtual bool InteractionWeaponFunction(EFunctionInterActionReason Reason) override;
 };

@@ -5,6 +5,9 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "PlayerTransformations.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "MaterialTypes.h"
 #include "PlayerTransformationComponent.generated.h"
 
 class APlayer_Character;
@@ -60,11 +63,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Transformation")
 	bool IsTransformed() const { return CurrentTransformation.bActive; }
 
+	UFUNCTION(BlueprintCallable, Category = "Transformation|Overlay")
+	void NotifyPlayerOverlayMaterialChanged();
+
+	UPROPERTY(Transient)
+	bool bNoShowingPlayerOverlayMaterialDuringTransformation = false;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> OwnedNoShowingOverlayMIDs;
+
 	UPROPERTY()
 	TObjectPtr<APlayer_Character> AppliedPlayer;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Transformation)
 	FPlayerTransformation CurrentTransformation;
+public:
+	TMap<TWeakObjectPtr<UMaterialInstanceDynamic>, float> NoShowingOverlayOriginalOpacityMap;
 
 public:
 	//변신 행동 제약
@@ -89,6 +103,12 @@ public:
 
 	void NotifyHittedDuringTransformation(APlayer_Character* AttackedPlayer);
 
+	void SetPlayerOverlayNoShowing_Local(bool bNoShowing);
+	void EnforcePlayerOverlayNoShowing_Local();
+	void RestorePlayerOverlayToShowing_Local();
+
+	UMaterialInstanceDynamic* GetOrCreateSuppressibleOverlayMID(UMeshComponent* MeshComp);
+	float ReadOverlayOpacity(UMaterialInterface* Material);
 protected:
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> TransformStaticMesh;

@@ -165,4 +165,8 @@ public:
 	void RefreshMatchModeButtons();
 	void UpdateSelectedFrameTargetPosition();
 	void SnapSelectedFrameToTargetLocation();
+
+	//[Å¬¸¯]
+	UFUNCTION()
+	void PlayCommonUIClickSound();
 };

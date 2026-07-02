@@ -59,11 +59,7 @@ void AMapObjects_Meteor::OnLanded(const FHitResult& Hit)
 	PawnQuery.AddObjectTypesToQuery(ECC_Pawn); // Pawn 채널만 쿼리 
 
 	TArray<FOverlapResult> Overlaps;
-	GetWorld()->OverlapMultiByObjectType(
-		Overlaps, LandCenter, FQuat::Identity,
-		PawnQuery,
-		FCollisionShape::MakeBox(FVector(BS * 0.5f * 3, BS * 0.5f * 3, BS)) // 1칸 범위 박스
-	);
+	GetWorld()->OverlapMultiByObjectType(Overlaps, LandCenter, FQuat::Identity, PawnQuery, FCollisionShape::MakeBox(FVector(BS, BS, BS))); //2 x 2칸 범위 박스
 
 	for (const FOverlapResult& Result : Overlaps) {
 		APlayer_Character* Target = Cast<APlayer_Character>(Result.GetActor());
@@ -74,7 +70,7 @@ void AMapObjects_Meteor::OnLanded(const FHitResult& Hit)
 	}
 
 	if (Area_FireArea) {
-		SpawnArea(Area_FireArea, GetAreaCenterLocation(), this, nullptr, nullptr, 1, 1); // 착지 위치에 1칸 화염 지역 생성
+		SpawnArea(Area_FireArea, GetAreaCenterLocation(), this, nullptr, nullptr, 1, 1); // 착지 위치에 3x3칸 화염 지역 생성
 	}
 
 	Destroy(); // 착지 후 자신 파괴

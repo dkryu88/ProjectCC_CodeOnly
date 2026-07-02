@@ -43,7 +43,7 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 		HittedPlayerController = Cast<AMatch_PlayerController>(HittedPlayer->GetController());
 	}
 
-	if (HittedPlayer && HittedPlayer != OwnPlayer && HittedPlayerController != OwnPlayerController) {
+	if (HittedPlayer && (HittedPlayer != OwnPlayer || HittedPlayerController != OwnPlayerController)) {
 		bIsExploded = true;
 
 		FVector ExplosionOrigin = GetActorLocation();

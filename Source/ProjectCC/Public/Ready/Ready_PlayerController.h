@@ -30,7 +30,7 @@ public:
 
 	//매치 모드 Player_State에 데이터 전송
 	UFUNCTION(Server, Reliable)
-	void Server_SubmitData(const FString& nickname, int32 portraitId);
+	void Server_SubmitData(const FString& nickname);
 
 protected:
 	UPROPERTY(EditDefaultsOnly)

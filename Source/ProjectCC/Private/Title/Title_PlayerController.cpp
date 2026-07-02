@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Title/Title_PlayerController.h"
@@ -7,6 +7,8 @@
 #include "Title/Title_AdditionalWidget.h"
 #include "AllPlayMode_GameInstance.h"
 #include "AllPlayMode_SessionSubsystem.h"
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Sound/SoundDataAsset.h"
 #include "Camera/CameraActor.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/UserWidget.h"
@@ -26,6 +28,7 @@ ATitle_PlayerController::ATitle_PlayerController()
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
 	bEnableMouseOverEvents = true;
+	//DefaultMouseCursor = EMouseCursor::Default;	//Å×½ºÆ®
 }
 
 void ATitle_PlayerController::BeginPlay()
@@ -34,7 +37,7 @@ void ATitle_PlayerController::BeginPlay()
 
 	SetTitleInputMode();
 
-
+	//[ÀÚµ¿¸ÅÄª¹ö±×] À§Ä¡ ÀÌµ¿
 	CreateAndShowTitleWidget();
 	FindPreviewActor();
 	FindAndSetTitleCamera();
@@ -44,37 +47,38 @@ void ATitle_PlayerController::BeginPlay()
 			SessionSubsystem->OnSessionStateChanged.AddDynamic(this, &ATitle_PlayerController::HandleSessionStateChanged);
 			HandleSessionStateChanged(SessionSubsystem->LastUIState, SessionSubsystem->LastUIMessage);
 
-			//[ë¨¸ì§€][ë²„ê·¸]Resultì—ì„œ Titleë¡œ ë„˜ì–´ê°ˆ ë•Œ ì„¸ì…˜ì„ ì¢…ë£Œì‹œí‚¤ê¸° ìœ„í•´ ì‚¬ìš©í•œ CancelQuickMatchLANí•¨ìˆ˜ì— ì˜í•´ Matching Cancelled! ê°€ ë³´ì—¬ì§€ëŠ”ê²ƒ ì—†ì• ê¸°
 			if (SessionSubsystem->LastUIState == ESessionUIState::None) {
-				SessionSubsystem->LastUIMessage = TEXT("");	//ìµœì´ˆ ì‹¤í–‰ë•Œ ì²˜ëŸ¼ ì•„ë¬´ê²ƒë„ ì—†ëŠ”ê±¸ë¡œ ë³´ì„
+				SessionSubsystem->LastUIMessage = TEXT("");
 			}
 
-			//[ë¨¸ì§€][ë²„ê·¸]ìë™ë§¤ì¹­ ë¡œì§ ì¶”ê°€
 			if (GameInstance->bAutoRestartMatch) {
-				GameInstance->bAutoRestartMatch = false;	//í”Œë ˆê·¸ ë„ê¸°
+				GameInstance->bAutoRestartMatch = false;	//ÇÃ·¹±× ²ô±â
 
 				if (TitleWidgetInstance) {
-					TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Connection Lost. ReMatching...")));	//[ì¶”ê°€ë¨¸ì§€]í…ìŠ¤íŠ¸ ìˆ˜ì • : í˜¸ìŠ¤íŠ¸ìº”ìŠ¬ + ì…êµ¬ì»·
-					TitleWidgetInstance->SetMatchingMode(true);	// ì´ ë•Œ ì·¨ì†Œë²„íŠ¼ ëˆ„ë¥¼ ìˆ˜ ìˆê²Œ í™œì„±í™”
+					TitleWidgetInstance->SetStatusMessageShowing(FText::FromString(TEXT("Connection Lost. ReMatching...")));
+					TitleWidgetInstance->SetMatchingMode(true);	// ÀÌ ¶§ Ãë¼Ò¹öÆ° ´©¸¦ ¼ö ÀÖ°Ô È°¼ºÈ­
 				}
 
-				//[ìë™ë§¤ì¹­ë²„ê·¸ìˆ˜ì •][ë¨¸ì§€]2ì´ˆ ë’¤ ë§¤ì¹­ ì‹œì‘
+				//2ÃÊ µÚ ¸ÅÄª ½ÃÀÛ
 				GetWorld()->GetTimerManager().SetTimer(AutoRestartTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, GameInstance]() {
-					
-					if(!AutoRestartTimerHandle.IsValid()) {
-						UE_LOG(LogTemp, Warning, TEXT("AutoRematch was cancelled by User."));
-						return;
-					}
-					
+					if (!AutoRestartTimerHandle.IsValid()) return;
 					if (UAllPlayMode_SessionSubsystem* Subsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
-						// ë§¤ì¹­ ì‹œë„
+						// ¸ÅÄª ½Ãµµ
 						Subsystem->QuickMatchLAN();
-						UE_LOG(LogTemp, Warning, TEXT("AutoRematch Start!"));
 					}
-					}), 2.f, false);
+				}), 2.f, false);
 			}
 		}
 	}
+
+	if (IsLocalController()) {
+		if (UAllPlayMode_SoundSubsystem* AudioSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			if (AudioSubsystem->GetAudioData() && AudioSubsystem->GetAudioData()->TitleBGM) {
+				AudioSubsystem->PlayBGM(AudioSubsystem->GetAudioData()->TitleBGM, 0.5f);
+			}
+		}
+	}
+
 }
 
 void ATitle_PlayerController::PlayerTick(float DeltaTime)
@@ -84,7 +88,7 @@ void ATitle_PlayerController::PlayerTick(float DeltaTime)
 	UpdatePreviewRotation();
 }
 
-//íƒ€ì´í‹€ í™”ë©´ í‚¤ ë°”ì¸ë”©
+//Å¸ÀÌÆ² È­¸é Å° ¹ÙÀÎµù
 void ATitle_PlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
@@ -97,7 +101,7 @@ void ATitle_PlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ATitle_PlayerController::ToggleAdditionalWidget);
 }
 
-//íƒ€ì´í‹€ í™”ë©´ ì…ë ¥ ì„¤ì •
+//Å¸ÀÌÆ² È­¸é ÀÔ·Â ¼³Á¤
 void ATitle_PlayerController::SetTitleInputMode()
 {
 	bShowMouseCursor = true;
@@ -105,14 +109,14 @@ void ATitle_PlayerController::SetTitleInputMode()
 	bEnableMouseOverEvents = true;
 
 	FInputModeGameAndUI InputMode;
-	//ë§ˆìš°ìŠ¤ ì…ë ¥ íšë“ ì¤‘ì—ë„ ì»¤ì„œë¥¼ ìˆ¨ê¸°ì§€ ì•ŠìŒ
+	//¸¶¿ì½º ÀÔ·Â È¹µæ Áß¿¡µµ Ä¿¼­¸¦ ¼û±âÁö ¾ÊÀ½
 	InputMode.SetHideCursorDuringCapture(false);
-	//ë§ˆìš°ìŠ¤ë¥¼ Viewì— ê°•ì œë¡œ ê°€ë‘ì§€ ì•Šë„ë¡ ì„¤ì •
+	//¸¶¿ì½º¸¦ View¿¡ °­Á¦·Î °¡µÎÁö ¾Êµµ·Ï ¼³Á¤
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
-
+	
 }
-//ì¶”ê°€ ìœ„ì ¯ ì—´ê¸°/ë‹«ê¸°
+//Ãß°¡ À§Á¬ ¿­±â/´İ±â
 void ATitle_PlayerController::ToggleAdditionalWidget()
 {
 	if (!IsLocalController()) return;
@@ -138,16 +142,18 @@ void ATitle_PlayerController::ToggleAdditionalWidget()
 		TitleWidgetInstance->Button_Exit->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
-//ì¶”ê°€ ìœ„ì ¯ ë‹«ê¸°
+//Ãß°¡ À§Á¬ ´İ±â
 void ATitle_PlayerController::CloseAdditionalWidget()
 {
 	if (!IsLocalController()) return;
 	if (!AdditionalWidget) return;
 
 	AdditionalWidget->SetVisibility(ESlateVisibility::Collapsed);
+	//[x¹öÆ°]
+	TitleWidgetInstance->Button_Exit->SetVisibility(ESlateVisibility::Visible);
 }
 
-//ê²Œì„ ì¢…ë£Œ
+//°ÔÀÓ Á¾·á
 void ATitle_PlayerController::ConfirmQuitGame()
 {
 	if (!IsLocalController()) return;
@@ -155,7 +161,7 @@ void ATitle_PlayerController::ConfirmQuitGame()
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
-//íƒ€ì´í‹€ í™”ë©´ ì¹´ë©”ë¼ ê²€ìƒ‰ ë° ì„¤ì •
+//Å¸ÀÌÆ² È­¸é Ä«¸Ş¶ó °Ë»ö ¹× ¼³Á¤
 void ATitle_PlayerController::FindAndSetTitleCamera()
 {
 	TArray<AActor*> FoundCameras;
@@ -169,28 +175,28 @@ void ATitle_PlayerController::FindAndSetTitleCamera()
 		}
 	}
 
-	//íƒ€ì´í‹€ ì¹´ë©”ë¼ê°€ ì—†ëŠ”ë° ë°œê²¬ëœ ì¹´ë©”ë¼ì˜ ìˆ˜ê°€ 1ì´ìƒì´ë¼ë©´ ì²«ë²ˆì§¸ ì¹´ë©”ë¼ë¥¼ ì‚¬ìš©
+	//Å¸ÀÌÆ² Ä«¸Ş¶ó°¡ ¾ø´Âµ¥ ¹ß°ßµÈ Ä«¸Ş¶óÀÇ ¼ö°¡ 1ÀÌ»óÀÌ¶ó¸é Ã¹¹øÂ° Ä«¸Ş¶ó¸¦ »ç¿ë
 	if (!TitleCamera && FoundCameras.Num() > 0) {
 		TitleCamera = Cast<ACameraActor>(FoundCameras[0]);
 	}
-	//ë°œê²¬ëœ íƒ€ì´í‹€ ì¹´ë©”ë¼ë¡œ í™”ë©´ ì „í™˜
+	//¹ß°ßµÈ Å¸ÀÌÆ² Ä«¸Ş¶ó·Î È­¸é ÀüÈ¯
 	if (TitleCamera) {
 		SetViewTargetWithBlend(TitleCamera, 0.f);
 	}
 }
 
-//íƒ€ì´í‹€ í™”ë©´ ìœ„ì ¯ ë°°ì¹˜
+//Å¸ÀÌÆ² È­¸é À§Á¬ ¹èÄ¡
 void ATitle_PlayerController::CreateAndShowTitleWidget()
 {
 	if (!IsLocalController()) return;
 	if (!TitleWidget) return;
-	//ì‹¤ì œë¡œ í™”ë©´ì— ìœ„ì ¯ ìƒì„±
+	//½ÇÁ¦·Î È­¸é¿¡ À§Á¬ »ı¼º
 	TitleWidgetInstance = CreateWidget<UTitle_Widget>(this, TitleWidget);
 
 	if (!TitleWidgetInstance) return;
 
 	TitleWidgetInstance->AddToViewport(0);
-	//ìœ„ì ¯ì˜ Play/Cancel ë²„íŠ¼ì„ HandlePlayRequested í•¨ìˆ˜ì— ë°”ì¸ë”©
+	//À§Á¬ÀÇ Play/Cancel ¹öÆ°À» HandlePlayRequested ÇÔ¼ö¿¡ ¹ÙÀÎµù
 	TitleWidgetInstance->OnTitlePlayRequested.AddUniqueDynamic(this, &ATitle_PlayerController::HandlePlayRequested);
 	TitleWidgetInstance->OnTitleCancelRequested.AddUniqueDynamic(this, &ATitle_PlayerController::HandleCancelRequested);
 
@@ -209,7 +215,7 @@ void ATitle_PlayerController::CreateAndShowTitleWidget()
 			return;
 		}
 
-		//ë§¤ì¹­ì„ ì§„í–‰í•˜ë‹¤ê°€ Hostê°€ ëœ ê²½ìš° UI ìœ ì§€ 
+		//¸ÅÄªÀ» ÁøÇàÇÏ´Ù°¡ Host°¡ µÈ °æ¿ì UI À¯Áö 
 		bool bKeepLocked = GameInstance->GetMatchFlowState() == EMatchFlowState::Searching || GameInstance->bPendingCreateLANSession;
 		if (bKeepLocked) {
 			TitleWidgetInstance->SetNicknameLocked(bKeepLocked);
@@ -222,7 +228,7 @@ void ATitle_PlayerController::CreateAndShowTitleWidget()
 	TitleWidgetInstance->ClearStatusMessage();
 }
 
-//í”„ë¦¬ë·° ìºë¦­í„° ê²€ìƒ‰
+//ÇÁ¸®ºä Ä³¸¯ÅÍ °Ë»ö
 void ATitle_PlayerController::FindPreviewActor()
 {
 	TArray<AActor*> FoundActors;
@@ -236,14 +242,14 @@ void ATitle_PlayerController::FindPreviewActor()
 			break;
 		}
 	}
-	//í”„ë¦¬ë·° ìºë¦­í„°ê°€ ì—†ëŠ”ë° ë°œê²¬ëœ ìºë¦­í„°ì˜ ìˆ˜ê°€ 1ì´ìƒì´ë¼ë©´ ì²«ë²ˆì§¸ ìºë¦­í„°ë¥¼ ì‚¬ìš©
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ°¡ ¾ø´Âµ¥ ¹ß°ßµÈ Ä³¸¯ÅÍÀÇ ¼ö°¡ 1ÀÌ»óÀÌ¶ó¸é Ã¹¹øÂ° Ä³¸¯ÅÍ¸¦ »ç¿ë
 	if (!PreviewCharacter && FoundActors.Num() > 0) {
 		PreviewCharacter = Cast<ATitle_PlayerCharacter>(FoundActors[0]);
 	}
 
 }
 
-//ë§ˆìš°ìŠ¤ë¡œ í”„ë¦¬ë·° ìºë¦­í„° íšŒì „
+//¸¶¿ì½º·Î ÇÁ¸®ºä Ä³¸¯ÅÍ È¸Àü
 void ATitle_PlayerController::UpdatePreviewRotation()
 {
 	if (!bIsPreviewDragging || !PreviewCharacter) return;
@@ -253,7 +259,7 @@ void ATitle_PlayerController::UpdatePreviewRotation()
 
 	if (!GetMousePosition(MouseX, MouseY)) return;
 
-	//ì´ì „ Tick ë§ˆìš°ìŠ¤ ìœ„ì¹˜ì™€ í˜„ì¬ ë§ˆìš°ìŠ¤ ìœ„ì¹˜ì˜ Xê°’ ì°¨ì´ë¥¼ í™•ì¸
+	//ÀÌÀü Tick ¸¶¿ì½º À§Ä¡¿Í ÇöÀç ¸¶¿ì½º À§Ä¡ÀÇ X°ª Â÷ÀÌ¸¦ È®ÀÎ
 	float ChangeX = MouseX - LastMouseX;
 	LastMouseX = MouseX;
 
@@ -262,11 +268,11 @@ void ATitle_PlayerController::UpdatePreviewRotation()
 	}
 }
 
-//ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ì‹œì‘
+//¸¶¿ì½º ¿ìÅ¬¸¯ ½ÃÀÛ
 void ATitle_PlayerController::OnLeftMousePressed()
 {
 	bIsPreviewDragging = true;
-
+	
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	if (GetMousePosition(MouseX, MouseY)) {
@@ -278,7 +284,7 @@ void ATitle_PlayerController::OnLeftMousePressed()
 	}
 }
 
-//ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ì™„ë£Œ
+//¸¶¿ì½º ¿ìÅ¬¸¯ ¿Ï·á
 void ATitle_PlayerController::OnLeftMouseReleased()
 {
 	bIsPreviewDragging = false;
@@ -288,13 +294,13 @@ void ATitle_PlayerController::OnLeftMouseReleased()
 	}
 }
 
-//í”Œë ˆì´ ë²„íŠ¼ ì…ë ¥ ì‹œ ê¸°ëŠ¥
+//ÇÃ·¹ÀÌ ¹öÆ° ÀÔ·Â ½Ã ±â´É
 void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode MatchMode)
 {
 	FString SanitizedNickname;
 	FText ErrorText;
 
-	//ë‹‰ë„¤ì„ì´ ìœ íš¨í•˜ì§€ ì•Šë‹¤ë©´ Error Text
+	//´Ğ³×ÀÓÀÌ À¯È¿ÇÏÁö ¾Ê´Ù¸é Error Text
 	if (!ValidateNickname(NickName, SanitizedNickname, ErrorText)) {
 		if (TitleWidgetInstance) {
 			TitleWidgetInstance->SetStatusMessage(ErrorText);
@@ -304,7 +310,7 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 		return;
 	}
 
-	//ê²Œì„ ë‚´ì—ì„œ ì‚¬ìš©ë˜ëŠ” GameInstanceë¥¼ ìºìŠ¤íŒ…
+	//°ÔÀÓ ³»¿¡¼­ »ç¿ëµÇ´Â GameInstance¸¦ Ä³½ºÆÃ
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	if (!GameInstance) {
 		if (TitleWidgetInstance) {
@@ -315,10 +321,10 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 		return;
 	}
 
-	//GameInstanceì— ì„ íƒëœ ë§¤ì¹˜ëª¨ë“œ ì €ì¥
+	//GameInstance¿¡ ¼±ÅÃµÈ ¸ÅÄ¡¸ğµå ÀúÀå
 	GameInstance->SetSelectedMatchMode(MatchMode);
 
-	//GameInstanceì— ì…ë ¥ë°›ì€ ë‹‰ë„¤ì„ ì €ì¥
+	//GameInstance¿¡ ÀÔ·Â¹ŞÀº ´Ğ³×ÀÓ ÀúÀå
 	GameInstance->SetLocalPlayerNickname(SanitizedNickname);
 	if (TitleWidgetInstance) {
 		TitleWidgetInstance->SetNicknameText(SanitizedNickname);
@@ -326,10 +332,10 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 		TitleWidgetInstance->SetMatchingMode(true);
 		TitleWidgetInstance->SetStatusMessage(FText::FromString(TEXT("Matching...")));
 	}
-	//í˜„ì¬ ê²Œì„ íë¦„ ìƒíƒœë¥¼ Searchingìœ¼ë¡œ ë³€ê²½
+	//ÇöÀç °ÔÀÓ Èå¸§ »óÅÂ¸¦ SearchingÀ¸·Î º¯°æ
 	GameInstance->SetMatchFlowState(EMatchFlowState::Searching);
 
-	//GameInstanceì˜ SessionSubsystemìœ¼ë¡œ QuickMatch ì‹œì‘
+	//GameInstanceÀÇ SessionSubsystemÀ¸·Î QuickMatch ½ÃÀÛ
 	UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>();
 	if (!SessionSubsystem) {
 		if (TitleWidgetInstance) {
@@ -344,7 +350,6 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 
 void ATitle_PlayerController::HandleCancelRequested()
 {
-	//[ìë™ë§¤ì¹­ë²„ê·¸ìˆ˜ì •]ì¶”ê°€-íƒ€ì´ë¨¸í•¸ë“¤ í´ë¦¬ì–´
 	GetWorld()->GetTimerManager().ClearTimer(AutoRestartTimerHandle);
 	AutoRestartTimerHandle.Invalidate();
 
@@ -356,34 +361,31 @@ void ATitle_PlayerController::HandleCancelRequested()
 
 	SessionSubsystem->CancelQuickMatchLAN();
 
-	//[ë¨¸ì§€]ìë™ë§¤ì¹­ 1.5ì´ˆ ëŒ€ê¸° ì¤‘ ì·¨ì†Œë²„íŠ¼ì„ ëˆŒë €ë‹¤ë©´, íƒ€ì´ë¨¸í•¸ë“¤ ì‚­ì œ->ìë™ë§¤ì¹­ ì•ˆí•¨
 	GetWorld()->GetTimerManager().ClearTimer(AutoRestartTimerHandle);
 
-	//[ë¨¸ì§€][ë²„ê·¸]ë‚´ê°€ í˜¸ìŠ¤íŠ¸ì¼ë•Œ(í’€ë°©ì´ ì•„ë‹ë•Œ) ì·¨ì†Œë²„íŠ¼ì„ ëˆŒëŸ¬ ë°©ì„ ê¹¼ì„ ë•Œ
-	// ì°¸ì—¬ì¤‘ì´ë˜ í´ë¼ì´ì–¸íŠ¸ë¥¼ ë‚´ë³´ë‚´ëŠ” ë¡œì§
 	if (HasAuthority() && GetWorld()->GetNetMode() == NM_ListenServer) {
-		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It) {
-			ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(It->Get());
-			if (PC && PC != this) {	// ìì‹ (í˜¸ìŠ¤íŠ¸) ì œì™¸
-				PC->Client_KickedByHost();
-			}
+		for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
+			ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(IT->Get());
+			if (PC && PC != this) PC->Client_ExitedByHost();
 		}
-		//  í˜¸ìŠ¤íŠ¸ ìì‹ ë„ 'Listen(ë©€í‹°)' ëª¨ë“œë¥¼ ë„ê³  ì‹±ê¸€ ë¡œì»¬ ë§µìœ¼ë¡œ ëŒì•„ê°€ì„œ ì„œë²„ë¥¼ ì™„ì „íˆ ë‹«ìŒ
-		// (í´ë¼ì´ì–¸íŠ¸ê°€ ëª…ë ¹ì„ ë°›ì„ ìˆ˜ ìˆë„ë¡ 1í”„ë ˆì„ ë’¤ì— ë‹«ì•„ì£¼ëŠ” ê²ƒì´ ì•ˆì „
-		GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
-			UGameplayStatics::OpenLevel(this, FName("/Game/Levels/LV_Title"));
-			});
+
+		//[ÀÚµ¿¸ÅÄª¹ö±×]
+		TWeakObjectPtr<ATitle_PlayerController> WeakThis = this;
+
+		GetWorld()->GetTimerManager().SetTimerForNextTick([WeakThis]() {
+			UGameplayStatics::OpenLevel(WeakThis.Get(), FName("/Game/Levels/LV_Title"));
+		});
 	}
 }
 
-//ì„¸ì…˜ ìƒíƒœ ë³€ê²½ì„ í™•ì¸ (Title í™”ë©´ì—ì„œ ë§¤ì¹­ ìƒíƒœë¥¼ í”Œë ˆì´ì–´ì—ê²Œ ë³´ì—¬ì¤Œ)
+//¼¼¼Ç »óÅÂ º¯°æÀ» È®ÀÎ (Title È­¸é¿¡¼­ ¸ÅÄª »óÅÂ¸¦ ÇÃ·¹ÀÌ¾î¿¡°Ô º¸¿©ÁÜ)
 void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, const FString& Message)
 {
 	if (!TitleWidgetInstance) return;
 
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 
-	//Joiningì¤‘ì¼ ë•Œ ì—°ê²°ëŠê¹€ì‹ í˜¸(None, Failed)ë¥¼ ì°¨ë‹¨í•˜ì—¬, ì°¸ì—¬ì§„í–‰ì´ ì˜ ë˜ëŠ” ì¤‘ì— í™”ë©´ì—ì„œ í”Œë ˆì´ ë²„íŠ¼ì´ ë‹¤ì‹œ í™œì„±í™”ë˜ëŠ” ë²„ê·¸ ìˆ˜ì •
+	//JoiningÁßÀÏ ¶§ ¿¬°á²÷±è½ÅÈ£(None, Failed)¸¦ Â÷´ÜÇÏ¿©, Âü¿©ÁøÇàÀÌ Àß µÇ´Â Áß¿¡ È­¸é¿¡¼­ ÇÃ·¹ÀÌ ¹öÆ°ÀÌ ´Ù½Ã È°¼ºÈ­µÇ´Â ¹ö±× ¼öÁ¤
 	if (GameInstance && GameInstance->GetMatchFlowState() == EMatchFlowState::Joining) {
 		bool bIsCancelledMessage = Message.Contains(TEXT("Cancelled"));
 		if ((State == ESessionUIState::None || State == ESessionUIState::Failed) && !bIsCancelledMessage) {
@@ -420,7 +422,6 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		if (GameInstance) {
 			GameInstance->SetMatchFlowState(EMatchFlowState::None);
 
-			//[ë¨¸ì§€][ë²„ê·¸]ê°•ì œ ì¢…ë£Œì— ì˜í•´ í´ë¼ì´ì–¸íŠ¸ê°€ íƒ€ì´í‹€ë¡œ ëŒì•„ê°ˆ ë•Œ ë‹‰ë„¤ì„ í‘œì‹œ(ì´ê±° ì—†ìœ¼ë©´ ê³µë€ì´ ë‚˜ì™”ìŒ)
 			FString SavedNickname = GameInstance->GetPlayerLocalNickname();
 			if (!SavedNickname.IsEmpty() && TitleWidgetInstance) {
 				TitleWidgetInstance->SetNicknameText(SavedNickname);
@@ -428,7 +429,6 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 		}
 		TitleWidgetInstance->SetMatchingMode(false);
 		TitleWidgetInstance->SetNicknameLocked(false);
-
 		if (Message.Equals(TEXT("Matching Cancelled!"))) {
 			TitleWidgetInstance->SetStatusMessageFadeOut(FText::FromString(Message), 1.f);
 		}
@@ -450,7 +450,7 @@ void ATitle_PlayerController::HandleSessionStateChanged(ESessionUIState State, c
 }
 
 
-//ë‹‰ë„¤ì„ì´ ìœ íš¨í•œì§€ ê²€ì‚¬
+//´Ğ³×ÀÓÀÌ À¯È¿ÇÑÁö °Ë»ç
 bool ATitle_PlayerController::ValidateNickname(const FString& nickname, FString& OutSanitized, FText& OutErrorText)
 {
 	OutSanitized = nickname;
@@ -470,17 +470,13 @@ bool ATitle_PlayerController::ValidateNickname(const FString& nickname, FString&
 	return true;
 }
 
-// [ë¨¸ì§€][ë²„ê·¸]í¬ë¼ì´ì–¸íŠ¸ê°€ í˜¸ìŠ¤íŠ¸ì˜ ì·¨ì†Œë²„íŠ¼í´ë¦­ì— ì˜í•´ í‡´ì¥ë‹¹í•  ë•Œ ì‹¤í–‰í•˜ëŠ” í•¨ìˆ˜	//HandleCancelRequestedí•¨ìˆ˜ì•ˆì—ì„œ ì‹¤í–‰ë¨
-void ATitle_PlayerController::Client_KickedByHost_Implementation()
+void ATitle_PlayerController::Client_ExitedByHost_Implementation()
 {
-	// ë§¤ì¹­ìƒíƒœë¥¼ Joiningì—ì„œ Noneìœ¼ë¡œ ë³€ê²½ -> ì¬ë™ë§¤ì¹­ì„ ìœ„í•´ Searchingìœ¼ë¡œ ìˆ˜ì •
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		GameInstance->SetMatchFlowState(EMatchFlowState::Searching);
-
-		//[ì¶”ê°€] ìë™ë§¤ì¹­ í”Œë˜ê·¸
 		GameInstance->bAutoRestartMatch = true;
 	}
-	// í˜¸ìŠ¤íŠ¸ë°©ì—ì„œ íƒ€ì´í‹€ í™”ë©´ìœ¼ë¡œ ëŒì•„ê°
+
 	UGameplayStatics::OpenLevel(this, FName("/Game/Maps/LV_Title"));
 }
 

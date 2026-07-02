@@ -58,7 +58,7 @@ public:
 	bool bIsEquipped = false;
 	//Equipment의 맵에 존재할 수 있는 시간
 	UPROPERTY(Replicated)
-	float LifeTime = 450.f;
+	float LifeTime = 45.f;
 	//Equipment가 장착/장착해제 되면 즉시 호출회든 함수(OnRep)
 	UFUNCTION()
 	virtual void OnRep_IsEquipped();

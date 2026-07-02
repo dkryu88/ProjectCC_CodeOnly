@@ -32,6 +32,33 @@ void APlayMode_Ready::BeginPlay()
 	AssignPortraitId();
 }
 
+void APlayMode_Ready::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+
+	if (!HasAuthority()) return;
+	if (!ErrorMessage.IsEmpty()) return;
+
+	IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+	if (OSS) {
+		IOnlineSessionPtr SessionInterface = OSS->GetSessionInterface();
+		if (SessionInterface.IsValid()) {
+			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
+			if (Session && Session->SessionSettings.bAllowJoinInProgress == false) {
+				ErrorMessage = TEXT("Ready : Game is already running!");
+				return;
+			}
+		}
+	}
+
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		if (GetNumPlayers() >= GameInstance->GetMaxPlayersByMode()) {
+			ErrorMessage = TEXT("Ready : Room is Full!");
+			return;
+		}
+	}
+}
+
 void APlayMode_Ready::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
@@ -111,6 +138,7 @@ void APlayMode_Ready::AssignPortraitId()
 		APlayer_State* PS = Cast<APlayer_State>(GameState->PlayerArray[i]);
 		if (!PS) continue;
 		PS->SetPortraitId(i);
+		PS->ForceNetUpdate();
 	}
 }
 
@@ -136,33 +164,4 @@ void APlayMode_Ready::NotifyReadyToTravel(APlayerController* PC) {
 	}
 
 	CheckAutoStartMatch();
-}
-
-void APlayMode_Ready::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
-{
-	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-
-	if (!HasAuthority()) return;
-	if (!ErrorMessage.IsEmpty()) return;
-
-	//온라인 서브시스템의 세션 간판을 직접 확인
-	IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
-	if (OSS) {
-		IOnlineSessionPtr SessionInterface = OSS->GetSessionInterface();
-		if (SessionInterface.IsValid()) {
-			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
-			if (Session && Session->SessionSettings.bAllowJoinInProgress == false) {
-				ErrorMessage = TEXT("Ready : Game is already running!");
-				UE_LOG(LogTemp, Warning, TEXT("Intruder blocked in Ready: Session is closed."));
-				return;
-			}
-		}
-	}
-	//보험
-	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-		if (GetNumPlayers() >= GameInstance->GetMaxPlayersByMode()) {
-			ErrorMessage = TEXT("Ready : Room is Full!");
-			return;
-		}
-	}
 }

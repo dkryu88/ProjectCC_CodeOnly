@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -8,7 +8,7 @@
 #include "Match_PlayerController.generated.h"
 
 /**
- * ê° í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•˜ëŠ” player controller 
+ * °¢ ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÏ´Â player controller 
  */
 
 class UInputMappingContext;
@@ -30,11 +30,11 @@ public:
 	void SetSpectatingDefaultCamera(bool bInValue) { bSpectatingDefaultCamera = bInValue; }
 	bool IsSpectatingDefaultCamera() { return bSpectatingDefaultCamera; }
 
-	//ë¦¬ìŠ¤í° ëŒ€ê¸°ì¤‘ì¸ì§€ í™•ì¸
+	//¸®½ºÆù ´ë±âÁßÀÎÁö È®ÀÎ
 	bool IsWaitingRespawn() { return bWaitingRespawn; }
-	//ìƒì ì´ ì—´ë ¤ìˆëŠ”ì§€ í™•ì¸
+	//»óÁ¡ÀÌ ¿­·ÁÀÖ´ÂÁö È®ÀÎ
 	bool IsShopOpen() const { return bIsShopOpen; }
-	//ìƒì  ë²„íŠ¼ í™œì„±í™”/ë¹„í™œì„±í™” ê²°ì •
+	//»óÁ¡ ¹öÆ° È°¼ºÈ­/ºñÈ°¼ºÈ­ °áÁ¤
 	void UpdateShopButtonVisibility();
 
 	void SaveResultData(const FMatchResultData& OwnerResult, const TArray<FMatchResultData>& AllResults);
@@ -47,26 +47,26 @@ public:
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputMappingContext> MatchInputMappingContext;
-	//í”Œë ˆì´ì–´ í™”ë©´ UI Widget í´ë˜ìŠ¤
+	//ÇÃ·¹ÀÌ¾î È­¸é UI Widget Å¬·¡½º
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UPlayer_ControllerWidget> Player_ControllerWidget;
-	//í”Œë ˆì´ì–´ í™”ë©´ UI Widget
+	//ÇÃ·¹ÀÌ¾î È­¸é UI Widget
 	UPROPERTY()
 	TObjectPtr<UPlayer_ControllerWidget> ScreenWidget;
-	//í”Œë ˆì´ì–´ ìŠ¤ì½”ì–´ë³´ë“œ UI Widget í´ë˜ìŠ¤
+	//ÇÃ·¹ÀÌ¾î ½ºÄÚ¾îº¸µå UI Widget Å¬·¡½º
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UMatch_ScoreBoardWidget> Match_ScoreBoardWidget;
-	//í”Œë ˆì´ì–´ ìŠ¤ì½”ì–´ë³´ë“œ UI WIdget
+	//ÇÃ·¹ÀÌ¾î ½ºÄÚ¾îº¸µå UI WIdget
 	UPROPERTY()
 	TObjectPtr<UMatch_ScoreBoardWidget> ScoreWidget;
-	//í”Œë ˆì´ì–´ ìƒì  UI Widget í´ë˜ìŠ¤
+	//ÇÃ·¹ÀÌ¾î »óÁ¡ UI Widget Å¬·¡½º
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UMatch_ShopWidget> Match_ShopWidget;
-	//í”Œë ˆì´ì–´ ìƒì  UI Widget
+	//ÇÃ·¹ÀÌ¾î »óÁ¡ UI Widget
 	UPROPERTY()
 	TObjectPtr<UMatch_ShopWidget> ShopWidget;
 	
-	//í˜„ì¬ ê´€ì „ì¤‘ì€ í”Œë ˆì´ì–´
+	//ÇöÀç °üÀüÁßÀº ÇÃ·¹ÀÌ¾î
 	UPROPERTY()
 	TObjectPtr<AActor> CurrentSpectatingTarget = nullptr;
 
@@ -77,6 +77,8 @@ protected:
 	bool bShopOpen = false;
 	UPROPERTY()
 	bool bAlreadyPurchasedInShop = false;
+
+	bool bShopClosedForce = false;
 
 	FTimerHandle SetupRetryTimerHandle;
 
@@ -101,46 +103,46 @@ protected:
 	void SetOutWidget();
 	void SetPlayWidget();
 
-	//ìŠ¤ì½”ì–´ë³´ë“œ ì—´ê¸°
+	//½ºÄÚ¾îº¸µå ¿­±â
 	void OpenScoreBoard();
-	//ìŠ¤ì½”ì–´ë³´ë“œ ë‹«ê¸°
+	//½ºÄÚ¾îº¸µå ´İ±â
 	void CloseScoreBoard();
 
-	//ìƒì  ë²„íŠ¼ ë°”ì¸ë”©
+	//»óÁ¡ ¹öÆ° ¹ÙÀÎµù
 	UFUNCTION()
 	void BindShopButton();
-	//ìƒì  íŒì—… ì—´ê¸°
+	//»óÁ¡ ÆË¾÷ ¿­±â
 	UFUNCTION()
 	void OpenShop();
-	//ìƒì  íŒì—… ë‹«ê¸°
+	//»óÁ¡ ÆË¾÷ ´İ±â
 	UFUNCTION()
 	void CloseShop();
 	
 
 public:
-	//ì„œë²„ì— Player_State ë°ì´í„°ë¥¼ ì „ì†¡
+	//¼­¹ö¿¡ Player_State µ¥ÀÌÅÍ¸¦ Àü¼Û
 	UFUNCTION(Server, Reliable)
 	void Server_SubmitMatchData(const FString& nickname, int32 portraitId);
 
-	//ì„œë²„ì— ê²Œì„ ì‹œì‘ ì¤€ë¹„ê°€ ì™„ë£Œë¨ì„ ì „ì†¡
+	//¼­¹ö¿¡ °ÔÀÓ ½ÃÀÛ ÁØºñ°¡ ¿Ï·áµÊÀ» Àü¼Û
 	UFUNCTION(Server, Reliable)
 	void Server_ReportMatchLoaded();
-	//ì„œë²„ì— ìˆ˜ë™ ë¦¬ìŠ¤í° ìš”ì²­
+	//¼­¹ö¿¡ ¼öµ¿ ¸®½ºÆù ¿äÃ»
 	UFUNCTION(Server, Reliable)
 	void Server_RequestRespawn();
 	UFUNCTION(Server, Reliable)
 	void Server_Purchase(EShopBoxs Box);
 public:
-	//Game ì…ë ¥ ëª¨ë“œ Client RPC
+	//Game ÀÔ·Â ¸ğµå Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyGameInputMode();
-	//UI ì…ë ¥ ëª¨ë“œ Client RPC
+	//UI ÀÔ·Â ¸ğµå Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyUIInputMode();
-	//ê´€ì „ ì‹œì‘ Client RPC
+	//°üÀü ½ÃÀÛ Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_StartSpectating(AActor* SpectatorTarget);
-	//í˜„ì¬ ë¦¬ìŠ¤í° ë°ì´í„°ë¥¼ ì„¸íŒ… Client RPC
+	//ÇöÀç ¸®½ºÆù µ¥ÀÌÅÍ¸¦ ¼¼ÆÃ Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_SetRespawnState(bool bWaiting, bool bCanRespawn);
 	UFUNCTION(Client, Reliable)
@@ -168,5 +170,13 @@ public:
 	void Client_ShowMatchEventActive(FName EventName, int32 RemainSeconds);
 	UFUNCTION(Client, Reliable)
 	void Client_HideMatchEventUI();
+	UFUNCTION(Client, Reliable)
+	void Client_SetShopClosed(bool bClosed);
 
+	UFUNCTION(Client, Reliable)
+	void Client_FadeOutBGM();
+
+	//[Ãß°¡] ¸ÅÄ¡ Á¾·á 30ÃÊ Àü BGMÀç»ı ¸í·É(¼­¹ö->Å¬¶óÀÌ¾ğÆ®)
+	UFUNCTION(Client, Reliable)
+	void Client_PlayBGM30Sec();
 };

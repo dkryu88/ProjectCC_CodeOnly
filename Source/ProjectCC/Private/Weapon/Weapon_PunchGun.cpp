@@ -142,22 +142,25 @@ float AWeapon_PunchGun::GetGloveLaunchDistance()
 
 	FVector AttackOrigin = EquippedPlayer->GetActorLocation();
 	AttackOrigin.Z = GloveMesh->GetComponentLocation().Z;
-	
+
 	float ARadius = FMath::Max(1.f, EquippedPlayer->AStat.AttackRadius);
-	FVector TraceStart = AttackOrigin + Dir * ARadius;
-	const float AdjustedRange = FMath::Max(0.f, AttackRealRange - (ARadius * 2.f));
+	FVector TraceStart = AttackOrigin + Dir * (ARadius * 2);
+	const float AdjustedRange = FMath::Max(0.f, AttackRealRange - ARadius);
 	FVector TraceEnd = TraceStart + Dir * AdjustedRange;
 	
-
 	FCollisionQueryParams Params(NAME_None, false);
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(EquippedPlayer);
+	if (EquippedPlayer->NowSupport) Params.AddIgnoredActor(EquippedPlayer->NowSupport);
 	Params.bFindInitialOverlaps = false;
 
-	FHitResult Hit;
-	if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params)) TraceEnd = Hit.ImpactPoint - Dir * 5.f;
-	TraceEnd -= Dir * 30.f;
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectParams.AddObjectTypesToQuery(ECC_GameTraceChannel4);
 
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params)) TraceEnd = Hit.ImpactPoint - Dir * 5.f;
 
 	FVector GloveTipStart = GetForwardMostPointOnMesh(GloveMesh, Dir);
 

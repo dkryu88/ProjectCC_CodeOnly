@@ -71,6 +71,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
 	FGameEffectData ConditionEndEffect;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Condition|Overlay")
+	TObjectPtr<UMaterialInterface> ConditionOverlayMaterial = nullptr;
+
+	//사운드 관련
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Condition|Sound")
+	USoundBase* ConditionStartSound = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Sound")
+	USoundBase* ConditionPersistSound = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Sound")
+	USoundBase* ConditionEndSound = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Sound")
+	float ConditionSoundFadeOutTime = 0.15f;
 	//플레이어 행동 별 Condition 진행 Rule---------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition|Rule")
 	EConditionEventRule JumpRule = EConditionEventRule::Keep;

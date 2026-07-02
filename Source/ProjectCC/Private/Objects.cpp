@@ -16,13 +16,14 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "Effect/GameEffectManagerComponent.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 
 // Sets default values
-AObjects::AObjects(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer)
+AObjects::AObjects(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -73,6 +74,14 @@ AObjects::AObjects(const FObjectInitializer& ObjectInitializer)
 	LifeTimeEffectComp->SetupAttachment(MeshPivot);
 	LifeTimeEffectComp->bAutoActivate = true;
 	LifeTimeEffectComp->SetAutoDestroy(false);
+
+	LifeTimeAudioComp = CreateDefaultSubobject<UAudioComponent>(TEXT("Audio"));
+	LifeTimeAudioComp->SetupAttachment(MeshPivot);
+	LifeTimeAudioComp->bAutoDestroy = false;
+	LifeTimeAudioComp->bAutoActivate = false;
+
+	//물체와의 상대적 위치에 따라 사운드 변화 (3D 사운드)
+	LifeTimeAudioComp->bAllowSpatialization = true;
 }
 
 /*실제 자식 class PhysicsCollider 생성 예시
@@ -115,6 +124,11 @@ void AObjects::BeginPlay()
 		Context.WorldRotation = GetActorRotation();
 
 		PlayObjectsEffect(EEffectType::Spawn, Context);
+	}
+
+	if (LifeTimeAudioComp && LifeTimeSound) {
+		LifeTimeAudioComp->SetSound(LifeTimeSound);
+		LifeTimeAudioComp->Play();
 	}
 
 	if (HasAuthority()) {
@@ -176,6 +190,11 @@ void AObjects::OnConstruction(const FTransform& Transform) {
 void AObjects::LifeSpanExpired()
 {
 	Func_Destroy();
+
+	if (LifeTimeAudioComp && LifeTimeAudioComp->IsPlaying()) {
+		LifeTimeAudioComp->FadeOut(0.3f, 0.f);
+	}
+
 	Super::LifeSpanExpired();
 }
 
@@ -196,16 +215,7 @@ void AObjects::Tick(float DeltaTime)
 			if (LifeTime <= 0.f) {
 				Func_ZeroLife();
 
-				if (ObjectsEffectManagerComp) {
-					//물체 Destroy 이펙트 생성
-					FGameEffectContext Context;
-					Context.SourceActor = this;
-					Context.SourceComponent = Mesh;
-					Context.WorldLocation = GetActorLocation();
-					Context.WorldRotation = GetActorRotation();
-
-					PlayObjectsEffect(EEffectType::Destroy, Context);
-				}
+				PlayObjectsDestroyEffect();
 
 				DelayForDestroyEffect();
 				return;
@@ -251,16 +261,7 @@ void AObjects::Tick(float DeltaTime)
 		bTickMoveActive = false;
 		Func_Destroy();
 
-		if (ObjectsEffectManagerComp) {
-			//물체 Destroy 이펙트 생성
-			FGameEffectContext Context;
-			Context.SourceActor = this;
-			Context.SourceComponent = Mesh;
-			Context.WorldLocation = GetActorLocation();
-			Context.WorldRotation = GetActorRotation();
-
-			PlayObjectsEffect(EEffectType::Destroy, Context);
-		}
+		PlayObjectsDestroyEffect();
 
 		DelayForDestroyEffect();
 		return;
@@ -472,7 +473,7 @@ float AObjects::TakeDamage(float damage, struct FDamageEvent const& DamageEvent,
 }
 
 //물체 데미지 적용 처리
-float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack)
+float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack, bool bHasHitData, FVector HitLocation, FVector HitNormal)
 {
 	if (!HasAuthority()) return 0.f;
 	if (Damage < 0) return 0.f;
@@ -519,22 +520,15 @@ float AObjects::ApplyDamageInternal(float Damage, APlayer_Character* AttackPlaye
 	//체력이 0이 되면 파괴 (파괴 효과 발동)
 	if (HP <= 0.0f) {
 		Func_Destroy();
-
-		if (ObjectsEffectManagerComp) {
-			//물체 Destroy 이펙트 생성
-			FGameEffectContext Context;
-			Context.SourceActor = this;
-			Context.SourceComponent = Mesh;
-			Context.WorldLocation = GetActorLocation();
-			Context.WorldRotation = GetActorRotation();
-			
-			PlayObjectsEffect(EEffectType::Destroy, Context);
-		}
+		PlayObjectsDestroyEffect();
 		
 		DelayForDestroyEffect();
 	}
 	//체력이 남으면 피격 효과 발동
 	else {
+		if (bHasHitData) {
+			PlayObjectsHittedEffect(HitLocation, HitNormal);
+		}
 		Func_AttackedByPlayer(AttackPlayer);
 	}
 
@@ -730,6 +724,7 @@ void AObjects::ApplyInstallState() {
 		PhysicsCollider->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 		PhysicsCollider->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PhysicsCollider->SetCollisionResponseToAllChannels(ECR_Block);
+		PhysicsCollider->SetNotifyRigidBodyCollision(true);
 	}
 	ApplyAdditionalSetting();
 	bRuntimeStateResolved = true;
@@ -918,9 +913,9 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 
 	AActor* OtherActor = Hit.GetActor();
 
-	if (Type == EObjectsType::Install || Type == EObjectsType::Normal) return;
 	if (ShouldIgnoreOwnerCollisionActor(OtherActor)) return;
-
+	if (Type == EObjectsType::Install || Type == EObjectsType::Normal) return;
+	
 	bHavingHitPoint = true;
 	HitPoint = Hit.ImpactPoint;
 
@@ -946,7 +941,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		}
 
 		else if (HitObject && HitObject->ObjectsData && HitObject->ObjectsData->bUseHP) {
-			HitObject->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, false);
+			HitObject->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, false, -1.f, true, Hit.ImpactPoint, Hit.ImpactNormal);
 
 			//물체 Hit 이펙트 생성
 			FGameEffectContext EffectContext;
@@ -982,16 +977,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		bTickMoveActive = false;
 		Func_Destroy();
 
-		if (ObjectsEffectManagerComp) {
-			//물체 Destroy 이펙트 생성
-			FGameEffectContext Context;
-			Context.SourceActor = this;
-			Context.SourceComponent = Mesh;
-			Context.WorldLocation = GetActorLocation();
-			Context.WorldRotation = GetActorRotation();
-
-			PlayObjectsEffect(EEffectType::Destroy, Context);
-		}
+		PlayObjectsDestroyEffect();
 
 		DelayForDestroyEffect();
 		return;
@@ -1007,16 +993,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 			bTickMoveActive = false;
 			Func_Destroy();
 
-			if (ObjectsEffectManagerComp) {
-				//물체 Destroy 이펙트 생성
-				FGameEffectContext Context;
-				Context.SourceActor = this;
-				Context.SourceComponent = Mesh;
-				Context.WorldLocation = GetActorLocation();
-				Context.WorldRotation = GetActorRotation();
-
-				PlayObjectsEffect(EEffectType::Destroy, Context);
-			}
+			PlayObjectsDestroyEffect();
 
 			DelayForDestroyEffect();
 			return;
@@ -1044,6 +1021,7 @@ void AObjects::ApplyNormalState() {
 		PhysicsCollider->SetCollisionObjectType(ECC_GameTraceChannel4);
 		PhysicsCollider->SetCollisionResponseToAllChannels(ECR_Block);
 		PhysicsCollider->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		PhysicsCollider->SetNotifyRigidBodyCollision(true);
 		PhysicsCollider->WakeAllRigidBodies();
 	}
 	ApplyAdditionalSetting();
@@ -1251,12 +1229,91 @@ void AObjects::DelayForDestroyEffect()
 	GetWorldTimerManager().SetTimer(DelayDestroyHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		Destroy();
-	}), 0.1f, false);
+	}), 1.f, false);
 }
 
-void AObjects::PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)
+void AObjects::PlayObjectsHittedEffect(const FVector& TheEffectLocation, const FVector& TheEffectNormal)
 {
-	FGameEffectData* EffectData = GetObjectsEffectData(EffectType);
+	if (!HasAuthority()) return;
+	if (!ObjectsData) return;
+	if (!ObjectsEffectManagerComp) return;
+
+	FVector EffectLocation = TheEffectLocation;
+	if (EffectLocation.IsNearlyZero()) EffectLocation = GetActorLocation();
+
+	FVector EffectNormal = TheEffectNormal;
+	if (EffectNormal.IsNearlyZero()) EffectNormal = FVector::UpVector;
+
+	float MiddleSize = GetMiddleAxisSize();
+	float Scale = FMath::Max(1.f, FMath::FloorToFloat(MiddleSize / 100.f));
+
+	bHavingHitPoint = true;
+	HitPoint = EffectLocation;
+
+	FGameEffectContext Context;
+	Context.SourceActor = this;
+	Context.SourceComponent = Mesh;
+	Context.WorldLocation = EffectLocation;
+	Context.WorldRotation = EffectNormal.Rotation();
+	Context.HitPoint = EffectLocation;
+	Context.HitNormal = EffectNormal;
+
+	FGameEffectRuntimeParams Params;
+	Params.AddFloatParam(TEXT("User.Scale"), Scale);
+ 
+	PlayObjectsEffect(EEffectType::Custom, Context, Params, TEXT("HittedEffect"));
+}
+
+void AObjects::PlayObjectsDestroyEffect()
+{
+	if (!HasAuthority()) return;
+	if (!ObjectsEffectManagerComp) return;
+
+	FVector Size = FVector(50.f, 50.f, 50.f);
+	if (Mesh) Size = Mesh->Bounds.BoxExtent * 2.f;
+	else if (PhysicsCollider) Size = PhysicsCollider->Bounds.BoxExtent * 2.f;
+
+	FGameEffectContext Context;
+	Context.SourceActor = this;
+	Context.SourceComponent = Mesh;
+	Context.WorldLocation = GetActorLocation();
+	Context.WorldRotation = GetActorRotation();
+
+	FGameEffectRuntimeParams Params;
+	Params.AddFloatParam(TEXT("User.Scale"), GetDestroyEffectScaleParam());
+	Params.AddVectorParam(TEXT("User.Size"), Size);
+	
+	
+	PlayObjectsEffect(EEffectType::Destroy, Context, Params);
+}
+
+float AObjects::GetDestroyEffectScaleParam()
+{
+	float MiddleSize = GetMiddleAxisSize();
+	return FMath::Max(1.f,FMath::FloorToFloat(MiddleSize / 25.f));
+}
+
+float AObjects::GetMiddleAxisSize()
+{
+	FVector FullSize = FVector::ZeroVector;
+
+	if (PhysicsCollider) FullSize = PhysicsCollider->Bounds.BoxExtent * 2.f;
+	else if (Mesh) FullSize = Mesh->Bounds.BoxExtent * 2.f;
+
+	TArray<float> AxisSizes;
+	AxisSizes.Add(FMath::Abs(FullSize.X));
+	AxisSizes.Add(FMath::Abs(FullSize.Y));
+	AxisSizes.Add(FMath::Abs(FullSize.Z));
+
+	AxisSizes.Sort();
+
+	//중간값 반환
+	return AxisSizes[1];
+}
+
+void AObjects::PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams, FName CustomEffectName)
+{
+	FGameEffectData* EffectData = GetObjectsEffectData(EffectType, CustomEffectName);
 	if (!EffectData) return;
 	if (!ObjectsEffectManagerComp) return;
 

@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -32,41 +32,39 @@ public:
 	void CloseAdditionalWidget();
 	UFUNCTION()
 	void ConfirmQuitGame();
-
-	//[ë¨¸ì§€][ë²„ê·¸] í˜¸ìŠ¤íŠ¸ê°€ ë§¤ì¹­ ì¤‘ ì·¨ì†Œë²„íŠ¼ì„ ëˆŒëŸ¬ ë°©ì„ ê¹° ë•Œ, ì°¸ì—¬í•´ìˆë˜ í´ë¼ì´ì–¸íŠ¸ë¥¼ í‡´ì¥ì‹œí‚¤ëŠ” í•¨ìˆ˜
-	UFUNCTION(Client, Reliable)
-	void Client_KickedByHost();
+	UFUNCTION(Client,Reliable)
+	void Client_ExitedByHost();
 
 protected:
-	//íƒ€ì´í‹€ í™”ë©´ ìœ„ì ¯
+	//Å¸ÀÌÆ² È­¸é À§Á¬
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Title UI")
 	TSubclassOf<UTitle_Widget> TitleWidget;
 
-	//íƒ€ì´í‹€ í™”ë©´ ìœ„ì ¯ ì¸ìŠ¤í„´ìŠ¤
+	//Å¸ÀÌÆ² È­¸é À§Á¬ ÀÎ½ºÅÏ½º
 	UPROPERTY(Transient)
 	TObjectPtr<UTitle_Widget> TitleWidgetInstance;
 
-	//í”„ë¦¬ë·° ìºë¦­í„°
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ
 	UPROPERTY(Transient)
 	TObjectPtr<ATitle_PlayerCharacter> PreviewCharacter;
 
-	//ì¹´ë©”ë¼ íƒœê·¸ (ê²€ìƒ‰ì— ì‚¬ìš©)
+	//Ä«¸Ş¶ó ÅÂ±× (°Ë»ö¿¡ »ç¿ë)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Title Camera")
 	FName TitleCameraTag = TEXT("Title Camera");
 
-	//íƒ€ì´í‹€ í™”ë©´ ì¹´ë©”ë¼
+	//Å¸ÀÌÆ² È­¸é Ä«¸Ş¶ó
 	UPROPERTY(Transient)
 	TObjectPtr<ACameraActor> TitleCamera;
 
-	//í”„ë¦¬ë·° ìºë¦­í„° íšŒì „ ì†ë„
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ È¸Àü ¼Óµµ
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Title Preview")
 	float PreviewRotateSpeed = 0.25;
 
-	//í”„ë¦¬ë·° ìºë¦­í„° íƒœê·¸ (ê²€ìƒ‰ì— ì‚¬ìš©)
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ ÅÂ±× (°Ë»ö¿¡ »ç¿ë)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category ="Title Preview")
 	FName PreviewActorTag = TEXT("Title Preview");
 
-	//íƒ€ì´í‹€ ì¶”ê°€ ìœ„ì ¯//
+	//Å¸ÀÌÆ² Ãß°¡ À§Á¬//
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UTitle_AdditionalWidget> Title_AdditionalWidget;
 	UPROPERTY()
@@ -76,23 +74,23 @@ protected:
 	float LastMouseX = 0.f;
 
 protected:
-	//íƒ€ì´í‹€ í™”ë©´ ì¹´ë©”ë¼ ê²€ìƒ‰ ë° ì„¤ì •
+	//Å¸ÀÌÆ² È­¸é Ä«¸Ş¶ó °Ë»ö ¹× ¼³Á¤
 	void FindAndSetTitleCamera();
-	//íƒ€ì´í‹€ í™”ë©´ ìœ„ì ¯ ë°°ì¹˜
+	//Å¸ÀÌÆ² È­¸é À§Á¬ ¹èÄ¡
 	void CreateAndShowTitleWidget();
-	//í”„ë¦¬ë·° ìºë¦­í„° ê²€ìƒ‰
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ °Ë»ö
 	void FindPreviewActor();
-	//íƒ€ì´í‹€ í™”ë©´ Input ì„¤ì •
+	//Å¸ÀÌÆ² È­¸é Input ¼³Á¤
 	void SetTitleInputMode();
 	
-	//í”„ë¦¬ë·° ìºë¦­í„° íšŒì „
+	//ÇÁ¸®ºä Ä³¸¯ÅÍ È¸Àü
 	void UpdatePreviewRotation();
-	//ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ì‹œì‘
+	//¸¶¿ì½º ¿ìÅ¬¸¯ ½ÃÀÛ
 	void OnLeftMousePressed();
-	//ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ì™„ë£Œ
+	//¸¶¿ì½º ¿ìÅ¬¸¯ ¿Ï·á
 	void OnLeftMouseReleased();
 
-	//í”Œë ˆì´ ë²„íŠ¼ ì…ë ¥ ì‹œ ê¸°ëŠ¥
+	//ÇÃ·¹ÀÌ ¹öÆ° ÀÔ·Â ½Ã ±â´É
 	UFUNCTION()
 	void HandlePlayRequested(FString NickName, EMatchMode MatchMode);
 	UFUNCTION()
@@ -101,9 +99,9 @@ protected:
 	UFUNCTION()
 	void HandleSessionStateChanged(ESessionUIState State, const FString& Message);
 
-	//ë‹‰ë„¤ì„ì´ ìœ íš¨í•œì§€ ê²€ì‚¬
+	//´Ğ³×ÀÓÀÌ À¯È¿ÇÑÁö °Ë»ç
 	bool ValidateNickname(const FString& nickname, FString& OutSanitized, FText& OutErrorText);
 
-	//[ë¨¸ì§€][ë²„ê·¸] ìë™ë§¤ì¹­ ëŒ€ê¸°ì‹œê°„ ê´€ë¦¬ íƒ€ì´ë¨¸í•¸ë“¤
+	//ÀÚµ¿¸ÅÄª ´ë±â½Ã°£ °ü¸® Å¸ÀÌ¸Ó ÇÚµé
 	FTimerHandle AutoRestartTimerHandle;
 };

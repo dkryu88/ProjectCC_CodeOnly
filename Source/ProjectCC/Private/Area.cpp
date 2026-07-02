@@ -11,6 +11,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "NiagaraComponent.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -51,6 +53,14 @@ AArea::AArea()
 	LifeTimeEffectComp->bAutoActivate = false;
 	LifeTimeEffectComp->SetAutoDestroy(false);
 
+
+	LifeTimeAudioComp = CreateDefaultSubobject<UAudioComponent>(TEXT("Audio"));
+	LifeTimeAudioComp->SetupAttachment(MeshPivot);
+	LifeTimeAudioComp->bAutoDestroy = false;
+	LifeTimeAudioComp->bAutoActivate = false;
+
+	//물체와의 상대적 위치에 따라 사운드 변화 (3D 사운드)
+	LifeTimeAudioComp->bAllowSpatialization = true;
 }
 
 // Called when the game starts or when spawned

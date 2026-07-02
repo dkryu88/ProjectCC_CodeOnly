@@ -4,9 +4,33 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Effect/FGameEffectData.h"
 #include "KillPlane.generated.h"
 
 class UBoxComponent;
+class UNiagaraComponent;
+class UGameEffectManagerComponent;
+
+enum class EKillPlaneEffectSurfaceAxis : uint8
+{
+	X,
+	Y,
+	Z
+};
+
+USTRUCT()
+struct FKillPlaneSurfaceInfo
+{
+	GENERATED_BODY()
+
+	EKillPlaneEffectSurfaceAxis SurfaceAxis = EKillPlaneEffectSurfaceAxis::Z;
+
+	FVector LocalNormal = FVector::UpVector;
+	FVector WorldNormal = FVector::UpVector;
+
+	// +면이면 1, -면이면 -1
+	float SurfaceValue = 1.f;
+};
 
 UCLASS()
 class PROJECTCC_API AKillPlane : public AActor
@@ -29,17 +53,50 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 public:
+	//상시 이펙트 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Effect")
+	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	TObjectPtr<UGameEffectManagerComponent> EffectManagerComp;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "KillPlane")
 	UStaticMeshComponent* Mesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "KillPlane")
 	UBoxComponent* KillCollider;
 	//KillCollider 크기 배율
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "KillPlane")
 	FVector SizeMagnification = FVector(1.f, 1.f, 1.f);
 	//KillCollider 크기 보정값
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "KillPlane")
 	FVector ColliderOffset = FVector(0.f, 0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Effect")
+	FGameEffectData KillPlaneDestroyEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effect")
+	float EffectMinPlaneSizeForShapeLocation = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effect")
+	float EffectPlaneSizeScale = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effect")
+	bool bSpawnEffectOnTopSurface = true;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Effect")
+	float EffectSurfaceOffsetZ = 2.f;
+
+	UPROPERTY()
+	TSet<TObjectPtr<AActor>> ProcessedActors;
 
 public:
 	void SetSizeofKillColliderwithMesh();
+
+	void ApplyLifeTimeEffectParams();
+
+	void PlayDestroyEffectForActor(AActor* TargetActor, UPrimitiveComponent* TargetComp);
+
+	FKillPlaneSurfaceInfo GetEffectSurfaceInfo(AActor* TargetActor);
+
+	FVector GetEffectLocationFromSurface(AActor* TargetActor, const FKillPlaneSurfaceInfo& SurfaceInfo);
+	FRotator GetEffectRotationFromSurface(const FKillPlaneSurfaceInfo& SurfaceInfo);
+	FVector GetEffectPlaneScaleForShapeLocation(AActor* TargetActor, UPrimitiveComponent* TargetComp, EKillPlaneEffectSurfaceAxis SurfaceAxis);
 };

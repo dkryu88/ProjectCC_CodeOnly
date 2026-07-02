@@ -55,9 +55,8 @@ bool AItem_EmergencyEscape::UseEffect_Implementation(APlayer_Character* Player)
 			}
 		}, InputBlockDuration, false);
 
-		if (Player->ConditionComp) {
-			Player->ConditionComp->ApplyCondition(InvincibilityDataAsset, Player, InvincibilityDuration);
-		}
+		//0.5초간 무적 부여 (이펙트는 나오지 않음)
+		Player->AddImmunityController(FName(TEXT("EmergencyEscape")), EPlayerImmunityType::DamageImmunity, 0, true, 0.5f);
 
 		return true;
 	}

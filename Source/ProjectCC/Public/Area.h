@@ -33,7 +33,12 @@ protected:
 	TObjectPtr<UStaticMeshComponent> TestMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AreaEffect")
 	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
-
+	//상시 사운드 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<UAudioComponent> LifeTimeAudioComp;
+	//재생할 상시 사운드
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> LifeTimeSound;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AreaDetail")
 	float AreaDuration = 0.5f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AreaDetail")

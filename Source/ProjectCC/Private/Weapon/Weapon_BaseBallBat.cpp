@@ -6,6 +6,7 @@
 #include "Objects.h"
 #include "ObjectsDataAsset.h"
 #include "MapConstructor.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 bool AWeapon_BaseBallBat::UseEffect_Implementation(APlayer_Character* Player)
@@ -42,7 +43,6 @@ bool AWeapon_BaseBallBat::UseEffect_Implementation(APlayer_Character* Player)
 		FVector Dir = Actor->GetActorLocation() - Player->GetActorLocation();
 		Dir.Z = 0.f;
 		Dir.Normalize();
-		bHitAnything = true;
 		if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Actor->GetRootComponent())) {
 			ECollisionEnabled::Type ColType = Prim->GetCollisionEnabled();
 			if (ColType == ECollisionEnabled::QueryOnly || ColType == ECollisionEnabled::NoCollision) continue;
@@ -72,6 +72,25 @@ bool AWeapon_BaseBallBat::UseEffect_Implementation(APlayer_Character* Player)
 			FVector Impulse = Dir * Force + FVector(0, 0, Force * 0.5f);
 			Prim->SetSimulatePhysics(true);
 			Prim->AddImpulse(Impulse, NAME_None, true);
+			bHitAnything = true;
+		}
+	}
+
+	//플레이어/물체 뿐만 아니라 다른 대상이 하나라도 맞으면 히트 사운드 재생
+	if (bHitAnything && WeaponData && WeaponData->HitEffect.Sound) {
+		if (Player->EffectManagerComp){
+			FGameEffectData SoundOnlyEffect = WeaponData->HitEffect;
+
+			// Niagara는 재생하지 않도록 제거
+			SoundOnlyEffect.NiagaraEffect = nullptr;
+
+			FGameEffectContext Context;
+			Context.SourceActor = Player;
+			Context.SourceComponent = Player->GetMesh();
+			Context.WorldLocation = StartLocation;
+			Context.WorldRotation = Player->GetActorRotation();
+
+			Player->EffectManagerComp->PlayGameEffect_Multicast(SoundOnlyEffect, Context);
 		}
 	}
 

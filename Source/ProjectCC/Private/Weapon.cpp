@@ -12,6 +12,12 @@
 #include "Objects.h"
 #include "Effect/GameEffectManagerComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/MeshComponent.h"
+#include "MaterialTypes.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -67,6 +73,8 @@ void AWeapon::BeginPlay() {
 	if (WeaponCollider) {
 		SetPhysicsCollider(WeaponCollider);
 	}
+
+	SetWeaponOverlayOpacity_Local(1.f);
 }
 
 void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const {
@@ -125,11 +133,11 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 		ApplyHitEffect(HitPlayer, Hit);
 
 		if (HitPlayer->EffectManagerComp) {
-			FGameEffectData* ThrowEffect = nullptr;	//[머지][버그] nullptr추가
+			FGameEffectData* ThrowEffect = nullptr;
 			FGameEffectContext Context;
 			if (WeaponData->Stats.AttackType != EAttackType::Shoot_HS) {
 				ThrowEffect = &WeaponData->HitEffect;
-
+				
 			}
 			else {
 				ThrowEffect = WeaponData->CustomEffects.Find(FName(TEXT("ThrowHitEffect")));
@@ -141,7 +149,8 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 				Context.HitNormal = Hit.ImpactNormal;
 				Context.WorldLocation = Hit.ImpactPoint;
 				Context.WorldRotation = Hit.ImpactNormal.Rotation();
-				HitPlayer->EffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);	//[머지][버그] if문 안으로 올림
+
+				HitPlayer->EffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);
 			}
 		}
 	}
@@ -184,7 +193,7 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 			EffectManagerComp->PlayGameEffect_Multicast(EffectData, Context);
 		}
 	}
-
+	
 	Destroy();
 }
 
@@ -214,6 +223,7 @@ void AWeapon::Equip(APlayer_Character* Player) {
 	if (!Player) return;
 	//무기를 장착된 상태로 변경, 무기 매쉬의 물리 설정 변경
 	SetEquipState(Player);
+	Multicast_SetWeaponOverlayOpacity(0.f);
 	EquippedPlayer->GetCapsuleComponent()->IgnoreActorWhenMoving(this, true);
 	if (WeaponData) {
 		//최초 생성된 무기의 사용 횟수 초기화
@@ -238,6 +248,7 @@ void AWeapon::UnEquip(APlayer_Character* Player) {
 		EquippedPlayer->GetCapsuleComponent()->IgnoreActorWhenMoving(this, false);
 	}
 	SetWorldState();
+	Multicast_SetWeaponOverlayOpacity(1.f);
 	//장착 해제 시 LifeTime이 10초 미만이면 10초로 연장
 	if (LifeTime < 10.f) {
 		LifeTime = 10.f;
@@ -280,9 +291,9 @@ void AWeapon::UseWeapon() {
 	if (!WeaponData) return;
 	//NowUseCount의 최소값을 -1로 지정 (-2는 초기화 전 최초 생성값)
 	if (NowUseCount > -1) {
-		if (!bFixUseCount) NowUseCount -= 1;
+		if(!bFixUseCount) NowUseCount -= 1;
 		OnWeaponUseCountChanged.Broadcast();
-
+		
 		ForceNetUpdate();
 	}
 	//사용 횟수 차감
@@ -327,7 +338,7 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	if (!Player || !WeaponData || !CheckUseCounting()) return;
 	//투척/발사 물체가 있는 경우에만 함수 기능 적용 (Melee와 HitScan은 없음)
 	if (!WeaponData->Bullet) return;
-
+	
 	FObjectLaunchData LaunchData;
 
 	if (!BuildBulletLaunchData(Player, TargetPoint, LaunchData)) return;
@@ -366,7 +377,7 @@ void AWeapon::ShootorThrow(APlayer_Character* Player, FVector TargetPoint) {
 	AObjects* Bullet = World->SpawnActor<AObjects>(WeaponData->Bullet, LaunchData.StartLocation, SpawnRotation, SpawnParams);
 	if (!Bullet) return;
 
-
+	
 	//스폰된 물체와 스폰 무기 간의 충돌 무시
 	if (Bullet->GetObjectPhysicsCollider()) {
 		Bullet->GetObjectPhysicsCollider()->IgnoreActorWhenMoving(this, true);
@@ -408,7 +419,7 @@ void AWeapon::SetWeaponEventMode(bool bEnable)
 	else {
 		Tags.Remove(TEXT("EventCreated"));
 	}
-
+	
 	ForceNetUpdate();
 }
 
@@ -520,6 +531,8 @@ void AWeapon::ApplyEquipState()
 			AddActorWorldOffset(Offset);
 		}
 	}
+
+	SetWeaponOverlayOpacity_Local(0.f);
 }
 
 void AWeapon::ApplyWorldState()
@@ -533,6 +546,8 @@ void AWeapon::ApplyWorldState()
 		WeaponCollider->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 		WeaponCollider->WakeAllRigidBodies();
 	}
+
+	SetWeaponOverlayOpacity_Local(1.f);
 }
 
 FVector AWeapon::GetBulletSpawnLocation(APlayer_Character* Player)
@@ -553,13 +568,13 @@ bool AWeapon::BuildBulletLaunchData(APlayer_Character* Player, const FVector& Th
 	if (!Player->NowMap)return false;
 
 	AObjects* Bullet = WeaponData->Bullet->GetDefaultObject<AObjects>();
-
+	
 	if (!Bullet || !Bullet->ObjectsData) return false;
-
+	
 	UObjectsDataAsset* BulletData = Bullet->ObjectsData;
 
 	float AttackRange = Player->AStat.AttackRange * Player->NowMap->BlockSize;
-
+	
 	FVector StartLocation = GetBulletSpawnLocation(Player);
 	FVector StandardLocation = Player->GetActorLocation();
 	StandardLocation.Z = 0.f;
@@ -572,7 +587,7 @@ bool AWeapon::BuildBulletLaunchData(APlayer_Character* Player, const FVector& Th
 	if (BulletData->Type == EObjectsType::Throwable)
 	{
 		OutLaunchData.bUseGravity = true;
-		OutLaunchData.LaunchVelocity = CalculateThrowLaunchVelocity(StartLocation, TargetLocation, 100.f);
+		OutLaunchData.LaunchVelocity = CalculateThrowLaunchVelocity(StartLocation, TargetLocation, 100.f);	
 	}
 	else if (BulletData->Type == EObjectsType::Projectile)
 	{
@@ -657,13 +672,13 @@ FVector AWeapon::CalculateThrowLaunchVelocity(const FVector& TheStartLocation, c
 FVector AWeapon::EvaluateLaunchLocation(FObjectLaunchData& LaunchData, float Time)
 {
 	FVector Gravity = FVector::ZeroVector;
-	if (LaunchData.bUseGravity) {
-		if (UWorld* World = GetWorld()) {
+	if (LaunchData.bUseGravity){
+		if (UWorld* World = GetWorld()){
 			Gravity = FVector(0.f, 0.f, World->GetGravityZ());
 		}
 	}
 
-	return LaunchData.StartLocation + LaunchData.LaunchVelocity * Time + 0.5f * Gravity * Time * Time;
+	return LaunchData.StartLocation + LaunchData.LaunchVelocity * Time + 0.5f * Gravity * Time * Time;	
 }
 
 float AWeapon::GetBulletMeshRadius(float TheRadius)
@@ -732,7 +747,7 @@ bool AWeapon::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualDa
 			PreviewData.bShowAttackPath = true;
 			PreviewData.PathRadius = FMath::Max(Stats.AttackRadius, 1.f);
 		}
-		else {
+		else{
 			PreviewData.bShowAttackSector = true;
 			PreviewData.bOnlySameHeight = true;
 		}
@@ -861,7 +876,7 @@ void AWeapon::PlayWeaponHitEffect(AActor* Target, const FHitResult& AttackHit)
 	}
 
 	FGameEffectData* EffectData = GetWeaponHitEffectData();
-
+	
 	if (!EffectData) return;
 
 	FVector AttackDir = HitLocation - EquippedPlayer->GetActorLocation();
@@ -922,6 +937,121 @@ FGameEffectData* AWeapon::GetWeaponHitEffectData()
 	return &WeaponData->HitEffect;
 }
 
+bool AWeapon::GetHitScanEffectStartLocation(FVector& StartLocation)
+{
+	if (Mesh && Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"))) {
+		StartLocation = Mesh->GetSocketLocation(TEXT("SK_WeaponAttackPoint"));
+		return true;
+	}
+
+	StartLocation = GetActorLocation();
+	return false;
+}
+
+void AWeapon::PlayHitScanAdditionalAttackEffect(APlayer_Character* Player, const FVector& TraceStart, const FVector& TraceEnd, EAttackTargetType AttackTargetType, const TArray<FHitResult>& TargetPlayerHits, const TArray<FHitResult>& TargetObjectsHits)
+{
+	if (!HasAuthority()) return;
+	if (!Player) return;
+	if (!WeaponData) return;
+	if (!Player->EffectManagerComp) return;
+
+	FGameEffectData* EffectData = WeaponData->CustomEffects.Find(FName(TEXT("AttackHSEffect")));
+	if (!EffectData) return;
+	if (!EffectData->NiagaraEffect && !EffectData->Sound) return;
+
+	auto GetSafeHitLocation = [](const FHitResult& Hit) -> FVector {
+		FVector Location = Hit.ImpactPoint;
+
+		if (Location.IsNearlyZero()) Location = Hit.Location;
+		if (Location.IsNearlyZero() && Hit.GetActor()) {
+			Location = Hit.GetActor()->GetActorLocation();
+		}
+
+		return Location;
+	};
+
+	FVector VisualStart = TraceStart;
+	GetHitScanEffectStartLocation(VisualStart);
+
+	FVector VisualEnd = TraceEnd;
+
+	FHitResult EffectHit;
+	bool bHasEffectHit = false;
+
+	if (AttackTargetType == EAttackTargetType::SingleTarget) {
+		float BestDistSq = TNumericLimits<float>::Max();
+
+		for (const FHitResult& Hit : TargetPlayerHits) {
+			FVector HitLocation = GetSafeHitLocation(Hit);
+			float DistSq = FVector::DistSquared(TraceStart, HitLocation);
+
+			if (DistSq < BestDistSq) {
+				BestDistSq = DistSq;
+				VisualEnd = HitLocation;
+				EffectHit = Hit;
+				bHasEffectHit = true;
+			}
+		}
+
+		for (const FHitResult& Hit : TargetObjectsHits) {
+			FVector HitLocation = GetSafeHitLocation(Hit);
+			float DistSq = FVector::DistSquared(TraceStart, HitLocation);
+
+			if (DistSq < BestDistSq) {
+				BestDistSq = DistSq;
+				VisualEnd = HitLocation;
+				EffectHit = Hit;
+				bHasEffectHit = true;
+			}
+		}
+	}
+
+	FVector DirEnd = (VisualEnd - VisualStart).GetSafeNormal();
+	if (DirEnd.IsNearlyZero()) DirEnd = (TraceEnd - TraceStart).GetSafeNormal();
+	if (DirEnd.IsNearlyZero()) {
+		DirEnd = Player->GetActorForwardVector();
+		DirEnd.Z = 0.f;
+		DirEnd = DirEnd.GetSafeNormal();
+	}
+
+	Multicast_PlayHitScanAdditionalAttackEffect_Local(VisualEnd, DirEnd);
+}
+
+void AWeapon::SetWeaponOverlayOpacity_Local(float opacity)
+{
+	UMaterialInstanceDynamic* MID = GetOrCreateWeaponOverlayMID();
+
+	if (!MID || !Mesh) return;
+
+	MID->SetScalarParameterValue(TEXT("Opacity"), opacity);
+
+	Mesh->MarkRenderStateDirty();
+}
+
+UMaterialInstanceDynamic* AWeapon::GetOrCreateWeaponOverlayMID()
+{
+	if (!Mesh) return nullptr;
+	if (WeaponOverlayMID) return WeaponOverlayMID;
+
+	UMaterialInterface* CurrentOverlay = Mesh->GetOverlayMaterial();
+
+	if (!CurrentOverlay) return nullptr;
+
+	TheWeaponOverlayMaterial = CurrentOverlay;
+
+	if (UMaterialInstanceDynamic* ExistingMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay)) WeaponOverlayMID = ExistingMID;
+	else {
+		WeaponOverlayMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
+
+		if (WeaponOverlayMID) {
+			Mesh->SetOverlayMaterial(WeaponOverlayMID);
+			Mesh->MarkRenderStateDirty();
+		}
+	}
+
+	return WeaponOverlayMID;
+}
+
 //---------------------------------------------------------------------------------------------//
 //무기가 가진 자체 공격 전처리 메커니즘 함수
 bool AWeapon::BeforeAttackWeaponFunction()
@@ -952,4 +1082,51 @@ void AWeapon::ReleaseAttackWeaponFunction()
 void AWeapon::AdditionalUnEquipWeaponFunction()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Weapon UnEquip Function!"));
+}
+
+void AWeapon::Multicast_SetWeaponOverlayOpacity_Implementation(float opacity)
+{
+	SetWeaponOverlayOpacity_Local(opacity);
+}
+
+void AWeapon::Multicast_PlayHitScanAdditionalAttackEffect_Local_Implementation(FVector_NetQuantize10 WorldEnd, FVector_NetQuantizeNormal WorldDirection)
+{
+	if (!WeaponData) return;
+	if (!Mesh) return;
+
+	FGameEffectData* EffectData = WeaponData->CustomEffects.Find(FName(TEXT("AttackHSEffect")));
+
+	if (!EffectData) return;
+	if (!EffectData->NiagaraEffect) return;
+
+	if (!Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"))) return;
+
+	UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAttached(EffectData->NiagaraEffect, Mesh, TEXT("SK_WeaponAttackPoint"), FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true, false);
+
+	if (!NiagaraComp) return;
+	FTransform EffectTransform = NiagaraComp->GetComponentTransform();
+	FVector SocketWorldLocation = NiagaraComp->GetComponentLocation();
+
+	FVector AdjustWorldEnd = FVector(WorldEnd);
+	AdjustWorldEnd.Z = SocketWorldLocation.Z;
+
+	FVector LocalStart = FVector::ZeroVector;
+	FVector LocalEnd = EffectTransform.InverseTransformPosition(FVector(AdjustWorldEnd));
+
+	FVector LocalDirection = LocalEnd.GetSafeNormal();
+	if (LocalDirection.IsNearlyZero()) {
+		FVector AdjustWorldDirection = AdjustWorldEnd - SocketWorldLocation;
+		AdjustWorldDirection.Z = 0.f;
+		AdjustWorldDirection = AdjustWorldDirection.GetSafeNormal();
+
+		LocalDirection = EffectTransform.InverseTransformVectorNoScale(AdjustWorldDirection).GetSafeNormal();
+	}
+	if (LocalDirection.IsNearlyZero()) LocalDirection = FVector::ForwardVector;
+
+	NiagaraComp->SetVariableVec3(TEXT("User.Start"), LocalStart);
+	NiagaraComp->SetVariableVec3(TEXT("User.End"), LocalEnd);
+	NiagaraComp->SetVariableVec3(TEXT("User.Direction"), LocalDirection);
+
+	NiagaraComp->Activate(true);
+	NiagaraComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 }

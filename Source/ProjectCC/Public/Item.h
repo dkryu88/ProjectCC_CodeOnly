@@ -67,8 +67,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
 	FVector ColliderOffset = FVector(0.f, 0.f, 0.f);
 	/*--------------------------------------------*/
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	FGameEffectData UsingEffect;
 public:
 	//아이템 장착
 	void Equip(APlayer_Character* Player);

@@ -22,6 +22,9 @@ struct FMatchEventData {
 	float EventDuration = 30.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bShopClose = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName EventName = FName("Default");
 };
 

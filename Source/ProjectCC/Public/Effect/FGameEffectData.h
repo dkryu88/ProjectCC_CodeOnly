@@ -109,6 +109,17 @@ struct FGameEffectBoolParam {
 };
 
 USTRUCT(BlueprintType)
+struct FGameEffectStaticMeshParam {
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ParamName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TObjectPtr<UStaticMesh> Value = nullptr;
+};
+
+USTRUCT(BlueprintType)
 struct FGameEffectRuntimeParams {
 	GENERATED_BODY()
 
@@ -120,6 +131,9 @@ struct FGameEffectRuntimeParams {
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FGameEffectBoolParam> BoolParams;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FGameEffectStaticMeshParam> StaticMeshParams;
 
 	void AddFloatParam(FName ParamName, float Value) {
 		if (ParamName.IsNone()) return;
@@ -146,6 +160,14 @@ struct FGameEffectRuntimeParams {
 		NewParam.ParamName = ParamName;
 		NewParam.Value = Value;
 		BoolParams.Add(NewParam);
+	}
+
+	void AddStaticMeshParam(FName ParamName, UStaticMesh* Value)
+	{
+		FGameEffectStaticMeshParam Param;
+		Param.ParamName = ParamName;
+		Param.Value = Value;
+		StaticMeshParams.Add(Param);
 	}
 
 	bool TryGetFloat(FName ParamName, float& OutValue) const {

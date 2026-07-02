@@ -7,6 +7,8 @@
 #include "Effect/FGameEffectData.h"
 #include "Player_FunctionInterActionReason.h"
 #include "Animation/EquipmentAnimation.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "Objects.generated.h"
 
 class UGameEffectManagerComponent;
@@ -87,6 +89,12 @@ public:
 	//상시 이펙트 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Effect")
 	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
+	//상시 사운드 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<UAudioComponent> LifeTimeAudioComp;
+	//재생할 상시 사운드
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> LifeTimeSound;
 	//물체 Mesh의 기준점
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Objects")
 	USceneComponent* MeshPivot;
@@ -235,7 +243,7 @@ public:
 	//물체 Mesh 크기를 SphereCollider에 반영
 	void SetSizeofSphereColliderwithMesh(USphereComponent* Collider);
 	//클라이언트가 물체 데미지 적용
-	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack = -1.f);
+	float ApplyDamageInternal(float Damage, APlayer_Character* AttackPlayer, AActor* DamageCauser, bool bApplyKnockBack, bool bForceDamage, float OverrideKnockBack = -1.f, bool bHasHitData = false, FVector HitLocation = FVector::ZeroVector, FVector HitNormal = FVector::UpVector);
 	//물체 넉백 적용
 	void ApplyKnockBack(FVector& AttackDir, float Strength, float UpStrength);
 	//플레이어가 물체 획득 시 확인
@@ -258,7 +266,7 @@ public:
 	//물체 설치(Install Type)
 	void ApplyInstallState();
 	//물체 상호작용 상태
-	void ApplyInteractionState(APlayer_Character* InterActionPlayer);
+	virtual void ApplyInteractionState(APlayer_Character* InterActionPlayer);
 	//물체 발사(Projectile Type), 투척(Throwable Type) 상태
 	void ApplyShootorThrowState();
 	//물체 발사 시 충돌 무시/복구
@@ -350,7 +358,11 @@ public:
 
 	FGameEffectData* GetObjectsEffectData(EEffectType EffectType, FName CustomEffectName = NAME_None);
 	void DelayForDestroyEffect();
-	void PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams());
+	void PlayObjectsHittedEffect(const FVector& EffectLocation, const FVector& EffectNormal);
+	void PlayObjectsDestroyEffect();
+	float GetDestroyEffectScaleParam();
+	float GetMiddleAxisSize();
+	void PlayObjectsEffect(EEffectType EffectType, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams(), FName CustomEffectName = NAME_None);
 };
 
 //고유 기능 구현은 여기에 있는 기능 함수를 Override 하여 사용

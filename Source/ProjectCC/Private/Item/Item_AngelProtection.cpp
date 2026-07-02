@@ -13,9 +13,10 @@ bool AItem_AngelProtection::UseEffect_Implementation(APlayer_Character* Player)
 
 	if (Player->ConditionComp) {
 		Player->ConditionComp->ApplyCondition(InvincibleDataAsset, Player, DamageImmunityDuration);
+		Player->AddImmunityController(FName(TEXT("AngelProtection")), EPlayerImmunityType::Invincible, 0, true, DamageImmunityDuration);
 
 		if (Player->EffectManagerComp) {
-			FGameEffectData* EffectData = &ItemData->UseEffect;
+			FGameEffectData* EffectData = ItemData->CustomEffects.Find(TEXT("ProtectionEffect"));
 			if (EffectData) {
 				FGameEffectContext Context;
 				FGameEffectRuntimeParams Params;
@@ -25,7 +26,7 @@ bool AItem_AngelProtection::UseEffect_Implementation(APlayer_Character* Player)
 				Context.WorldLocation = Player->GetActorLocation();
 				Context.WorldRotation = Player->GetActorRotation();
 
-				Params.AddFloatParam(TEXT("User.LifetTime"), DamageImmunityDuration);
+				Params.AddFloatParam(TEXT("User.LifeTime"), DamageImmunityDuration);
 
 				Player->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params);
 			}

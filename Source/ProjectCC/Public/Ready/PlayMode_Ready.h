@@ -18,6 +18,7 @@ public:
 	APlayMode_Ready();
 
 	virtual void BeginPlay() override;
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
 	void NotifyPlayerProfileSynced(APlayerController* PC);
@@ -25,9 +26,6 @@ public:
 	void NotifyReadyToTravel(APlayerController* PC);
 
 	FTimerHandle MatchStartTimerHandle;
-
-	//[추가머지]난입방지
-	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Ready")

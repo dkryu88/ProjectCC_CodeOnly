@@ -10,6 +10,7 @@
 #include "PlayerTransformationEffect.h"
 #include "PlayerTransformationDataAsset.h"
 #include "PlayerTransformationAnimation.h"
+#include "PlayerConditionComponent.h"
 #include "Player_CharacterWidget.h"
 #include "PlayerConditionComponent.h"
 #include "NiagaraComponent.h"
@@ -64,6 +65,10 @@ void UPlayerTransformationComponent::TickComponent(float DeltaTime, ELevelTick T
 
 	UpdateTransformMeshLocation();
 
+	if (bNoShowingPlayerOverlayMaterialDuringTransformation) {
+		EnforcePlayerOverlayNoShowing_Local();
+	}
+
 	if (!AppliedPlayer || !AppliedPlayer->HasAuthority()) return;
 
 	if (CurrentTransformation.Duration > 0.f) {
@@ -101,6 +106,7 @@ void UPlayerTransformationComponent::OnRep_Transformation()
 	else {
 		StopTransformLoopEffect_Local();
 		ApplyNormalVisual();
+		SetPlayerOverlayNoShowing_Local(false);
 		SetComponentTickEnabled(false);
 	}
 
@@ -200,6 +206,7 @@ void UPlayerTransformationComponent::ApplyTransformationVisual()
 		AppliedPlayer->VisualManagerComp->RefreshPortraitMaterials();
 	}
 
+	SetPlayerOverlayNoShowing_Local(true);
 	SetComponentTickEnabled(true);
 }
 //플레이어 매쉬를 복원
@@ -521,6 +528,9 @@ bool UPlayerTransformationComponent::StartTransformation(UPlayerTransformationDa
 
 		AppliedPlayer->EffectManagerComp->PlayGameEffect_Multicast(CurrentTransformation.TransformStartEffect, Context);
 	}
+	if (AppliedPlayer->ConditionComp) {
+		AppliedPlayer->ConditionComp->Multicast_RefreshConditionOverlayVisual();
+	}
 
 	if (CurrentTransformation.TransformPersistEffect.NiagaraEffect) Multicast_StartTransformLoopEffect(CurrentTransformation.TransformPersistEffect);
 
@@ -542,6 +552,8 @@ bool UPlayerTransformationComponent::StartTransformation(UPlayerTransformationDa
 		ApplyNormalVisual();
 		CurrentTransformation = FPlayerTransformation();
 		CurrentTransformation.bActive = false;
+
+		SetPlayerOverlayNoShowing_Local(false);
 
 		SetComponentTickEnabled(false);
 		AppliedPlayer->ForceNetUpdate();
@@ -591,6 +603,12 @@ void UPlayerTransformationComponent::StopTransformation(bool bEndEffect, bool bR
 	CurrentTransformation = FPlayerTransformation();
 	CurrentTransformation.bActive = false;
 
+	SetPlayerOverlayNoShowing_Local(false);
+	
+	if (AppliedPlayer->ConditionComp) {
+		AppliedPlayer->ConditionComp->Multicast_RefreshConditionOverlayVisual();
+	}
+
 	//위젯 설정 복원
 	UPlayer_CharacterWidget* Player_CharacterWidget = Cast<UPlayer_CharacterWidget>(AppliedPlayer->WidgetComponent->GetUserWidgetObject());
 	if (Player_CharacterWidget) {
@@ -604,12 +622,106 @@ void UPlayerTransformationComponent::StopTransformation(bool bEndEffect, bool bR
 	AppliedPlayer->ForceNetUpdate();
 }
 
+void UPlayerTransformationComponent::NotifyPlayerOverlayMaterialChanged()
+{
+	if (!bNoShowingPlayerOverlayMaterialDuringTransformation) return;
+
+	EnforcePlayerOverlayNoShowing_Local();
+}
+
 void UPlayerTransformationComponent::NotifyHittedDuringTransformation(APlayer_Character* AttackedPlayer)
 {
 	ResolveInputRule(CurrentTransformation.HittedRule);
 	if (CurrentTransformation.TransformationEffect) {
 		CurrentTransformation.TransformationEffect->HittedEffect(AppliedPlayer, this, CurrentTransformation, AttackedPlayer);
 	}
+}
+
+void UPlayerTransformationComponent::SetPlayerOverlayNoShowing_Local(bool bNoShowing)
+{
+	if (bNoShowingPlayerOverlayMaterialDuringTransformation == bNoShowing) {
+		if(bNoShowing) EnforcePlayerOverlayNoShowing_Local();
+		return;
+	}
+	
+	bNoShowingPlayerOverlayMaterialDuringTransformation = bNoShowing;
+
+	if (bNoShowing) EnforcePlayerOverlayNoShowing_Local();
+	else RestorePlayerOverlayToShowing_Local();
+}
+
+void UPlayerTransformationComponent::EnforcePlayerOverlayNoShowing_Local()
+{
+	if (!AppliedPlayer) AppliedPlayer = Cast<APlayer_Character>(GetOwner());
+	if (!AppliedPlayer || !AppliedPlayer->GetMesh()) return;
+
+	UMeshComponent* MeshComp = AppliedPlayer->GetMesh();
+
+	UMaterialInstanceDynamic* OverlayMID = GetOrCreateSuppressibleOverlayMID(MeshComp);
+	if (!OverlayMID) return;
+
+	OverlayMID->SetScalarParameterValue(TEXT("Opacity"), 0.f);
+
+	MeshComp->MarkRenderStateDirty();
+}
+
+void UPlayerTransformationComponent::RestorePlayerOverlayToShowing_Local()
+{
+	if (!AppliedPlayer) AppliedPlayer = Cast<APlayer_Character>(GetOwner());
+
+	for (auto& Pair : NoShowingOverlayOriginalOpacityMap) {
+		UMaterialInstanceDynamic* MID = Pair.Key.Get();
+
+		if (!MID) continue;
+
+		float OriginalOpacity = Pair.Value;
+		MID->SetScalarParameterValue(TEXT("Opacity"), OriginalOpacity);
+	}
+
+	if (AppliedPlayer && AppliedPlayer->GetMesh()) AppliedPlayer->GetMesh()->MarkRenderStateDirty();
+
+	NoShowingOverlayOriginalOpacityMap.Empty();
+	OwnedNoShowingOverlayMIDs.Empty();
+}
+
+UMaterialInstanceDynamic* UPlayerTransformationComponent::GetOrCreateSuppressibleOverlayMID(UMeshComponent* MeshComp)
+{
+	if (!MeshComp) return nullptr;
+	UMaterialInterface* CurrentOverlay = MeshComp->GetOverlayMaterial();
+
+	if (!CurrentOverlay) return nullptr;
+
+	if (UMaterialInstanceDynamic* CurrentMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay)) {
+		if (!NoShowingOverlayOriginalOpacityMap.Contains(CurrentMID)) {
+			float OriginalOpacity = ReadOverlayOpacity(CurrentMID);
+			NoShowingOverlayOriginalOpacityMap.Add(CurrentMID, OriginalOpacity);
+		}
+
+		return CurrentMID;
+	}
+
+	float OriginalOpacity = ReadOverlayOpacity(CurrentOverlay);
+	UMaterialInstanceDynamic* NewMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
+	if (!NewMID) return nullptr;
+	NewMID->SetScalarParameterValue(TEXT("Opacity"), OriginalOpacity);
+
+	OwnedNoShowingOverlayMIDs.Add(NewMID);
+	NoShowingOverlayOriginalOpacityMap.Add(NewMID, OriginalOpacity);
+
+	MeshComp->SetOverlayMaterial(NewMID);
+	MeshComp->MarkRenderStateDirty();
+
+	return NewMID;
+}
+
+float UPlayerTransformationComponent::ReadOverlayOpacity(UMaterialInterface* Material)
+{
+	if (!Material) return 1.f;
+
+	float Value = 1.f;
+	Material->GetScalarParameterValue(FMaterialParameterInfo(TEXT("Opacity")), Value);
+
+	return Value;
 }
 
 bool UPlayerTransformationComponent::CheckHidePlayerEffectsFromOthers()

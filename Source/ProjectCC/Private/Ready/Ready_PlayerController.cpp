@@ -6,6 +6,8 @@
 #include "AllPlayMode_GameInstance.h"
 #include "Player_State.h"
 #include "Ready/PlayMode_Ready.h"
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Sound/SoundDataAsset.h"
 
 void AReady_PlayerController::BeginPlay()
 {
@@ -29,13 +31,21 @@ void AReady_PlayerController::BeginPlay()
 	}
 
 	if (!bDataSubmitted) {
-		Server_SubmitData(GameInstance->GetPlayerLocalNickname(), GameInstance->GetLocalPortraitId());
+		Server_SubmitData(GameInstance->GetPlayerLocalNickname());
 		bDataSubmitted = true;
 	}
 	
 	if (!bReadyScreenLoadedSent) {
 		Server_NotifyReadyScreenLoaded();
 		bReadyScreenLoadedSent = true;
+	}
+
+	if (IsLocalController()) {
+		if (UAllPlayMode_SoundSubsystem* AudioSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			if (AudioSubsystem->GetAudioData() && AudioSubsystem->GetAudioData()->ReadyBGM) {
+				AudioSubsystem->PlayBGM(AudioSubsystem->GetAudioData()->ReadyBGM, 0.5f);
+			}
+		}
 	}
 
 	//준비가 완료되었는지 0.1초 단위로 계속 확인
@@ -60,13 +70,12 @@ void AReady_PlayerController::TryNotifyReadyToTravel()
 }
 
 //<ServerRPC> PlayerState에 닉네임, 초상화 ID 저장
-void AReady_PlayerController::Server_SubmitData_Implementation(const FString& nickname, int32 portraitId)
+void AReady_PlayerController::Server_SubmitData_Implementation(const FString& nickname)
 {
 	APlayer_State* Player_State = GetPlayerState<APlayer_State>();
 	if (!Player_State) return;
 
 	Player_State->SetNickName(nickname);
-	Player_State->SetPortraitId(portraitId);
 
 	Player_State->SetReadySyncState(EReadySyncState::ProfileSynced);
 }

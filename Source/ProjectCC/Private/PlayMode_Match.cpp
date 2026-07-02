@@ -20,6 +20,7 @@
 #include "Engine/TargetPoint.h"
 #include "EngineUtils.h"
 #include "MapConstructor.h"
+#include "PlayerConditionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/CameraActor.h"
 #include "GameFramework/PlayerState.h"
@@ -34,8 +35,6 @@ APlayMode_Match::APlayMode_Match()
 
 	CoinWaveTime = { 300, 200, 100 };
 }
-
-
 
 // Called when the game starts or when spawned
 void APlayMode_Match::BeginPlay()
@@ -62,6 +61,33 @@ void APlayMode_Match::BeginPlay()
 		_MatchState->SetMatchStarted(false);
 		_MatchState->SetMatchEnded(false);
 		_MatchState->SetMatchTime(MatchDuration);
+	}
+}
+
+void APlayMode_Match::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+
+	if (!HasAuthority()) return;
+	if (!ErrorMessage.IsEmpty()) return;
+
+	IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+	if (OSS) {
+		IOnlineSessionPtr SessionInterface = OSS->GetSessionInterface();
+		if (SessionInterface.IsValid()) {
+			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
+			if (Session && Session->SessionSettings.bAllowJoinInProgress == false) {
+				ErrorMessage = TEXT("Match : Game is already running!");
+				return;
+			}
+		}
+	}
+
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		if (GetNumPlayers() >= GameInstance->GetMaxPlayersByMode()) {
+			ErrorMessage = TEXT("Match : Room is Full!");
+			return;
+		}
 	}
 }
 
@@ -176,6 +202,11 @@ void APlayMode_Match::UpdateMatchTimer()
 
 	UpdateActiveMatchEventUI();
 
+	//[추가]
+	if (NewMatchTime == 30) {
+		BroadcastPlayBGM30Sec();
+	}
+
 	if (NewMatchTime <= 0) {
 		EndMatchLogic();
 	}
@@ -208,6 +239,7 @@ void APlayMode_Match::EndMatchLogic()
 				player->AddInputBlockController(FName("MatchEnd"), true, true, true, false);
 			}
 			PC->Client_ApplyUIInputMode();
+			PC->Client_FadeOutBGM();
 		}
 	}
 
@@ -706,6 +738,7 @@ bool APlayMode_Match::TryShoppingBox(AMatch_PlayerController* PC, EShopBoxs Box)
 	if (!PC) return false;
 	//리스폰 대기중인 플레이어가 아닌 경우 상점 이용 불가
 	if (!RespawnMap.Contains(PC)) return false;
+	if (bActiveShopClose) return false;
 
 	APlayer_State* PS = PC->GetPlayerState<APlayer_State>();
 	if (!PS) return false;
@@ -1027,6 +1060,11 @@ void APlayMode_Match::Respawn(AMatch_PlayerController* PC) {
 	SpawnPlayer->ApplyResevedWeapon();
 	SpawnPlayer->EquipSavedEquipmentAfterRespawn();
 
+	//리스폰 플레이어에게 무적 3초 부여
+	SpawnPlayer->ConditionComp->ApplyCondition(InvincibleData, SpawnPlayer, RespawnImmunityDuration);
+	SpawnPlayer->AddImmunityController(FName(TEXT("RespawnImmunity")), EPlayerImmunityType::Invincible, 2, false, RespawnImmunityDuration);
+
+	//현재 진행중인 이벤트를 리스폰 플레이어 캐릭터에 강제 적용
 	ApplyActiveEventToPlayer(SpawnPlayer);
 
 	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
@@ -1157,7 +1195,9 @@ void APlayMode_Match::StartMatchEvent()
 	CurrentEventName = SelectedEventData.EventName;
 	CurrentEventTime = GetWorld()->GetTimeSeconds() + SelectedEventData.EventDuration;
 	bActiveMatchEvent = true;
+	bActiveShopClose = SelectedEventData.bShopClose;
 
+	BroadcastShopClosedState(bActiveShopClose);
 	NewEvent->StartEvent(CurrentMap, this, SelectedEventData.EventDuration);
 
 	int32 RemainingSeconds = FMath::Max(0, FMath::CeilToInt(SelectedEventData.EventDuration));
@@ -1177,6 +1217,7 @@ void APlayMode_Match::StopMatchEvent()
 	CurrentEventName = NAME_None;
 	CurrentEventTime = -1.f;
 	bActiveMatchEvent = false;
+	bActiveShopClose = false;
 
 	BroadcastMatchEventEnded();
 }
@@ -1231,6 +1272,16 @@ void APlayMode_Match::UpdateActiveMatchEventUI()
 	BroadcastMatchEventActive(CurrentEventName, RemainSeconds);
 }
 
+void APlayMode_Match::BroadcastShopClosedState(bool bClosed)
+{
+	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
+		AMatch_PlayerController* PC = Cast<AMatch_PlayerController>(IT->Get());
+		if (!PC) continue;
+
+		PC->Client_SetShopClosed(bClosed);
+	}
+}
+
 void APlayMode_Match::NotifyMatchEventFinished(AMatch_Event* FinishedEvent)
 {
 	if (!HasAuthority()) return;
@@ -1241,6 +1292,7 @@ void APlayMode_Match::NotifyMatchEventFinished(AMatch_Event* FinishedEvent)
 		CurrentEventName = NAME_None;
 		CurrentEventTime = -1.f;
 		bActiveMatchEvent = false;
+		bActiveShopClose = false;
 
 		BroadcastMatchEventEnded();
 	}
@@ -1282,6 +1334,18 @@ void APlayMode_Match::BroadcastMatchEventEnded()
 		if (!PC) continue;
 
 		PC->Client_HideMatchEventUI();
+		PC->Client_SetShopClosed(false);
+	}
+}
+
+//[추가]
+void APlayMode_Match::BroadcastPlayBGM30Sec()
+{
+	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
+		AMatch_PlayerController* PC = Cast<AMatch_PlayerController>(IT->Get());
+		if (!PC) continue;
+
+		PC->Client_PlayBGM30Sec();
 	}
 }
 
@@ -1689,34 +1753,4 @@ bool APlayMode_Match::SpawnSupplyObjects()
 		}
 	}
 	return false;
-}
-
-//[추가머지]난입방지
-void APlayMode_Match::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
-{
-	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-
-	if (!HasAuthority()) return;
-	if (!ErrorMessage.IsEmpty()) return;
-
-	//온라인 서브시스템의 세션 간판을 직접 확인
-	IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
-	if (OSS) {
-		IOnlineSessionPtr SessionInterface = OSS->GetSessionInterface();
-		if (SessionInterface.IsValid()) {
-			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
-			if (Session && Session->SessionSettings.bAllowJoinInProgress == false) {
-				ErrorMessage = TEXT("Match : Game is already running!");
-				UE_LOG(LogTemp, Warning, TEXT("Intruder blocked in Match: Session is closed."));
-				return;
-			}
-		}
-	}
-	//보험
-	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-		if (GetNumPlayers() >= GameInstance->GetMaxPlayersByMode()) {
-			ErrorMessage = TEXT("Match : Room is Full!");
-			return;
-		}
-	}
 }

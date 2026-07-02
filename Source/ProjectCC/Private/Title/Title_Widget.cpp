@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Title/Title_Widget.h"
@@ -12,6 +12,8 @@
 #include "Components/Overlay.h"
 #include "AllPlayMode_GameInstance.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Sound/AllPlayMode_SoundSubsystem.h"	//[Å¬¸¯]
+#include "Blueprint/WidgetTree.h"	//[Å¬¸¯]
 
 void UTitle_Widget::NativeConstruct() {
 	Super::NativeConstruct();
@@ -38,12 +40,12 @@ void UTitle_Widget::NativeConstruct() {
 	}
 
 	if (Button_Play) {
-		//Playë²„íŠ¼ì— í•¨ìˆ˜ ë°”ì¸ë”©
+		//Play¹öÆ°¿¡ ÇÔ¼ö ¹ÙÀÎµù
 		Button_Play->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandlePlayButtonClicked);
 	}
 
 	if (Button_Exit) {
-		//Playë²„íŠ¼ì— í•¨ìˆ˜ ë°”ì¸ë”©
+		//Play¹öÆ°¿¡ ÇÔ¼ö ¹ÙÀÎµù
 		Button_Exit->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::HandleExitButtonClicked);
 	}
 
@@ -57,19 +59,26 @@ void UTitle_Widget::NativeConstruct() {
 	}
 
 	if (Text_Status) {
-		//ìœ„ì ¯ì´ ì²˜ìŒ í™”ë©´ì— ìƒì„±ë  ë•Œ ë³´ì´ëŠ” ê¸°ë³¸ ìƒíƒœ ë©”ì„¸ì§€
+		//À§Á¬ÀÌ Ã³À½ È­¸é¿¡ »ı¼ºµÉ ¶§ º¸ÀÌ´Â ±âº» »óÅÂ ¸Ş¼¼Áö
 		Text_Status->SetText(FText::FromString(TEXT("Enter Your Nickname.")));
 	}
 
-	//ApplyMatchMode(EMatchMode::TwoPlayers, true);
-	//[ë¨¸ì§€][ë²„ê·¸] ë§¤ì¹˜ëª¨ë“œ ì„ íƒí•œ ê±¸ ê°€ì ¸ì™€ì„œ Image_SelectedFrameì´ ìœ ì§€ë˜ë„ë¡
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	if (GameInstance) {
 		EMatchMode SavedMatchMode = GameInstance->GetSelectedMatchMode();
 		ApplyMatchMode(SavedMatchMode, true);
 	}
-	else {	//ë³´í—˜ìš©
+	else {
 		ApplyMatchMode(EMatchMode::TwoPlayers, true);
+	}
+
+	//[Å¬¸¯]
+	if (WidgetTree) {
+		WidgetTree->ForEachWidget([this](UWidget* widget) {
+			if (UButton* Btn = Cast<UButton>(widget)) {
+				Btn->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::PlayCommonUIClickSound);
+			}
+		});
 	}
 }
 
@@ -111,18 +120,18 @@ void UTitle_Widget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 }
 
-//ë‹‰ë„¤ì„ íšë“
+//´Ğ³×ÀÓ È¹µæ
 FString UTitle_Widget::GetNicknameString() {
-	//ì…ë ¥ì¹¸ì´ ì—†ë‹¤ë©´ ë¹ˆ ë¬¸ìì—´ ë°˜í™˜
+	//ÀÔ·ÂÄ­ÀÌ ¾ø´Ù¸é ºó ¹®ÀÚ¿­ ¹İÈ¯
 	if (!EditableTextBox_Nickname) {
 		return FString();
 	}
 
-	//ë‹‰ë„¤ì„ ì…ë ¥ì¹¸ ë‚´ì— ì…ë ¥ë°›ì€ ë‹‰ë„¤ì„ ë°˜í™˜
+	//´Ğ³×ÀÓ ÀÔ·ÂÄ­ ³»¿¡ ÀÔ·Â¹ŞÀº ´Ğ³×ÀÓ ¹İÈ¯
 	return EditableTextBox_Nickname->GetText().ToString();
 }
 
-//ë‹‰ë„¤ì„ ì„¤ì •
+//´Ğ³×ÀÓ ¼³Á¤
 void UTitle_Widget::SetNicknameText(const FString& nickname)
 {
 	if (!EditableTextBox_Nickname) return;
@@ -131,7 +140,7 @@ void UTitle_Widget::SetNicknameText(const FString& nickname)
 	RefreshNicknameBox();
 }
 
-//ë‹‰ë„¤ì„ ìˆ˜ì •, ì…ë ¥ í—ˆìš©/ë°©ì§€
+//´Ğ³×ÀÓ ¼öÁ¤, ÀÔ·Â Çã¿ë/¹æÁö
 void UTitle_Widget::SetNicknameLocked(bool bLocked)
 {
 	bNicknameLocked = bLocked;
@@ -186,7 +195,6 @@ void UTitle_Widget::SetJoinCompleteMode()
 		Button_CancelMatch->SetIsEnabled(false);
 	}
 
-	//[ë¨¸ì§€][ë²„ê·¸] í´ë¼ì´ì–¸íŠ¸ê°€ Matching Complete ë°©ì†¡í•˜ë©´ì„œ 4ì¸ë°© ì¸ì›ëª¨ì§‘ ëŒ€ê¸°ì¤‘ì¼ ë•Œ 2ì¸/4ì¸ë²„íŠ¼ ì„ íƒë˜ëŠ” ë²„ê·¸ ìˆ˜ì •
 	if (Button_TwoPlayer) {
 		Button_TwoPlayer->SetIsEnabled(false);
 	}
@@ -197,7 +205,7 @@ void UTitle_Widget::SetJoinCompleteMode()
 	SetNicknameLocked(true);
 }
 
-//Text_Statusì˜ Text ë³€ê²½
+//Text_StatusÀÇ Text º¯°æ
 void UTitle_Widget::SetStatusMessage(const FText& text)
 {
 	if (!Text_Status) return;
@@ -213,7 +221,7 @@ void UTitle_Widget::SetStatusMessage(const FText& text)
 	
 }
 
-//í‚¤ë³´ë“œë¥¼ ë‹‰ë„¤ì„ ì…ë ¥ì¹¸ì— ë°”ì¸ë”©
+//Å°º¸µå¸¦ ´Ğ³×ÀÓ ÀÔ·ÂÄ­¿¡ ¹ÙÀÎµù
 void UTitle_Widget::FocusNicknameBox()
 {
 	if (EditableTextBox_Nickname) {
@@ -259,7 +267,7 @@ void UTitle_Widget::SetStatusMessageFadeOut(const FText& text, float VisibleTime
 	StatusElapsedTime = 0.f;
 }
 
-//OnTitlePlayRequest ì´ë²¤íŠ¸ë¥¼ ë°œìƒì‹œì¼œ ì…ë ¥ë°›ì€ ë‹‰ë„¤ì„ì„ PlayerControllerê°€ ì €ì¥í•˜ë„ë¡ ì§€ì •
+//OnTitlePlayRequest ÀÌº¥Æ®¸¦ ¹ß»ı½ÃÄÑ ÀÔ·Â¹ŞÀº ´Ğ³×ÀÓÀ» PlayerController°¡ ÀúÀåÇÏµµ·Ï ÁöÁ¤
 void UTitle_Widget::HandlePlayButtonClicked()
 {
 	OnTitlePlayRequested.Broadcast(GetNicknameString(), SelectedMatchMode);
@@ -288,7 +296,7 @@ void UTitle_Widget::HandleFourPlayerButtonClicked()
 	SetMatchMode(EMatchMode::FourPlayers);
 }
 
-//ë‹‰ë„¤ì„ ì…ë ¥ ë°•ìŠ¤ í…ìŠ¤íŠ¸ ë³€ê²½ ì‹œ ê°±ì‹ 
+//´Ğ³×ÀÓ ÀÔ·Â ¹Ú½º ÅØ½ºÆ® º¯°æ ½Ã °»½Å
 void UTitle_Widget::HandleNickNameTextChanged(const FText& NewText)
 {
 	FString ChangedText = NewText.ToString().TrimStartAndEnd();
@@ -302,7 +310,7 @@ void UTitle_Widget::SetMatchMode(EMatchMode TheMatchMode)
 	ApplyMatchMode(TheMatchMode, false);
 }
 
-//ë‹‰ë„¤ì„ ì…ë ¥ ë°•ìŠ¤ ê°±ì‹ 
+//´Ğ³×ÀÓ ÀÔ·Â ¹Ú½º °»½Å
 void UTitle_Widget::RefreshNicknameBox()
 {
 	if (!EditableTextBox_Nickname) return;
@@ -376,7 +384,7 @@ void UTitle_Widget::UpdateSelectedFrameTargetPosition()
 	FVector2D TargetSize = TargetSlot->GetSize();
 	FVector2D TargetAlignment = TargetSlot->GetAlignment();
 
-	//ë²„íŠ¼ì˜ ì‹¤ì œ ì¤‘ì•™ ì¢Œí‘œ ê³„ì‚°
+	//¹öÆ°ÀÇ ½ÇÁ¦ Áß¾Ó ÁÂÇ¥ °è»ê
 	FVector2D TargetCenterPosition = TargetPosition + TargetSize * (FVector2D(0.5f, 0.5f) - TargetAlignment);
 		
 	FrameSlot->SetAlignment(FVector2D(0.5f, 0.5f));
@@ -394,6 +402,14 @@ void UTitle_Widget::SnapSelectedFrameToTargetLocation()
 
 	FrameSlot->SetPosition(TargetFramePosition);
 	bFrameMoving = false;
+}
+
+//[Å¬¸¯]
+void UTitle_Widget::PlayCommonUIClickSound()
+{
+	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		AudioSub->PlayUIClickSound();
+	}
 }
 
 

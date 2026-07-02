@@ -56,12 +56,24 @@ public:
 	//레일건 공격 완료 애니메이션
 	UPROPERTY(EditAnywhere, Category = "RainGun | Animation")
 	TObjectPtr<UAnimSequence> RailGunCompleteAnimation = nullptr;
+	//레일건 공격 이펙트 (지속)
+	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
+	UNiagaraSystem* RailGunBeamEffect;
+	//레일건 공격 이펙트 재생 나이아가라 컴포넌트 (기존의 EffectComp는 일시 효과만 적용하므로 따로 생성)
+	UPROPERTY()
+	TObjectPtr<UNiagaraComponent> ActiveRailGunEffectComp;
+	//레일건 발사 이펙트 파라미터 갱신
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_UpdateRailGunBeamEffect(FVector_NetQuantize10 BeamStart, FVector_NetQuantize10 BeamEnd, float ChargeRate, float Radius, bool bBeamActive);
+	//레일건 발사 이펙트 중지
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_StopRailGunBeamEffect();
 	// 발사 가능 최소 게이지 — 이 값 미만에서 Release하면 발사 안 함
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
 	float MinGauge = 25.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
-	float ChargeSpeedPerSecond = 2.f;
+	float ChargeSpeedPerSecond = 5.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RailGun")
 	float ChargeAmountPerSecond = 5.f;
@@ -131,26 +143,4 @@ public:
 	FName GetAnimationSlotName();
 	//재생중인 애니메이션 슬롯 전환
 	void RefreshRailGunAnimationSlot();
-
-	//[추가]
-	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
-
-	UPROPERTY(Transient)
-	USoundBase* CachedChargeSound = nullptr;
-
-	UPROPERTY(Transient)
-	USoundBase* CachedFireLoopSound = nullptr;
-
-	UPROPERTY(Transient)
-	USoundBase* CachedPowerDownSound = nullptr;
-
-	UPROPERTY(Transient)
-	UAudioComponent* ChargeAudioComp;
-
-	UPROPERTY(Transient)
-	UAudioComponent* FireAudioComp;
-
-	bool bWasChargingSoundPlaying = false;
-	bool bWasFiringSoundPlaying = false;
 };

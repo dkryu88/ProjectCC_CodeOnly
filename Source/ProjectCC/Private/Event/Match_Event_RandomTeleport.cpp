@@ -49,10 +49,11 @@ void AMatch_Event_RandomTeleport::TeleportAllPlayers()
 					Player->RemoveInputBlockController(FName("SpeedUpEvent"));
 				}
 				
-			}, 2.f, false);
+			}, 1.f, false);
 			//텔레포트 후 플레이어에게 일시적인 무적 효과 부여
 			if (Player->ConditionComp) {
-				Player->ConditionComp->ApplyCondition(InvincibilityDataAsset, Player, 2.f);
+				//0.5초간 무적 부여 (이펙트는 나오지 않음)
+				Player->AddImmunityController(FName(TEXT("EmergencyEscape")), EPlayerImmunityType::DamageImmunity, 0, true, 0.5f);
 			}
 			//텔레포트 후 플레이어에게 은신 부여
 			if (Player->TransformationComp){

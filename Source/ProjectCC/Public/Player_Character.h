@@ -38,7 +38,14 @@ class AEquipment;
 class AWeapon;
 class AItem;
 class AActor;
-class UFootStepDataAsset;	//[사운드]발소리
+
+UENUM(BlueprintType)
+enum class EPlayerImmunityType : uint8 {
+	None				UMETA(DisplayName = "Fallback"),
+	DamageImmunity		UMETA(DisplayName = "Damage Immunity"),
+	DebuffImmunity		UMETA(DisplayName = "Debuff Immunity"),
+	Invincible			UMETA(DisplayName = "Invincible")
+};
 
 USTRUCT(BlueprintType)
 struct FSpeedController {
@@ -59,6 +66,25 @@ public:
 
 	UPROPERTY()
 	bool bConstant = false;
+};
+
+USTRUCT(BlueprintType)
+struct FDamageImmunityController {
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ImmunityControllerName = FName("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EPlayerImmunityType  Type = EPlayerImmunityType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bCanEraseForce = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Priority = 0;
+
+	FTimerHandle ControllerTimerHandle;
 };
 
 USTRUCT(BlueprintType)
@@ -180,6 +206,9 @@ public:
 	//플레이어 BlockController (조작 제어)
 	UPROPERTY()
 	TArray<FInputBlockController> BlockControllers;
+	//플레이어 면역 제어
+	UPROPERTY()
+	TArray<FDamageImmunityController> ImmunityControllers;
 	//플레이어 카메라-----------------------------------------------------
 	//플레이어 카메라가 위치할 springArm
 	UPROPERTY(VisibleAnywhere, Category = Camera)
@@ -445,6 +474,8 @@ public:
 	//플레이어 화면에 떠있던 추가 이미지 제거
 	UFUNCTION(Client, Reliable)
 	void Client_EndAdditionalImage();
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StopPhysicsOnKillPlane();
 	//애니메이션----------------------------------------------------
 	//플레이어 이동 속도 (Animation에서 사용)
 	UPROPERTY(Replicated, BlueprintReadOnly)
@@ -476,9 +507,12 @@ public:
 	//슬롯 애니메이션(시퀀스) 정지
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_StopSlotAnimation(FName SlotName, float BlendOutTime);
-	//몽차주 애니메이션 정지
+	//몽타주 애니메이션 정지
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_StopMontage(UAnimMontage* Montage, float BlendOutTime);
+	//BigHit 몽타주 애니메이션 홀딩 (BigHit 중 탈락 혹은 BigHit에 해당하는 넉백을 가진 공격으로 탈락 시)
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_HoldBigHitDeathPose();
 	//피격 시 두 손까지 포즈에 적용 시킬지 여부 (두 손 Grip, 특수 포즈는 false로 해서 두 손은 제외)
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	bool bHitReactionUseNoArms = true;
@@ -547,6 +581,15 @@ public:
 	//플레이어 탈락 이펙트
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	TMap<FName, FGameEffectData> OutEffects;
+	//플레이어 오버레이 머티리얼------------------------
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> PlayerDefaultOverlayMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PlayerDefaultOverlayMID;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SetPlayerOverlayMaterialNoShowing();
 public:
 	//현재 매치에서 플레이 중인 맵
 	AMapConstructor* NowMap;
@@ -715,11 +758,16 @@ public:
 	FTimerHandle ResumeAimAnimationTimerHandle;
 	//공격 상태 종료 타이머 (애니메이션 기준)
 	FTimerHandle EndAttackStateTimerHandle;
+	//BigHit 종료 후 포즈 정지 타이머 (BigHit 탈락 시 사용)
+	FTimerHandle BigHitDeathPauseTimerHandle;
 	/*---------------------------플레이어 이펙트 처리----------------------------*/
 	void PlayNormalAttackHitEffect(AActor* Target, const FHitResult& AttackHit);
 	void PlayAttackEffectByNotify();
 	bool ShouldHideEffectsFromOtherPlayer();
 	bool ShouldShowGameEffectForThisClient(const FGameEffectData& EffectData);
+	/*---------------------------플레이어 오버레이 머티리얼 관련-----------------*/
+	void SetPlayerOverlayOpacityZero_Local();
+	void SearchPlayerDefaultOverlayMaterial();
 public:
 	//플레이어 제어 관련//
 	//*----------------------------------
@@ -773,6 +821,17 @@ public:
 	//속도 조정자 제거
 	void RemoveSpeedControllerByName(FName ControllerName);
 	void RemoveSpeedControllerByPriority(int32 Priority);
+	//면역 조정자 반영
+	void AddImmunityController(FName ControllerName, EPlayerImmunityType type, int32 Priority = 0, bool bCanEraseForce = false, float Duration = 0.f);
+	void RemoveImmunityControllerByName(FName ControllerName, bool EraseForce = false);
+	void RemoveImmunityControllerByPriority(int32 priority);
+	void RemoveImmunityControllerByType(EPlayerImmunityType type);
+	void RefreshImmunityConditionEffects(EPlayerImmunityType type);
+	//면역 조정자 확인
+	bool HavingImmunity(EPlayerImmunityType type);
+	bool HavingDamageImmunity();
+	bool HavingDebuffImmunity();
+	FName GetConditionNameByImmunityType(EPlayerImmunityType type);
 	//플레이어의 현재 상태 데이터를 서버에서 획득
 	APlayer_State* GetThePlayerState();
 	//플레이어의 현재 상태 데이터를 반영
@@ -800,7 +859,6 @@ public:
 	float LastTurnTime = 0.f;
 	float LastSenttoServerYaw = 0.f;
 	FTimerHandle HittedResetTimerHandle;
-
 	//플레이어 코인 손실 시간
 	float LastLoseCoinHP = -1.f;
 	//직전 공격 플레이어 설정
@@ -825,13 +883,4 @@ public:
 	FVector VisualMeshLocation = FVector::ZeroVector;
 	FVector DefaultCamLocation = FVector::ZeroVector;
 	FVector VisualCamLocation = FVector::ZeroVector;
-
-	//[사운드]발소리
-public:
-	FORCEINLINE UFootStepDataAsset* GetFootStepData() const { return FootStepData; }
-private:
-	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UFootStepDataAsset> FootStepData;
-
-	virtual void OnJumped_Implementation() override;
 };

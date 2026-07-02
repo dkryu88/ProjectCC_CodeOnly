@@ -11,14 +11,18 @@ void AMatch_Event_Meteor::StartEvent_Implementation(AMapConstructor* map, APlayM
 
 	if (!MapObjects_Meteor || !NowMap) return;
 
+	bMeteorEventRunning = true;
+
 	NowDuration = EventDuration;
 	GetWorldTimerManager().SetTimer(MeteorTimerHandle, this, &AMatch_Event_Meteor::SpawnMeteor, SpawnInterval, true);
 }
 
 void AMatch_Event_Meteor::StopEvent_Implementation()
 {
+	bMeteorEventRunning = false;
+
 	GetWorldTimerManager().ClearTimer(MeteorTimerHandle);
-	
+
 	Super::StopEvent_Implementation();
 }
 
@@ -31,23 +35,66 @@ void AMatch_Event_Meteor::SpawnMeteor() {
 
 	for (int32 i = 0; i < SpawnCountPerInterval; ++i)
 	{
-		TArray<FIntVector> Candidates = NowMap->FloorBlocksData;
+		TArray<FIntVector>& Candidates = NowMap->FloorBlocksData;
 		int32 index = FMath::RandRange(0, Candidates.Num() - 1);
+		FIntVector TargetGrid = Candidates[index];
 
-		float BS = NowMap->BlockSize; // 블록 크기 (월드 단위)
+		FVector TargetTopLocation = NowMap->GridToWorldCenter(TargetGrid.X, TargetGrid.Y, TargetGrid.Z);
 
-		FVector SpawnLocation = NowMap->GridToWorldCenter(Candidates[index].X, Candidates[index].Y, Candidates[index].Z);
-		SpawnLocation.Z += BS * 30.f; // 지형 위 10칸 높이에서 낙하 시작
+		SpawnMeteorWarningActor(TargetTopLocation);
 
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		FTimerHandle DelaySpawnHandle;
+		GetWorldTimerManager().SetTimer(DelaySpawnHandle, FTimerDelegate::CreateWeakLambda(this, [this, TargetTopLocation]() {
+			if (!bMeteorEventRunning) return;
+			SpawnMeteorAtTargetTop(TargetTopLocation);
+		}), WarningDelay, false);
+	}
+}
 
-		FRotator SpawnRotation = FRotator(FMath::RandRange(-30.f, 30.f), FMath::RandRange(-180.f, 180.f), FMath::RandRange(-30.f, 30.f));
+void AMatch_Event_Meteor::SpawnMeteorWarningActor(const FVector& TargetTopLocation)
+{
+	if (!NowMap || !MeteorWarningClass) return;
+	if (!bMeteorEventRunning) return;
 
-		AMapObjects_Meteor* Meteor = GetWorld()->SpawnActor<AMapObjects_Meteor>(MapObjects_Meteor, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-		if (Meteor) {
-			Meteor->NowMap = NowMap;          // 맵 참조 전달
-			Meteor->ApplyAdditionalSetting(); // 물리·충돌 설정 및 낙하 시작
-		}
+	float BS = NowMap->BlockSize;
+
+	FVector WarningLocation = TargetTopLocation;
+	WarningLocation.Z += WarningZOffset;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AActor* WarningActor = GetWorld()->SpawnActor<AActor>(MeteorWarningClass, WarningLocation, FRotator::ZeroRotator, SpawnParams);
+
+	if (WarningActor)
+	{
+		float PlaneBaseSize = 100.f;
+		float ScaleXY = BS / PlaneBaseSize;
+
+		WarningActor->SetActorScale3D(FVector(ScaleXY, ScaleXY, 1.f));
+		WarningActor->SetLifeSpan(WarningDelay + 0.05f);
+	}
+}
+
+void AMatch_Event_Meteor::SpawnMeteorAtTargetTop(const FVector& TargetTopLocation)
+{
+	if (!NowMap || !MapObjects_Meteor) return;
+
+	const float BS = NowMap->BlockSize;
+
+	FVector SpawnLocation = TargetTopLocation;
+	SpawnLocation.Z += BS * 30.f;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	FRotator SpawnRotation(FMath::RandRange(-30.f, 30.f), FMath::RandRange(-180.f, 180.f), FMath::RandRange(-30.f, 30.f));
+
+	AMapObjects_Meteor* Meteor = GetWorld()->SpawnActor<AMapObjects_Meteor>(MapObjects_Meteor, SpawnLocation, SpawnRotation, SpawnParams);
+
+	if (Meteor)
+	{
+		Meteor->NowMap = NowMap;
+		Meteor->ApplyAdditionalSetting();
 	}
 }

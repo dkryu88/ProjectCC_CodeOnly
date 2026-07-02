@@ -10,88 +10,12 @@
 #include "Engine/World.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
-#include "Components/AudioComponent.h"	//[추가]
-#include "WeaponDataAsset.h"	//[추가]
-
-void AWeapon_RailGun::BeginPlay()	//[추가]
-{
-	Super::BeginPlay();
-
-	if (WeaponData)
-	{
-		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_Charge"))) CachedChargeSound = Data->Sound.Get();
-		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_Fire"))) CachedFireLoopSound = Data->Sound.Get();
-		if (FGameEffectData* Data = WeaponData->CustomEffects.Find(TEXT("RailGun_End"))) CachedPowerDownSound = Data->Sound.Get();
-	}
-}
-
-void AWeapon_RailGun::Tick(float DeltaTime)	//[추가]
-{
-	Super::Tick(DeltaTime);
-
-	if (bRailGunCharging) {
-		if (ChargeGauge < 25.f)
-		{
-			if (bWasFiringSoundPlaying) {
-				if (FireAudioComp) FireAudioComp->Stop();
-				bWasFiringSoundPlaying = false;
-			}
-
-			if (!bWasChargingSoundPlaying && CachedChargeSound) {
-				if (!ChargeAudioComp) {
-					ChargeAudioComp = UGameplayStatics::SpawnSoundAttached(CachedChargeSound, WeaponCollider);
-				}
-				else {
-					ChargeAudioComp->Play();
-				}
-				bWasChargingSoundPlaying = true;
-			}
-
-			//일관적인 소리의 에셋을 사용할 때 볼륨과 피치를 조절하는 코드
-			/*if (ChargeAudioComp) {
-				float ChargeRatio = FMath::Clamp(ChargeGauge / 25.f, 0.f, 1.f);
-				ChargeAudioComp->SetVolumeMultiplier(ChargeRatio);
-				ChargeAudioComp->SetPitchMultiplier(0.5f + (ChargeRatio * 0.5f));
-			}*/
-		}
-
-		else {
-			// [구간 2] 발사 중
-			if (bWasChargingSoundPlaying)
-			{
-				if (ChargeAudioComp) ChargeAudioComp->Stop();
-				bWasChargingSoundPlaying = false;
-			}
-
-			if (!bWasFiringSoundPlaying && CachedFireLoopSound)
-			{
-				if (!FireAudioComp) {
-					FireAudioComp = UGameplayStatics::SpawnSoundAttached(CachedFireLoopSound, WeaponCollider);
-				}
-				else {
-					FireAudioComp->Play();
-				}
-				bWasFiringSoundPlaying = true;
-			}
-		}
-	}
-	else {
-		// [구간 3] 플레이어가 입력을 멈췄을 때, 100% 유지시간이 끝나 강제 종료되었을 때
-		if ((bWasChargingSoundPlaying || bWasFiringSoundPlaying)) {
-			if (ChargeAudioComp) ChargeAudioComp->Stop();
-			if (FireAudioComp) FireAudioComp->Stop();
-
-			if (bMaxChargeFired && CachedPowerDownSound) {
-				UGameplayStatics::SpawnSoundAttached(CachedPowerDownSound, WeaponCollider.Get());
-			}
-			bWasChargingSoundPlaying = false;
-			bWasFiringSoundPlaying = false;
-		}
-	}
-}
-
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "NiagaraFunctionLibrary.h"
 
 void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 {
@@ -99,6 +23,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 
 	if (bMaxChargeFired) {
 		ResetRailGunMoveSpeed();
+		Multicast_StopRailGunBeamEffect();
 		return;
 	}
 
@@ -106,6 +31,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 
 	if (!CheckUseCounting()) {
 		bWaitingRepress = true;
+		Multicast_StopRailGunBeamEffect();
 		return;
 	}
 
@@ -148,7 +74,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 			bRailGunCharging = false;
 			bWaitingRepress = true;
 			bMaxChargeFired = true;
-
+			
 			ChargeGauge = 0.f;
 			PendingDamage = 0.f;
 			PendingRadius = 0.f;
@@ -172,6 +98,7 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 			if (!CheckUseCounting()) bWaitingRepress = true;
 
 			InstantHideRailGunPreview(CompleteAnimDuration);
+			Multicast_StopRailGunBeamEffect();
 			ForceNetUpdate();
 
 			return;
@@ -181,7 +108,20 @@ void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 	ApplyRailGunMoveSpeed();
 	RefreshRailGunAnimationSlot();
 
-	if (ChargeGauge < MinGauge) return;
+	
+	float ChargeRate = ChargeGauge / 100.f;
+
+	if (ChargeGauge < MinGauge) {
+		FVector BeamStart = EquippedPlayer->GetActorLocation() + FVector(0.f, 0.f, 80.f);
+		if (Mesh && Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"))) {
+			BeamStart = Mesh->GetSocketLocation(TEXT("SK_WeaponAttackPoint"));
+		}
+		FVector BeamEnd = BeamStart + EquippedPlayer->GetActorForwardVector() * 10.f;
+
+		Multicast_UpdateRailGunBeamEffect(BeamStart, BeamEnd, ChargeRate, MinBeamRadius, false);
+
+		return;
+	}
 
 	//레일건 공격이 시작되면 공격 애니메이션 재생 (공격 끝까지 무한반복)
 	if (RailGunAnimState != ERailGunAnimState::Firing) {
@@ -204,6 +144,7 @@ void AWeapon_RailGun::CancelRailGunAttack()
 	MaxChargeStartTime = -1.f;
 
 	StopRailGunAnimation();
+	Multicast_StopRailGunBeamEffect();
 	ResetRailGunMoveSpeed();
 
 	float SavedGauge = ChargeGauge;
@@ -238,7 +179,7 @@ void AWeapon_RailGun::InstantHideRailGunPreview(float Duration)
 	GetWorldTimerManager().SetTimer(InstantHideRailGunPreviewTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
 		bNoShowingRailGunPreview = false;
 		ForceNetUpdate();
-		}), FMath::Max(0.05f, Duration), false);
+	}), FMath::Max(0.05f, Duration), false);
 }
 
 void AWeapon_RailGun::PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32 LoopCount)
@@ -255,8 +196,7 @@ void AWeapon_RailGun::PlayRailGunDynamicAnimation(UAnimSequence* Sequence, int32
 
 	CurrentAnimSlot = RailGunSlotName;
 
-	EquippedPlayer->Multicast_StopSlotAnimation(RailGunSlotName, 0.01f);
-	EquippedPlayer->Multicast_PlayAnimationDynamic(Sequence, RailGunSlotName, 0.1f, 0.1f, 1.f, LoopCount, 0);
+	EquippedPlayer->Multicast_PlayAnimationDynamic(Sequence, RailGunSlotName, 0.1f, 0.25f, 1.f, LoopCount, 0);
 }
 
 void AWeapon_RailGun::StopRailGunAnimation()
@@ -277,7 +217,7 @@ void AWeapon_RailGun::StopRailGunAnimation()
 
 void AWeapon_RailGun::OnRep_RailGunCharging()
 {
-	if (bRailGunCharging) {
+	if(bRailGunCharging){
 		bLocalNoShowingRailGunPreview = true;
 
 		if (bRailGunCharging && EquippedPlayer && EquippedPlayer->IsLocallyControlled()) {
@@ -302,6 +242,11 @@ FName AWeapon_RailGun::GetAnimationSlotName()
 
 	FVector Velocity2D = EquippedPlayer->GetVelocity();
 	Velocity2D.Z = 0.f;
+
+	if (bRailGunCharging || RailGunAnimState == ERailGunAnimState::Charging || RailGunAnimState == ERailGunAnimState::Firing)
+	{
+		return FName(TEXT("UpperBody"));
+	}
 
 	bool bStandingStill = Velocity2D.SizeSquared() < FMath::Square(10.f);
 
@@ -340,6 +285,8 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 {
 	LastChargeTime = -1.f;
 	MaxChargeStartTime = -1.f;
+	
+	FTimerHandle RailGunBeamStopTimerHandle;
 
 	ResetRailGunMoveSpeed();
 
@@ -367,6 +314,7 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 	}
 	else {
 		StopRailGunAnimation();
+		Multicast_StopRailGunBeamEffect();
 		InstantHideRailGunPreview(0.25f);
 	}
 
@@ -391,6 +339,8 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 	UseWeapon();
 
 	FireRailGunBeam(Damage, Radius, SavedGauge / 100);
+
+	Multicast_StopRailGunBeamEffect();
 
 	PendingDamage = 0.f;
 	PendingRadius = 0.f;
@@ -465,8 +415,6 @@ bool AWeapon_RailGun::InteractionWeaponFunction(EFunctionInterActionReason Reaso
 	case EFunctionInterActionReason::Jump:
 		// 레일건은 점프로 취소하지 않음
 		return true;
-	case EFunctionInterActionReason::Aim:	//[추가] 공격 중 우클릭 조준하면 공격 애니메이션 끊김
-		if (bRailGunCharging) return false;
 	default:
 		return true;
 	}
@@ -558,7 +506,14 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 	float AttackRealRange = WeaponData->Stats.AttackRange * EquippedPlayer->NowMap->BlockSize;
 	float RailGunAttackRealRange = FMath::Lerp(AttackRealRange * 0.25f, AttackRealRange, GaugePercent);
 	FVector TraceStart = EquippedPlayer->GetActorLocation();
+	float ZOffset = EquippedPlayer->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.25f;
 	FVector TraceEnd = TraceStart + EquippedPlayer->GetActorForwardVector() * RailGunAttackRealRange;
+
+	FVector BeamStart = TraceStart + FVector(0.f, 0.f, ZOffset);
+	if (Mesh && Mesh->DoesSocketExist(TEXT("SK_WeaponAttackPoint"))) {
+		BeamStart = Mesh->GetSocketLocation(TEXT("SK_WeaponAttackPoint"));
+	}
+	FVector BeamEnd = BeamStart + EquippedPlayer->GetActorForwardVector() * RailGunAttackRealRange;
 
 	TArray<AActor*> ActorsToIgnore;
 	ActorsToIgnore.Add(EquippedPlayer);
@@ -580,12 +535,18 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 	FCollisionObjectQueryParams WallObjectParams;
 	WallObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
 
-	bool bWallHit = GetWorld()->LineTraceSingleByObjectType(WallHit, TraceStart + FVector(0.f, 0.f, 80.f), TraceEnd + FVector(0.f, 0.f, 80.f), WallObjectParams, Params);
+	bool bWallHit = GetWorld()->LineTraceSingleByObjectType(WallHit, TraceStart + FVector(0.f, 0.f, ZOffset), TraceEnd + FVector(0.f, 0.f, ZOffset), WallObjectParams, Params);
 	if (bWallHit) {
-		TraceEnd = WallHit.ImpactPoint;
+		TraceEnd = WallHit.ImpactPoint - FVector(0.f, 0.f, ZOffset);
 	}
 
+	FHitResult BeamWallHit;
+	bool bBeamWallHit = GetWorld()->LineTraceSingleByObjectType(BeamWallHit, BeamStart, BeamEnd, WallObjectParams, Params);
+	if (bBeamWallHit) BeamEnd = BeamWallHit.ImpactPoint;
 	//--------------------------------------------------
+
+	//레이저 이펙트 파라미터 갱신
+	Multicast_UpdateRailGunBeamEffect(BeamStart, BeamEnd, GaugePercent, Radius, true);
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
@@ -601,7 +562,7 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 		ObjectTypes,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::ForOneFrame,//ForDuration,	[추가] 수정 - 기존 5초에서 프레임으로 변경
+		EDrawDebugTrace::ForDuration,
 		TraceHits,
 		true
 	);
@@ -645,75 +606,75 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 		if (!TargetPlayer) return;
 		TargetPlayer->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, WeaponData->bApplyKnockBack, WeaponData->bApplyRotation, WeaponData->bUsingHitAction, false);
 		ApplyHitEffect(TargetPlayer);
-		};
+	};
 
 	auto ApplyToObjects = [&](AObjects* TargetObject) {
 		if (!TargetObject) return;
 		TargetObject->ApplyDamageInternal(Damage, EquippedPlayer, nullptr, true, false);
 		ApplyHitEffect(TargetObject);
-		};
+	};
 
 	switch (WeaponData->Stats.AttackTargetType)
 	{
-	case EAttackTargetType::SingleTarget:
-	{
-		AActor* ClosestActor = nullptr;
-		float ClosestDistSq = TNumericLimits<float>::Max();
-
-		for (APlayer_Character* Player : TargetPlayers)
+		case EAttackTargetType::SingleTarget:
 		{
-			const float DistSq = FVector::DistSquared(
-				EquippedPlayer->GetActorLocation(),
-				Player->GetActorLocation()
-			);
+			AActor* ClosestActor = nullptr;
+			float ClosestDistSq = TNumericLimits<float>::Max();
 
-			if (DistSq < ClosestDistSq)
+			for (APlayer_Character* Player : TargetPlayers)
 			{
-				ClosestDistSq = DistSq;
-				ClosestActor = Player;
+				const float DistSq = FVector::DistSquared(
+					EquippedPlayer->GetActorLocation(),
+					Player->GetActorLocation()
+				);
+
+				if (DistSq < ClosestDistSq)
+				{
+					ClosestDistSq = DistSq;
+					ClosestActor = Player;
+				}
 			}
-		}
 
-		for (AObjects* Obj : TargetObjects)
-		{
-			const float DistSq = FVector::DistSquared(
-				EquippedPlayer->GetActorLocation(),
-				Obj->GetActorLocation()
-			);
-
-			if (DistSq < ClosestDistSq)
+			for (AObjects* Obj : TargetObjects)
 			{
-				ClosestDistSq = DistSq;
-				ClosestActor = Obj;
+				const float DistSq = FVector::DistSquared(
+					EquippedPlayer->GetActorLocation(),
+					Obj->GetActorLocation()
+				);
+
+				if (DistSq < ClosestDistSq)
+				{
+					ClosestDistSq = DistSq;
+					ClosestActor = Obj;
+				}
 			}
+
+			if (APlayer_Character* Player = Cast<APlayer_Character>(ClosestActor))
+			{
+				ApplyToPlayer(Player);
+			}
+			else if (AObjects* Obj = Cast<AObjects>(ClosestActor))
+			{
+				ApplyToObjects(Obj);
+			}
+
+			break;
 		}
 
-		if (APlayer_Character* Player = Cast<APlayer_Character>(ClosestActor))
+		case EAttackTargetType::MultiTarget:
 		{
-			ApplyToPlayer(Player);
-		}
-		else if (AObjects* Obj = Cast<AObjects>(ClosestActor))
-		{
-			ApplyToObjects(Obj);
-		}
+			for (APlayer_Character* Player : TargetPlayers)
+			{
+				ApplyToPlayer(Player);
+			}
 
-		break;
-	}
+			for (AObjects* Obj : TargetObjects)
+			{
+				ApplyToObjects(Obj);
+			}
 
-	case EAttackTargetType::MultiTarget:
-	{
-		for (APlayer_Character* Player : TargetPlayers)
-		{
-			ApplyToPlayer(Player);
+			break;
 		}
-
-		for (AObjects* Obj : TargetObjects)
-		{
-			ApplyToObjects(Obj);
-		}
-
-		break;
-	}
 	}
 
 }
@@ -750,4 +711,44 @@ void AWeapon_RailGun::ResetRailGunMoveSpeed() {
 
 	EquippedPlayer->RemoveSpeedControllerByName("RailGunSpeed");
 	EquippedPlayer->Aim_TurnSpeed = WeaponData->Aim_TurnSpeed;
+}
+
+void AWeapon_RailGun::Multicast_UpdateRailGunBeamEffect_Implementation(FVector_NetQuantize10 BeamStart, FVector_NetQuantize10 BeamEnd, float ChargeRate, float Radius, bool bBeamActive)
+{
+	if (!GetWorld()) return;
+	if (!Mesh) return;
+	if (!RailGunBeamEffect) return;
+	if (!ActiveRailGunEffectComp) {
+		ActiveRailGunEffectComp = UNiagaraFunctionLibrary::SpawnSystemAttached(RailGunBeamEffect, Mesh, TEXT("SK_WeaponAttackPoint"), FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, false);
+		if (!ActiveRailGunEffectComp) return;
+	}
+
+	FTransform BeamSocketTransform = Mesh->GetSocketTransform(TEXT("SK_WeaponAttackPoint"), RTS_World);
+
+	FVector LocalStart = FVector::ZeroVector;
+	FVector WorldBeamVector = FVector(BeamEnd) - FVector(BeamStart);
+	FVector LocalEnd = BeamSocketTransform.InverseTransformVectorNoScale(WorldBeamVector);
+	FVector LocalDirection = LocalEnd.GetSafeNormal();
+	if (LocalDirection.IsNearlyZero()) {
+		LocalDirection = FVector::ForwardVector;
+	}
+	
+	ActiveRailGunEffectComp->SetVariableVec3(TEXT("User.BeamStart"), LocalStart);
+	ActiveRailGunEffectComp->SetVariableVec3(TEXT("User.BeamEnd"), LocalEnd);
+	ActiveRailGunEffectComp->SetVariableFloat(TEXT("User.ChargeRate"), ChargeRate);
+	ActiveRailGunEffectComp->SetVariableFloat(TEXT("User.BeamRadius"), Radius);
+	ActiveRailGunEffectComp->SetVariableBool(TEXT("User.bBeamActive"), bBeamActive);
+	ActiveRailGunEffectComp->SetVariableVec3(TEXT("User.BeamDirection"), LocalDirection);
+
+	if (!ActiveRailGunEffectComp->IsActive()) ActiveRailGunEffectComp->Activate(true);
+}
+
+void AWeapon_RailGun::Multicast_StopRailGunBeamEffect_Implementation()
+{
+	if (ActiveRailGunEffectComp) {
+		ActiveRailGunEffectComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		ActiveRailGunEffectComp->SetAutoDestroy(true);
+		ActiveRailGunEffectComp->Deactivate();
+		ActiveRailGunEffectComp = nullptr;
+	}
 }

@@ -18,6 +18,7 @@ class APlayer_State;
 class AMapConstructor;
 class ATargetPoint;
 class ACoin;
+class UPlayerConditionDataAsset;
 class UWeaponListDataAsset;
 class UItemListDataAsset;
 class UObjectsListDataAsset;
@@ -62,16 +63,13 @@ class PROJECTCC_API APlayMode_Match : public AGameMode
 public:
 	APlayMode_Match();
 
-	//[추가머지]난입방지
-	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
-
 protected:
 	virtual void BeginPlay() override;
-
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 protected:
 	//매치 진행 시간 (60 * 5 = 300 <-- 5분)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
-	int32 MatchDuration = 240;
+	int32 MatchDuration = 300;	//테스트
 	//매치 진행 시간 관리
 	FTimerHandle MatchTimerHandle;
 	//매치 시작 딜레이 타이머
@@ -104,6 +102,9 @@ protected:
 	//리스폰 지점들
 	UPROPERTY()
 	TArray<TObjectPtr<ATargetPoint>> RespawnPoints;
+	//리스폰 무적 Condition Data
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Out")
+	TObjectPtr<UPlayerConditionDataAsset> InvincibleData;
 	//리스폰 최소 대기시간
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Out")
 	float RespawnTime = 5.f;
@@ -113,6 +114,9 @@ protected:
 	//리스폰 지점을 OverPoint를 사용할지 여부
 	UPROPERTY(VisibleAnywhere, Category = "RespawnPoint")
 	bool bUseOverRespawnPoints = false;
+	//리스폰 무적 지속 시간
+	UPROPERTY(EditDefaultsOnly, Category = "Respawn")
+	float RespawnImmunityDuration = 3.f;
 	/*--------------------Random Event----------------------*/
 	//공용 매치 이벤트 리스트
 	UPROPERTY(EditDefaultsOnly, Category="MatchEvent")
@@ -135,6 +139,9 @@ protected:
 	//현재 이벤트를 발동 중인지 여부
 	UPROPERTY()
 	bool bActiveMatchEvent = false;
+	//상점 이용 불가능 여부 (일부 이벤트 중)
+	UPROPERTY()
+	bool bActiveShopClose = false;
 	//현재 보류중인 이벤트 데이터
 	UPROPERTY()
 	FMatchEventData PendingEventData;
@@ -158,12 +165,17 @@ protected:
 	//UI 갱신
 	void UpdateMatchEventNoticeUI(int32 RemainingTime);
 	void UpdateActiveMatchEventUI();
+	void BroadcastShopClosedState(bool bClosed);
 	void NotifyMatchEventFinished(AMatch_Event* FinishedEvent);
 	bool PrepareNextMatchEvent();
 
 	void BroadcastMatchEventCountdown(FName EventName, int32 SecondsUntilEvent);
 	void BroadcastMatchEventActive(FName EventName, int32 RemainingSeconds);
 	void BroadcastMatchEventEnded();
+
+	//[추가]
+	void BroadcastPlayBGM30Sec();
+
 	/* ----------------------Coin Wave-------------------------- */
 	UPROPERTY(EditDefaultsOnly, Category="CoinWave")
 	TSubclassOf<ACoin> Coin;

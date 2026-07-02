@@ -5,7 +5,10 @@
 #include "Player_Character.h"
 #include "Effect/FGameEffectData.h"
 #include "Effect/GameEffectManagerComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "PlayerTransformationComponent.h"
 #include "PlayerConditionDataAsset.h"
 
@@ -60,19 +63,25 @@ void UPlayerConditionComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		bool bTickEffectEnd = (Condition.EffectInterval > 0.f && Condition.EffectCount >= 0 && Condition.RemainingTickCount <= 0);
 
 		if (bTimeOver || bTickEffectEnd) {
-			FName RemovedConditionName = CurrentConditions[i].ConditionName;
-			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(RemovedConditionName, i);
+			if (!CurrentConditions.IsValidIndex(i)) continue;
 
-			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(RemovedConditionName);
+			FPlayerCondition RemovedCondition = CurrentConditions[i];
+			FName RemovedConditionName = RemovedCondition.ConditionName;
+			
+			CurrentConditions.RemoveAt(i);
+			bool bHasSameConditionAfterRemove = HasSameConditionByName(RemovedConditionName);
 
-			if (CurrentConditions[i].ConditionEffect) {
-				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], true);
-			}
+			if (RemovedCondition.ConditionEffect) RemovedCondition.ConditionEffect->EndFunction(Player, this, RemovedCondition, true);
 
 			if (!bHasSameConditionAfterRemove) {
-				PlayConditionOnceEffect(CurrentConditions[i].ConditionEndEffect, CurrentConditions[i]);
+				PlayConditionOnceEffect(RemovedCondition.ConditionEndEffect, RemovedCondition);
+				PlayConditionEndSound(RemovedCondition);
+
+				Multicast_StopConditionLoopEffect(RemovedConditionName);
+				Multicast_StopConditionOverlay(RemovedConditionName, 0.5f);
+
+				Multicast_StopConditionPersistSound(RemovedConditionName, RemovedCondition.ConditionSoundFadeOutTime);
 			}
-			CurrentConditions.RemoveAt(i);
 		}
 	}
 }
@@ -141,7 +150,14 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 	NewCondition.ConditionStartEffect = ConditionData->ConditionStartEffect;
 	NewCondition.ConditionPersistEffect = ConditionData->ConditionPersistEffect;
 	NewCondition.ConditionEndEffect = ConditionData->ConditionEndEffect;
+
+	NewCondition.ConditionStartSound = ConditionData->ConditionStartSound;
+	NewCondition.ConditionPersistSound = ConditionData->ConditionPersistSound;
+	NewCondition.ConditionEndSound = ConditionData->ConditionEndSound;
+	NewCondition.ConditionSoundFadeOutTime = ConditionData->ConditionSoundFadeOutTime;
 	
+	NewCondition.ConditionOverlayMaterial = ConditionData->ConditionOverlayMaterial;
+
 	NewCondition.NextEffectTimer = ConditionData->EffectInterval;
 	NewCondition.RemainingTickCount = ConditionData->EffectCount;
 
@@ -155,14 +171,32 @@ void UPlayerConditionComponent::ApplyCondition(UPlayerConditionDataAsset* Condit
 		NewCondition.ConditionEffect->StartEffect(Player, this, NewCondition, CausePlayer);
 	}
 
+	PlayConditionStartSound(NewCondition);
 	PlayConditionOnceEffect(NewCondition.ConditionStartEffect, NewCondition);
 
 	CurrentConditions.Add(NewCondition);
 	
-	if (!bAlreadyHadSameCondition && NewCondition.ConditionPersistEffect.NiagaraEffect) {
-		Multicast_StartConditionLoopEffect(NewCondition.ConditionName, NewCondition.ConditionPersistEffect);
-	}
+	if (!bAlreadyHadSameCondition) {
+		if (NewCondition.ConditionPersistSound) {
+			Multicast_StartConditionPersistSound(NewCondition.ConditionName, NewCondition.ConditionPersistSound);
+		}
 
+		if (NewCondition.ConditionPersistEffect.NiagaraEffect) {
+			FGameEffectRuntimeParams RuntimeParams;
+
+			FGameEffectFloatParam LifeTimeParam;
+			LifeTimeParam.ParamName = TEXT("User.LifeTime");
+			LifeTimeParam.Value = NewCondition.Duration;
+
+			RuntimeParams.FloatParams.Add(LifeTimeParam);
+
+			Multicast_StartConditionLoopEffect(NewCondition.ConditionName, NewCondition.ConditionPersistEffect, RuntimeParams);
+		}
+		if (NewCondition.ConditionOverlayMaterial) {
+			Multicast_StartConditionOverlay(NewCondition.ConditionName, NewCondition.ConditionOverlayMaterial, TEXT("Opacity"), NewCondition.Priority);
+		}
+	}
+	
 	if (ConditionData->bCanMultiApply && ConditionData->MultiApplyInterval > 0.f) {
 		if (UWorld* World = GetWorld()) {
 			MultiApplyIntervalMap.Add(ConditionData->ConditionName, World->GetTimeSeconds() + ConditionData->MultiApplyInterval);
@@ -175,7 +209,11 @@ void UPlayerConditionComponent::RemoveCondition(FName TargetConditionName) {
 	for (int32 i = 0; i < CurrentConditions.Num(); i++) {
 		if (CurrentConditions[i].ConditionName == TargetConditionName) {
 			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(TargetConditionName, i);
-			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(TargetConditionName);
+			if (!bHasSameConditionAfterRemove) {
+				Multicast_StopConditionLoopEffect(TargetConditionName);
+				Multicast_StopConditionOverlay(TargetConditionName, 0.5f);
+				Multicast_StopConditionPersistSound(TargetConditionName, CurrentConditions[i].ConditionSoundFadeOutTime);
+			}
 
 			if (CurrentConditions[i].ConditionEffect) {
 				CurrentConditions[i].ConditionEffect->EndFunction(Player, this, CurrentConditions[i], false);
@@ -210,7 +248,12 @@ void UPlayerConditionComponent::RemoveSameNameCondition(FName TargetConditionNam
 
 	if (bRemovedAny) {
 		Multicast_StopConditionLoopEffect(TargetConditionName);
-		if (bEndEffect) PlayConditionOnceEffect(LastRemovedCondition.ConditionEndEffect, LastRemovedCondition);
+		Multicast_StopConditionOverlay(TargetConditionName, 0.5f);
+		Multicast_StopConditionPersistSound(TargetConditionName, LastRemovedCondition.ConditionSoundFadeOutTime);
+		if (bEndEffect) {
+			PlayConditionOnceEffect(LastRemovedCondition.ConditionEndEffect, LastRemovedCondition);
+			PlayConditionEndSound(LastRemovedCondition);
+		}
 	}
 
 	UPlayerTransformationComponent* TransformationComp = Player->TransformationComp;
@@ -240,9 +283,16 @@ void UPlayerConditionComponent::RemoveSameCategoryCondition(EPlayerConditionType
 	for (const FName& RemovedName : RemovedConditionNames) {
 		if (!HasSameConditionByName(RemovedName)) {
 			Multicast_StopConditionLoopEffect(RemovedName);
+			Multicast_StopConditionOverlay(RemovedName, 0.5f);
+			
+			if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
+				Multicast_StopConditionPersistSound(RemovedName, RemovedCondition->ConditionSoundFadeOutTime);
+			}
+
 			if (bEndEffect) {
 				if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
 					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+					PlayConditionEndSound(*RemovedCondition);
 				}
 			}
 		}
@@ -272,17 +322,25 @@ void UPlayerConditionComponent::RemoveLowPriorityCondition(int32 Priority, bool 
 	for (const FName& RemovedName : RemovedConditionNames) {
 		if (!HasSameConditionByName(RemovedName)) {
 			Multicast_StopConditionLoopEffect(RemovedName);
-			if (bEndEffect) {
-				if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
+			Multicast_StopConditionOverlay(RemovedName, 0.5f);
+			if (FPlayerCondition* RemovedCondition = LastRemovedByName.Find(RemovedName)) {
+				Multicast_StopConditionPersistSound(RemovedName, RemovedCondition->ConditionSoundFadeOutTime);
+				if (bEndEffect) {
 					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+					PlayConditionEndSound(*RemovedCondition);
 				}
 			}
+			
 		}
 	}
 }
 
 //특정 Condition이 있는지 체크
 bool UPlayerConditionComponent::CheckCondition(FName TargetConditionName) {
+	if (TargetConditionName.IsNone()) return false;
+	if (!IsValid(Player)) Player = Cast<APlayer_Character>(GetOwner());
+	if (!IsValid(Player)) return false;
+
 	for (FPlayerCondition& Conditions : CurrentConditions) {
 		if (Conditions.ConditionName == TargetConditionName) {
 			return true;
@@ -328,19 +386,26 @@ void UPlayerConditionComponent::HandleConditionEvent(EPlayerConditionEvent Event
 			if (!Condition.bCanRemove) continue;
 			FName RemovedConditionName = Condition.ConditionName;
 			bool bHasSameConditionAfterRemove = HasSameConditionExceptIndex(RemovedConditionName, i);
-			if (!bHasSameConditionAfterRemove) Multicast_StopConditionLoopEffect(RemovedConditionName);
+			if (!bHasSameConditionAfterRemove) {
+				Multicast_StopConditionLoopEffect(RemovedConditionName);
+				Multicast_StopConditionOverlay(RemovedConditionName, 0.5f);
+				Multicast_StopConditionPersistSound(RemovedConditionName, Condition.ConditionSoundFadeOutTime);
+			}
 			
 			if (Condition.ConditionEffect) {
 				Condition.ConditionEffect->EndFunction(Player, this, Condition, bUseEndEffect);
 			}
-			if (!bHasSameConditionAfterRemove && bUseEndEffect) PlayConditionOnceEffect(Condition.ConditionEndEffect, Condition);
+			if (!bHasSameConditionAfterRemove && bUseEndEffect) {
+				PlayConditionOnceEffect(Condition.ConditionEndEffect, Condition);
+				PlayConditionEndSound(Condition);
+			}
 
 			CurrentConditions.RemoveAt(i);
 		}
 	}
 }
 
-void UPlayerConditionComponent::StartConditionLoopEffect_Local(FName ConditionName, const FGameEffectData& EffectData)
+void UPlayerConditionComponent::StartConditionLoopEffect_Local(FName ConditionName, const FGameEffectData& EffectData, const FGameEffectRuntimeParams& RuntimeParams)
 {
 	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
 
@@ -362,12 +427,15 @@ void UPlayerConditionComponent::StartConditionLoopEffect_Local(FName ConditionNa
 	}
 
 	ActiveEffect.NiagaraComp->RegisterComponent();
-	ActiveEffect.NiagaraComp->AttachToComponent(Player->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+	ActiveEffect.NiagaraComp->AttachToComponent(Player->GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
 
 	ActiveEffect.NiagaraComp->SetAsset(EffectData.NiagaraEffect);
 	ActiveEffect.NiagaraComp->SetRelativeLocation(EffectData.LocationOffset);
 	ActiveEffect.NiagaraComp->SetRelativeRotation(EffectData.RotationOffset);
 	ActiveEffect.NiagaraComp->SetRelativeScale3D(EffectData.Scale);
+	UNiagaraFunctionLibrary::OverrideSystemUserVariableSkeletalMeshComponent(ActiveEffect.NiagaraComp, TEXT("User.PlayerMesh"), Player->GetMesh());
+
+	ApplyRuntimeParams(ActiveEffect.NiagaraComp, RuntimeParams);
 
 	ActiveEffect.NiagaraComp->SetVisibility(bShouldShow, true);
 	ActiveEffect.NiagaraComp->SetHiddenInGame(!bShouldShow, true);
@@ -384,11 +452,36 @@ void UPlayerConditionComponent::StopConditionLoopEffect_Local(FName ConditionNam
 
 	if (!ActiveEffect) return;
 	if (ActiveEffect->NiagaraComp) {
-		ActiveEffect->NiagaraComp->Deactivate();
-		ActiveEffect->NiagaraComp->DestroyComponent();
+		UNiagaraComponent* NiagaraComp = ActiveEffect->NiagaraComp;
+		NiagaraComp->Deactivate();
+
+		FTimerHandle DestroyHandle;
+		if (UWorld* World = GetWorld()) {
+			World->GetTimerManager().SetTimer(DestroyHandle, FTimerDelegate::CreateWeakLambda(this, [NiagaraComp]() {
+				if (IsValid(NiagaraComp)) NiagaraComp->DestroyComponent();
+			}),1.f, false);
+		}
+		else {
+			ActiveEffect->NiagaraComp->DestroyComponent();
+		}
 	}
 
 	ActiveConditionPersistEffects.Remove(ConditionName);
+}
+
+void UPlayerConditionComponent::ApplyRuntimeParams(UNiagaraComponent* NiagaraComp, const FGameEffectRuntimeParams& RuntimeParams)
+{
+	if (!NiagaraComp) return;
+
+	for (const FGameEffectFloatParam& Param : RuntimeParams.FloatParams) {
+		if (!Param.ParamName.IsNone()) NiagaraComp->SetVariableFloat(Param.ParamName, Param.Value);
+	}
+	for (const FGameEffectVectorParam& Param : RuntimeParams.VectorParams) {
+		if (!Param.ParamName.IsNone()) NiagaraComp->SetVariableVec3(Param.ParamName, Param.Value);
+	}
+	for (const FGameEffectBoolParam& Param : RuntimeParams.BoolParams) {
+		if (!Param.ParamName.IsNone()) NiagaraComp->SetVariableBool(Param.ParamName, Param.Value);
+	}
 }
 
 bool UPlayerConditionComponent::HasSameConditionExceptIndex(FName ConditionName, int32 ExceptIndex)
@@ -434,6 +527,222 @@ void UPlayerConditionComponent::RefreshConditionLoopEffectVisibility()
 	}
 }
 
+void UPlayerConditionComponent::StartConditionOverlay_Local(FName ConditionName, UMaterialInterface* OverlayMaterial, FName OpacityParamName, int32 Priority)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->GetMesh()) return;
+	if (ConditionName.IsNone() || !OverlayMaterial) return;
+
+	UWorld* World = GetWorld();
+	if (World) World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
+
+	USkeletalMeshComponent* MeshComp = Player->GetMesh();
+
+	if (ActiveConditionOverlays.Num() == 0 && CurrentOverlayConditionName.IsNone()) {
+		DefaultOverlayMaterial = MeshComp->GetOverlayMaterial();
+	}
+
+	UMaterialInstanceDynamic* OverlayMID = UMaterialInstanceDynamic::Create(OverlayMaterial, this);
+	if (!OverlayMID) return;
+
+	OverlayMID->SetScalarParameterValue(OpacityParamName, 1.f);
+
+	FActiveConditionOverlayEffect& ActiveOverlay = ActiveConditionOverlays.FindOrAdd(ConditionName);
+
+	ActiveOverlay.OverlayMID = OverlayMID;
+	ActiveOverlay.SourceMaterial = OverlayMaterial;
+	ActiveOverlay.Priority = Priority;
+
+	ApplyHighestConditionOverlay_Local();
+}
+
+void UPlayerConditionComponent::StopConditionOverlay_Local(FName ConditionName, float FadeOutTime)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->GetMesh()) return;
+	if (ConditionName.IsNone()) return;
+
+	FActiveConditionOverlayEffect* ActiveOverlay = ActiveConditionOverlays.Find(ConditionName);
+	if (!ActiveOverlay) return;
+
+	if (CurrentOverlayConditionName != ConditionName) {
+		ActiveConditionOverlays.Remove(ConditionName);
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) {
+		ActiveConditionOverlays.Remove(ConditionName);
+		ApplyHighestConditionOverlay_Local();
+		return;
+	}
+
+	World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
+
+	TWeakObjectPtr<UMaterialInstanceDynamic> FadingMID = ActiveOverlay->OverlayMID;
+	FName OpacityParamName = TEXT("Opacity");
+	float SafeFadeTime = FMath::Max(0.1f, FadeOutTime);
+
+	TSharedRef<float, ESPMode::ThreadSafe> Elapsed = MakeShared<float, ESPMode::ThreadSafe>(0.f);
+
+	World->GetTimerManager().SetTimer(OverlayFadeTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, ConditionName, FadingMID, OpacityParamName, SafeFadeTime, Elapsed]() {
+		UWorld* World = GetWorld();
+		if (!World) return;
+
+		*Elapsed += World->GetDeltaSeconds();
+
+		float Alpha = FMath::Clamp(*Elapsed / SafeFadeTime, 0.f, 1.f);
+		float Opacity = 1.f - Alpha;
+
+		if (FadingMID.IsValid()) {
+			FadingMID->SetScalarParameterValue(OpacityParamName, Opacity);
+		}
+		if (Alpha >= 1.f) {
+			World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
+			ActiveConditionOverlays.Remove(ConditionName);
+			ApplyHighestConditionOverlay_Local();
+		}
+	}), 0.015f, true);
+}
+
+void UPlayerConditionComponent::RefreshConditionOverlay_Local()
+{
+	ApplyHighestConditionOverlay_Local();
+}
+
+void UPlayerConditionComponent::ApplyHighestConditionOverlay_Local()
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->GetMesh()) return;
+
+	USkeletalMeshComponent* MeshComp = Player->GetMesh();
+
+	if (ShouldNoShowingConditionOverlayByTransformation_Local()) {
+		if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
+		CurrentOverlayConditionName = NAME_None;
+
+		MeshComp->SetOverlayMaterial(DefaultOverlayMaterial);
+		MeshComp->MarkRenderStateDirty();
+
+		NotifyTransformationOverlayChanged_Local();
+		return;
+	}
+
+	FName BestName;
+	FActiveConditionOverlayEffect* BestOverlay = nullptr;
+
+	for (auto& Pair : ActiveConditionOverlays) {
+		FActiveConditionOverlayEffect& Overlay = Pair.Value;
+		if (!Overlay.OverlayMID) continue;
+
+		if (!BestOverlay || Overlay.Priority > BestOverlay->Priority) {
+			BestName = Pair.Key;
+			BestOverlay = &Overlay;
+		}
+	}
+
+	if (BestOverlay && BestOverlay->OverlayMID) {
+		CurrentOverlayConditionName = BestName;
+		BestOverlay->OverlayMID->SetScalarParameterValue(TEXT("Opacity"), 1.f);
+
+		MeshComp->SetOverlayMaterial(BestOverlay->OverlayMID);
+		MeshComp->MarkRenderStateDirty();
+		NotifyTransformationOverlayChanged_Local();
+	}
+	else {
+		CurrentOverlayConditionName = NAME_None;
+		MeshComp->SetOverlayMaterial(DefaultOverlayMaterial);
+		MeshComp->MarkRenderStateDirty();
+		NotifyTransformationOverlayChanged_Local();
+	}
+}
+
+void UPlayerConditionComponent::NotifyTransformationOverlayChanged_Local()
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->TransformationComp) return;
+
+	Player->TransformationComp->NotifyPlayerOverlayMaterialChanged();
+}
+
+bool UPlayerConditionComponent::ShouldNoShowingConditionOverlayByTransformation_Local()
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->TransformationComp) return false;
+
+	auto& CurrentTransformation = Player->TransformationComp->CurrentTransformation;
+
+	if (!CurrentTransformation.bActive) return false;
+	if (!CurrentTransformation.bHidePlayerEffectsFromOthers) return false;
+
+	return !Player->IsLocallyControlled();
+}
+
+void UPlayerConditionComponent::PlayConditionStartSound(const FPlayerCondition& Condition)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player) return;
+	if (!Player->HasAuthority()) return;
+	if (!Condition.ConditionStartSound) return;
+
+	Multicast_PlayConditionOnceSound(Condition.ConditionStartSound);
+}
+void UPlayerConditionComponent::PlayConditionEndSound(const FPlayerCondition& Condition)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player) return;
+	if (!Player->HasAuthority()) return;
+	if (!Condition.ConditionEndSound) return;
+
+	Multicast_PlayConditionOnceSound(Condition.ConditionEndSound);
+}
+
+void UPlayerConditionComponent::StartConditionPersistSound_Local(FName ConditionName, USoundBase* Sound)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player) return;
+	if (ConditionName.IsNone()) return;
+	if (!Sound) return;
+
+	if (ActiveConditionPersistSounds.Contains(ConditionName)) return;
+
+	USceneComponent* AttachComp = Player->GetRootComponent();
+	if (!AttachComp) return;
+
+	UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAttached(Sound, AttachComp, NAME_None, FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true);
+
+	if (!AudioComp) return;
+
+	ActiveConditionPersistSounds.Add(ConditionName, AudioComp);
+}
+
+void UPlayerConditionComponent::StopConditionPersistSound_Local(FName ConditionName, float FadeOutTime)
+{
+	if (ConditionName.IsNone()) return;
+
+	TObjectPtr<UAudioComponent>* FoundAudioComp = ActiveConditionPersistSounds.Find(ConditionName);
+	if (!FoundAudioComp || !FoundAudioComp->Get()) return;
+
+	UAudioComponent* AudioComp = FoundAudioComp->Get();
+	
+	if (FadeOutTime > 0.f) {
+		AudioComp->FadeOut(FadeOutTime, 0.f);
+
+		FTimerHandle DestroyHandle; 
+		if (UWorld* World = GetWorld()) {
+			World->GetTimerManager().SetTimer(DestroyHandle, FTimerDelegate::CreateWeakLambda(this, [AudioComp]() {
+				if (IsValid(AudioComp)) AudioComp->DestroyComponent();
+			}), FadeOutTime + 0.05f, false);
+		}
+	}
+	else {
+		AudioComp->Stop();
+		AudioComp->DestroyComponent();
+	}
+
+	ActiveConditionPersistSounds.Remove(ConditionName);
+}
+
 void UPlayerConditionComponent::PlayConditionOnceEffect(const FGameEffectData& EffectData, const FPlayerCondition& Condition)
 {
 	if (!Player) return;
@@ -444,21 +753,11 @@ void UPlayerConditionComponent::PlayConditionOnceEffect(const FGameEffectData& E
 
 	FGameEffectContext Context;
 	Context.SourceActor = Player;
-	Context.SourceComponent = Player->GetRootComponent();
+	Context.SourceComponent = Player->GetMesh();
 	Context.WorldLocation = Player->GetActorLocation();
 	Context.WorldRotation = Player->GetActorRotation();
 	
 	Player->EffectManagerComp->PlayGameEffect_Multicast(EffectData, Context);
-}
-
-void UPlayerConditionComponent::Multicast_StartConditionLoopEffect_Implementation(FName ConditionName, FGameEffectData EffectData)
-{
-	StartConditionLoopEffect_Local(ConditionName, EffectData);
-}
-
-void UPlayerConditionComponent::Multicast_StopConditionLoopEffect_Implementation(FName ConditionName)
-{
-	StopConditionLoopEffect_Local(ConditionName);
 }
 
 void UPlayerConditionComponent::TryRemoveTransform(int32 Priority, EPlayerConditionType Type, bool bEndEffect) {
@@ -530,9 +829,12 @@ bool UPlayerConditionComponent::TryGetVisualSlotForCondition(const FPlayerCondit
 	for (const FName& RemovedName : RemovedConditionNames) {
 		if (!HasSameConditionByName(RemovedName)) {
 			Multicast_StopConditionLoopEffect(RemovedName);
-			if (bEndEffect) {
-				if (FPlayerCondition* RemovedCondition = LastRemovedConditions.Find(RemovedName)) {
+			Multicast_StopConditionOverlay(RemovedName, 0.5f);
+			if (FPlayerCondition* RemovedCondition = LastRemovedConditions.Find(RemovedName)) {
+				Multicast_StopConditionPersistSound(RemovedName, RemovedCondition->ConditionSoundFadeOutTime);
+				if (bEndEffect) {
 					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
+					PlayConditionEndSound(*RemovedCondition);
 				}
 			}
 		}
@@ -575,6 +877,7 @@ void UPlayerConditionComponent::RemoveAnimationConditionsForTransformation(int32
 	for (const FName& RemovedName : RemovedConditionNames) {
 		if (!HasSameConditionByName(RemovedName)) {
 			Multicast_StopConditionLoopEffect(RemovedName);
+			Multicast_StopConditionOverlay(RemovedName, 0.5f);
 			if (bEndEffect) {
 				if (FPlayerCondition* RemovedCondition = LastRemovedConditions.Find(RemovedName)) {
 					PlayConditionOnceEffect(RemovedCondition->ConditionEndEffect, *RemovedCondition);
@@ -601,4 +904,117 @@ void UPlayerConditionComponent::ResumeCurrentConditionAnimation()
 	}
 }
 
+//플레이어 탈락 시 플레이어의 모든 Condition 제거 및 정리
+void UPlayerConditionComponent::ClearAllConditionWhenPlayerOut()
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->HasAuthority()) return;
 
+	for (FPlayerCondition& Condition : CurrentConditions) {
+		if (Condition.ConditionEffect) Condition.ConditionEffect->EndFunction(Player, this, Condition, false);
+	}
+
+	CurrentConditions.Empty();
+	MultiApplyIntervalMap.Empty();
+
+	Multicast_ClearAllConditionVisualWhenPlayerOut();
+}
+
+void UPlayerConditionComponent::ClearAllConditionVisualsWhenPlayerOut_Local()
+{
+	if(!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player) return;
+
+	UWorld* World = GetWorld();
+	if (World) World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
+
+	for (auto& Pair : ActiveConditionPersistEffects) {
+		FActiveConditionPersistEffect& ActiveEffect = Pair.Value;
+
+		if (ActiveEffect.NiagaraComp) {
+			ActiveEffect.NiagaraComp->DeactivateImmediate();
+			ActiveEffect.NiagaraComp->DestroyComponent();
+			ActiveEffect.NiagaraComp = nullptr;
+		}
+	}
+
+	ActiveConditionPersistEffects.Empty();
+	
+	for (auto& Pair : ActiveConditionPersistSounds) {
+		if (Pair.Value) {
+			Pair.Value->Stop();
+			Pair.Value->DestroyComponent();
+		}
+	}
+
+	ActiveConditionPersistSounds.Empty();
+
+	for (auto& Pair : ActiveConditionOverlays) {
+		FActiveConditionOverlayEffect& ActiveOverlay = Pair.Value;
+
+		if (ActiveOverlay.OverlayMID) {
+			ActiveOverlay.OverlayMID->SetScalarParameterValue(TEXT("Opacity"), 0.f);
+		}
+	}
+
+	ActiveConditionOverlays.Empty();
+	CurrentOverlayConditionName = NAME_None;
+
+	if (USkeletalMeshComponent* MeshComp = Player->GetMesh()) {
+		MeshComp->SetOverlayMaterial(DefaultOverlayMaterial);
+		MeshComp->MarkRenderStateDirty();
+	}
+
+	DefaultOverlayMaterial = nullptr;
+	NotifyTransformationOverlayChanged_Local();
+}
+
+
+void UPlayerConditionComponent::Multicast_StopConditionOverlay_Implementation(FName ConditionName, float FadeOutTime)
+{
+	StopConditionOverlay_Local(ConditionName, FadeOutTime);
+}
+
+void UPlayerConditionComponent::Multicast_StartConditionOverlay_Implementation(FName ConditionName, UMaterialInterface* OverlayMaterial, FName OpacityParamName, int32 Priority)
+{
+	StartConditionOverlay_Local(ConditionName, OverlayMaterial, OpacityParamName, Priority);
+}
+
+void UPlayerConditionComponent::Multicast_StartConditionLoopEffect_Implementation(FName ConditionName, FGameEffectData EffectData, FGameEffectRuntimeParams RuntimeParams)
+{
+	StartConditionLoopEffect_Local(ConditionName, EffectData, RuntimeParams);
+}
+
+void UPlayerConditionComponent::Multicast_StopConditionLoopEffect_Implementation(FName ConditionName)
+{
+	StopConditionLoopEffect_Local(ConditionName);
+}
+
+void UPlayerConditionComponent::Multicast_ClearAllConditionVisualWhenPlayerOut_Implementation()
+{
+	ClearAllConditionVisualsWhenPlayerOut_Local();
+}
+
+void UPlayerConditionComponent::Multicast_RefreshConditionOverlayVisual_Implementation()
+{
+	RefreshConditionOverlay_Local();
+}
+
+void UPlayerConditionComponent::Multicast_PlayConditionOnceSound_Implementation(USoundBase* Sound)
+{
+	if (!Player) Player = Cast<APlayer_Character>(GetOwner());
+	if (!Player || !Player->GetMesh()) return;
+	if (!Sound) return;
+
+	UGameplayStatics::SpawnSoundAttached(Sound, Player->GetMesh(), NAME_None, FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true);
+}
+
+void UPlayerConditionComponent::Multicast_StartConditionPersistSound_Implementation(FName ConditionName, USoundBase* Sound)
+{
+	StartConditionPersistSound_Local(ConditionName, Sound);
+}
+
+void UPlayerConditionComponent::Multicast_StopConditionPersistSound_Implementation(FName ConditionName, float FadeOutTime)
+{
+	StopConditionPersistSound_Local(ConditionName, FadeOutTime);
+}

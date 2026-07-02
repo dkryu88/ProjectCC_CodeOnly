@@ -147,7 +147,7 @@ void AItem::UseItem() {
 			//아이템 사용 이펙트 재생
 			//물체 Hit 이펙트 생성
 			if (EffectManagerComp && EquippedPlayer) {
-				FGameEffectData* EffectData = &UsingEffect;
+				FGameEffectData* EffectData = &ItemData->UseEffect;
 				if (EffectData) {
 					FGameEffectContext Context;
 					Context.SourceActor = EquippedPlayer;

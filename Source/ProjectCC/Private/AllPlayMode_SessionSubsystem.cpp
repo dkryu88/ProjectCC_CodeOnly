@@ -7,7 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "HAL/PlatformTime.h"
-#include "Title/Title_PlayerController.h"	//[머지][매칭수정]
+#include "Title/Title_PlayerController.h"
 
 UAllPlayMode_SessionSubsystem::UAllPlayMode_SessionSubsystem()
 {
@@ -18,32 +18,75 @@ UAllPlayMode_SessionSubsystem::UAllPlayMode_SessionSubsystem()
 	DestroySessionCompleteDelegate = FOnDestroySessionCompleteDelegate::CreateUObject(this, &UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted);
 
 }
-
-//[머지][버그]
-void UAllPlayMode_SessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
-{
-	Super::Initialize(Collection);
-
-	// 엔진의 네트워크 실패(끊김) 이벤트에 초기화 함수를 연결
-	if (GEngine) {
-		GEngine->OnNetworkFailure().AddUObject(this, &UAllPlayMode_SessionSubsystem::HandleNetworkFailure);
-	}
-}
-
-//[머지][버그]
-void UAllPlayMode_SessionSubsystem::Deinitialize()
-{
-	// 서브시스템이 꺼질 때 연결했던 이벤트를 안전하게 해제
-	if (GEngine) {
-		GEngine->OnNetworkFailure().RemoveAll(this);
-	}
-
-	Super::Deinitialize();
-}
 /*
 * IOnlineSubsystem -> 온라인 관련 전체를 담당
 * SessionInterface -> 세션 검색/생성/참여/파괴를 담당
 */
+
+
+void UAllPlayMode_SessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	if (GEngine) GEngine->OnNetworkFailure().AddUObject(this, &UAllPlayMode_SessionSubsystem::HandleNetworkFailure);
+}
+
+void UAllPlayMode_SessionSubsystem::Deinitialize()
+{
+	if (GEngine) GEngine->OnNetworkFailure().RemoveAll(this);
+
+	Super::Deinitialize();
+}
+
+void UAllPlayMode_SessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString) {
+	if (bIsNetworkError) return;
+	bIsNetworkError = true;
+
+	bool bShouldAutoRematch = false;
+	int32 BannedTicket = 0;
+	//입장중이나 매치완료상태에서 연결이 끊겼다면 자동으로 리매치 상태로 돌입
+	if (LastUIState == ESessionUIState::Matched || LastUIState == ESessionUIState::Joining) {
+		bShouldAutoRematch = true;
+		//연결이 끊긴 방의 티켓번호 저장 후 블랙리스트 등록
+		if (LastTriedJoinResult.IsValid()) {
+			LastTriedJoinResult->Session.SessionSettings.Get(FName(TEXT("HostTicket")), BannedTicket);
+		}
+	}
+
+	CancelQuickMatchLAN();
+	bCancelRequested = false;
+
+	if (BannedTicket != 0) {
+		IgnoredHostTickets.Add(BannedTicket);
+	}
+
+	LastUIState = ESessionUIState::None;
+	LastUIMessage = TEXT("");
+
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+
+		if (bShouldAutoRematch) GameInstance->bAutoRestartMatch = true;
+	}
+
+	if (bShouldAutoRematch) {
+		if (SessionInterface.IsValid() && SessionInterface->GetNamedSession(SessionName)) {
+			bSearchAfterDestroy = true;
+		}
+		else {
+			if (World) World->GetTimerManager().SetTimerForNextTick([this]() {
+				FindLANSessions();
+				});
+		}
+	}
+
+	if (World) {
+		World->GetTimerManager().SetTimerForNextTick([this]() {
+			bIsNetworkError = false;
+			});
+	}
+	else bIsNetworkError = false;
+}
 
 //플레이어의 세션 인터페이스가 준비되었는지 확인
 bool UAllPlayMode_SessionSubsystem::EnsureSessionInterface() {
@@ -67,7 +110,6 @@ bool UAllPlayMode_SessionSubsystem::EnsureSessionInterface() {
 //현재 세션 상태를 전파 (Title Widget에서 사용)
 void UAllPlayMode_SessionSubsystem::BroadcastState(ESessionUIState State, const FString& Message)
 {
-	//[버그]
 	if (bIsNetworkError) return;
 
 	LastUIState = State;
@@ -76,7 +118,7 @@ void UAllPlayMode_SessionSubsystem::BroadcastState(ESessionUIState State, const 
 	OnSessionStateChanged.Broadcast(State, Message);
 
 	if (GEngine) {
-		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Black, Message);
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Cyan, Message);
 	}
 }
 
@@ -104,17 +146,42 @@ void UAllPlayMode_SessionSubsystem::MarkSessionInFullLoby()
 	FNamedOnlineSession* NamedSession = SessionInterface->GetNamedSession(SessionName);
 	if (!NamedSession) return;
 
-
-
 	FOnlineSessionSettings NewSettings = NamedSession->SessionSettings;
 
-	//[추가머지][버그] 뒤늦은 난입 방지
-	NewSettings.bAllowJoinInProgress = false; // 진행 중/꽉 찬 상태에서 난입 완전 차단
-
+	//이미 게임이 시작된 방에 난입 금지 설정
+	NewSettings.bAllowJoinInProgress = false;
 	NewSettings.Set(FName(TEXT("SessionPhase")), FString(TEXT("LV_Title")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	NewSettings.Set(FName(TEXT("CanQuickMatch")), false, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	SessionInterface->UpdateSession(SessionName, NewSettings, true);
+}
+
+void UAllPlayMode_SessionSubsystem::ReturnToTitle()
+{
+	//UI 팝업 음소거 모드 켜기 (이후 발생하는 세션 파괴 방송을 UI가 듣지 못하게 함)
+	bIsNetworkError = true;
+
+	//세션 및 찌꺼기 변수 초기화
+	CancelQuickMatchLAN();
+	bCancelRequested = false;
+
+	LastUIState = ESessionUIState::None;
+	LastUIMessage = TEXT("");
+
+	//GameInstance 상태 초기화
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+	}
+
+	//아주 짧은 시간 뒤에 음소거 해제 (비동기 파괴 신호가 지나간 후)
+	if (UWorld* World = GetWorld()) {
+		World->GetTimerManager().SetTimerForNextTick([this]() {
+			bIsNetworkError = false;
+			});
+	}
+	else {
+		bIsNetworkError = false;
+	}
 }
 
 //Play를 위한 매칭 시작
@@ -136,7 +203,6 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 
 	PendingJoinResult.Reset();
 	LastTriedJoinResult.Reset();
-	//IgnoredHostTickets.Empty();	//[추가머지] 삭제(주석처리) 블랙리스트 리셋은 CancelQuickMatchLAN함수에서 처리하게, 자동매칭 할 때 블랙리스트가 지워져서 튕긴방에 또 접속 시도함
 	SessionSearch.Reset();
 
 	UWorld* World = GetWorld();
@@ -152,6 +218,10 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 	//이전 세션이 남아있는 경우 정리
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		BroadcastState(ESessionUIState::Searching, TEXT("Destroy existing session first"));
+
+		//[자동매칭버그] 추가
+		bSearchAfterDestroy = true;
+
 		LeaveCurrentSession();
 		return;
 	}
@@ -171,6 +241,16 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	bJoinInProgress = false;
 	bFindInProgress = false;
 	bIsHostingSession = false;
+
+	//[자동매칭버그] 문제가 생긴다면 적용하면 됨, 현재 상태 문제 없음
+	LastUIState = ESessionUIState::None;
+	LastUIMessage = TEXT("");
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+		GameInstance->bPendingCreateLANSession = false;
+		GameInstance->bAutoRestartMatch = false;
+	}
+	//================================================================
 
 	PendingJoinResult.Reset();
 	IgnoredHostTickets.Reset();
@@ -296,7 +376,7 @@ void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 
 	FOnlineSessionSettings Settings;
 	Settings.bIsLANMatch = true;
-	Settings.NumPublicConnections = MaxPlayers;	//[머지][버그] 기존 2에서 변경
+	Settings.NumPublicConnections = MaxPlayers;
 	//세션의 검색 허용 유무
 	Settings.bShouldAdvertise = true;
 	//게임 진행 중에도 세션에 빈자리가 있으면 참여 허용 유무
@@ -366,6 +446,9 @@ void UAllPlayMode_SessionSubsystem::LeaveCurrentSession()
 		return;
 	}
 
+	// [자동매칭버그] 중복 방지 위해 이전 델리게이트 끊음
+	SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
+
 	DestroySessionCompleteHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
 	SessionInterface->DestroySession(SessionName);
 }
@@ -374,19 +457,6 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoin()
 {
 	if (!bIsHostingSession) return;
 	if (bHostMatchedBroadCasted) return;
-
-	// [버그 수정: 섣부른 문 닫힘 방어 로직] 3명방에 1명이 들어가지 않고 호스트가 되는 버그 수정
-	// GameMode 쪽에서 인원수 계산 오류로 방을 일찍 닫으려고 시도하더라도,
-	// 실제 언리얼 세션 시스템(SessionInterface)에 빈자리가 남아있다면 닫지 못하게 강제로 쫓아냄
-	if (EnsureSessionInterface()) {
-		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
-		if (MySession) {
-			// 빈자리가 1명이라도 남아있다면 무시 (문 안 닫음)
-			if (MySession->NumOpenPublicConnections > 0) {
-				return;
-			}
-		}
-	}
 
 	bGuestJoinedWhenHost = true;
 	bHostMatchedBroadCasted = true;
@@ -412,26 +482,11 @@ void UAllPlayMode_SessionSubsystem::NotifyHostPlayerJoining()
 		World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 	}
 
-	/*UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
+	UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
 	int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
 
 	if (MaxPlayers > 2) BroadcastState(ESessionUIState::Hosting, TEXT("Player Joined! Wait for More"));
-	else BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));*/
-
-	// [버그 수정: UI 텍스트 출력 교차 검증]
-	// 진짜로 빈자리가 남아있는지 세션을 확인해서 정확하게 글자를 띄워줍니다.
-	if (EnsureSessionInterface()) {
-		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
-		if (MySession && MySession->NumOpenPublicConnections <= 0) {
-			bHostMatchedBroadCasted = true; // 방이 찼으므로 갱신 방지
-			MarkSessionInFullLoby();
-			BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
-			return;
-		}
-	}
-
-	// 빈자리가 남아있다면 기다린다는 메시지 출력
-	BroadcastState(ESessionUIState::Hosting, TEXT("Player Joined! Wait for More"));
+	else BroadcastState(ESessionUIState::Matched, TEXT("Matching Complete!"));
 }
 
 //세션 검색에 성공하였을 경우
@@ -469,87 +524,9 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		return;
 	}
 
-	////자신이 Host인 경우 다른 Host와 충돌 체크
-	//if (bIsHostingSession) {
-	//	//다른 플레이어가 Join한 경우 return
-	//	if (bGuestJoinedWhenHost) return;
-	//	bool bHasGuest = false;
-	//	const FOnlineSessionSearchResult* BestOtherHost = nullptr;
-	//	int32 BestOtherTicket = MAX_int32;
-
-	//	// [버그] 내 매치 모드의 최대 인원수 구하기
-	//	UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
-	//	int32 MaxPlayers = GI ? GI->GetMaxPlayersByMode() : 2;
-
-	//	//검색에 성공하면 결과 목록 확인
-	//	for (const FOnlineSessionSearchResult& Result : SessionSearch->SearchResults) {
-	//		//검색 목록 중 같은 게임의 세션만 등록
-	//		FString MatchType;
-	//		Result.Session.SessionSettings.Get(FName(TEXT("MatchType")), MatchType);
-	//		if (MatchType != TEXT("ProjectCC_LAN")) continue;
-
-	//		//검색 목록 중 세션의 현재 게임 상태 확인 (Title만 후보에 등록)
-	//		FString SessionPhase;
-	//		Result.Session.SessionSettings.Get(FName(TEXT("SessionPhase")), SessionPhase);
-	//		if (SessionPhase != TEXT("LV_Title")) continue;
-
-	//		//검색 목록 중 세션의 현재 상태가 퀵매치 가능 상태인지 확인
-	//		bool bCanQuickMatch = false;
-	//		Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
-	//		if (!bCanQuickMatch) continue;
-
-	//		//호스트끼리 방을 합치기 위한 티켓 비교 전 인원수 매치모드 검사 (2인 이상)
-	//		int32 SessionMatchMode = 0;
-	//		Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
-	//		//UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance());	//위에서 선언됨 -> 주석처리
-	//		int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
-	//		if (SessionMatchMode != MyMatchMode) continue;
-
-	//		//검색 목록 중 다른 플레이어의 HostTicket 확인
-	//		int32 OtherHostTicket = 0;
-	//		Result.Session.SessionSettings.Get(FName(TEXT("HostTicket")), OtherHostTicket);
-
-	//		if (OtherHostTicket == 0 || OtherHostTicket == LocalHostTicket) continue;
-
-	//		// [버그] 수정 로직 - 상대방 방에 이미 다른 손님이 있는지 확인!
-	//		int32 OpenSlots = Result.Session.NumOpenPublicConnections;
-	//		// [버그]빈자리가 MaxPlayers - 1 보다 적다면, 누군가 이미 접속해 있다는 뜻입니다.
-	//		bool bOtherHasGuest = (OpenSlots < (MaxPlayers - 1));
-
-	//		if (bOtherHasGuest || OtherHostTicket < BestOtherTicket) {	//[버그]조건 추가
-	//			BestOtherTicket = OtherHostTicket;
-	//			BestOtherHost = &Result;
-	//			//[버그]추가
-	//			if (bOtherHasGuest) {
-	//				bHasGuest = true;
-	//				break;
-	//			}
-	//		}
-	//	}
-	//	//HostTicket이 더 작은 Host가 있다면 그쪽으로 Session 이동
-	//	if (BestOtherHost && (bHasGuest || BestOtherTicket < LocalHostTicket)) {	//[버그]조건 추가
-	//		BroadcastState(ESessionUIState::Joining, TEXT("Go To Other Player's Room"));	
-	//		bIsHostingSession = false;
-
-	//		if (UWorld* World = GetWorld()) {
-	//			World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
-	//		}
-
-	//		PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(*BestOtherHost);
-	//		bJoinAfterDestroy = true;
-	//		LeaveCurrentSession();
-	//		return;
-	//	}
-
-	//	StartHostMergeCheck();
-	//	return;
-	//}
-
-	//[머지][매칭수정]
-	// 자신이 Host인 경우 다른 Host와 충돌 체크
+	//자신이 Host인 경우 다른 Host와 충돌 체크
 	if (bIsHostingSession) {
-
-		// 1. 현재 내 방의 상태 파악
+		//현재 자신의 Session 상태 파악
 		FNamedOnlineSession* MySession = SessionInterface->GetNamedSession(SessionName);
 		if (!MySession) return;
 
@@ -559,70 +536,63 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 		int32 MyOpenSlots = MySession->NumOpenPublicConnections;
 		int32 MyPlayerCount = MaxPlayers - MyOpenSlots;
 
-		// 방어 코드 : 내 방이 이미 최대 인원이면 굳이 다른 방으로 이동하지 않음
 		if (MyOpenSlots <= 0) return;
 
 		const FOnlineSessionSearchResult* BestOtherHost = nullptr;
 		int32 BestOtherTicket = MAX_int32;
 		int32 BestOtherPlayerCount = -1;
 
-		// 검색에 성공하면 결과 목록 확인
+		//검색에 성공하면 결과 목록 확인
 		for (const FOnlineSessionSearchResult& Result : SessionSearch->SearchResults) {
+			//검색 목록 중 같은 게임의 세션만 등록
 			FString MatchType;
 			Result.Session.SessionSettings.Get(FName(TEXT("MatchType")), MatchType);
 			if (MatchType != TEXT("ProjectCC_LAN")) continue;
 
+			//검색 목록 중 세션의 현재 게임 상태 확인 (Title만 후보에 등록)
 			FString SessionPhase;
 			Result.Session.SessionSettings.Get(FName(TEXT("SessionPhase")), SessionPhase);
 			if (SessionPhase != TEXT("LV_Title")) continue;
 
+			//검색 목록 중 세션의 현재 상태가 퀵매치 가능 상태인지 확인
 			bool bCanQuickMatch = false;
 			Result.Session.SessionSettings.Get(FName(TEXT("CanQuickMatch")), bCanQuickMatch);
 			if (!bCanQuickMatch) continue;
 
+			//호스트끼리 방을 합치기 위한 티켓 비교 전 인원수 매치모드 검사 (2인 이상)
 			int32 SessionMatchMode = 0;
 			Result.Session.SessionSettings.Get(FName(TEXT("MatchMode")), SessionMatchMode);
 			int32 MyMatchMode = GI ? (int32)GI->GetSelectedMatchMode() : (int32)EMatchMode::TwoPlayers;
 			if (SessionMatchMode != MyMatchMode) continue;
 
+			//검색 목록 중 다른 플레이어의 HostTicket 확인
 			int32 OtherHostTicket = 0;
 			Result.Session.SessionSettings.Get(FName(TEXT("HostTicket")), OtherHostTicket);
 			if (OtherHostTicket == 0 || OtherHostTicket == LocalHostTicket) continue;
 
-
-			// 2. 상대방 방의 상태 파악
 			int32 OtherOpenSlots = Result.Session.NumOpenPublicConnections;
 			int32 OtherPlayerCount = MaxPlayers - OtherOpenSlots;
 
-			// 내가 들어갈 빈자리가 1개라도 없으면 무시
+			//빈자리가 하나도 없으면 무시
 			if (OtherOpenSlots < 1) continue;
 
-			// 3. 합병 로직 : 누가 자신의 방을 깰 것인가?
-			bool bShouldISurrender = false;
+			bool bShouldSurrender = false;
 
-			// 조건 A: 상대방 방의 인원이 내 방보다 많다면 내가 합류함
-			if (OtherPlayerCount > MyPlayerCount) {
-				bShouldISurrender = true;
-			}
-			// 조건 B: 인원수가 똑같다면 티켓 번호 우선순위로 결정함
+			if (OtherPlayerCount > MyPlayerCount) bShouldSurrender = true;
 			else if (OtherPlayerCount == MyPlayerCount) {
-				if (OtherHostTicket < LocalHostTicket) {
-					bShouldISurrender = true;
-				}
+				if (OtherHostTicket < LocalHostTicket) bShouldSurrender = true;
 			}
 
-			// 내가 이동해야 한다면, 가장 조건이 좋은 방을 타겟으로 저장
-			if (bShouldISurrender) {
-				if (OtherPlayerCount > BestOtherPlayerCount ||
-					(OtherPlayerCount == BestOtherPlayerCount && OtherHostTicket < BestOtherTicket)) {
+			if (bShouldSurrender) {
+				if (OtherPlayerCount > BestOtherPlayerCount || (OtherPlayerCount == BestOtherPlayerCount && OtherHostTicket < BestOtherTicket)) {
 					BestOtherPlayerCount = OtherPlayerCount;
 					BestOtherTicket = OtherHostTicket;
 					BestOtherHost = &Result;
 				}
 			}
-		}
 
-		// 4. 이동할 타겟 방이 정해졌다면 즉시 이동 처리
+		}
+		//합병 대상 Host가 있다면 그쪽으로 Session 이동
 		if (BestOtherHost) {
 			BroadcastState(ESessionUIState::Joining, TEXT("Go To Other Player's Room"));
 			bIsHostingSession = false;
@@ -630,14 +600,9 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 			if (UWorld* World = GetWorld()) {
 				World->GetTimerManager().ClearTimer(HostMergeCheckTimerHandle);
 
-				// [클라이언트 자동 재매칭을 위한 핵심 추가 코드]
-				// 내 방을 부수기 전에, 내 방에 접속해 있던 손님들에게 강제 퇴장(자동 재매칭) 명령을 보냄
 				for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It) {
 					ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(It->Get());
-					// 자신(방장)이 아닌 순수 클라이언트들에게만 명령 전송
-					if (PC && PC->IsLocalController() == false) {
-						PC->Client_KickedByHost();
-					}
+					if (PC && PC->IsLocalController() == false) PC->Client_ExitedByHost();
 				}
 			}
 
@@ -701,7 +666,6 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 
 	HostLANSession();
 }
-
 //세션 생성에 성공하였을 경우
 void UAllPlayMode_SessionSubsystem::OnCreateSessionCompleted(FName sessionName, bool bWasSuccessful)
 {
@@ -750,7 +714,6 @@ void UAllPlayMode_SessionSubsystem::HostMergeCheckTick()
 {
 	if (!EnsureSessionInterface() || !bIsHostingSession) return;
 	if (bFindInProgress) return;
-	//if (bGuestJoinedWhenHost) return;	//[머지][매칭수정] 삭제(주석처리)
 
 	SessionSearch = MakeShared<FOnlineSessionSearch>();
 	SessionSearch->bIsLanQuery = true;
@@ -853,10 +816,11 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 		return;
 	}
 
-	//[머지][매칭수정]
 	if (!bJoinAfterDestroy) {
-		BroadcastState(ESessionUIState::None, TEXT("Session destroyed"));
+		BroadcastState(ESessionUIState::None, TEXT("Session Destroyed"));
 	}
+
+	BroadcastState(ESessionUIState::None, TEXT("Session destroyed"));
 
 	//Host가 HostTicket으로 정해졌을 경우 정해진 Host로 즉시 Join
 	if (bJoinAfterDestroy && PendingJoinResult.IsValid()) {
@@ -874,109 +838,13 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 		return;
 	}
 
-	// [추가머지] 튕겨서 타이틀로 강제 귀환 중이라면, 여기서 검색하지 말고 GameInstance에게 맡김
 	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (GI->bAutoRestartMatch) return;
 	}
 
 	//새로운 세션을 검색
-	FindLANSessions();
+	//[자동매칭버그] 삭제(주석처리)
+	//FindLANSessions();
 }
 
-void UAllPlayMode_SessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
-{
-	// 1. 에러가 연속으로 2번 터져서 로그가 2번 찍히는 것을 방지
-	if (bIsNetworkError) return;
 
-	// 2. 음소거 모드 ON! (이 아래부터는 UI나 로그에 아무것도 뜨지 않음)
-	bIsNetworkError = true;
-
-	//[추가머지]입구컷 당한 클라이언트의 자동재매칭 설정
-	bool bShouldAutoRematch = false;
-	int32 BannedTicket = 0;
-	//입장중이나 매치완료상태에서 입구컷당했다면
-	if (LastUIState == ESessionUIState::Matched || LastUIState == ESessionUIState::Joining) {
-		bShouldAutoRematch = true;
-		//입구컷 한 방의 티켓번호 저장
-		if (LastTriedJoinResult.IsValid()) {
-			LastTriedJoinResult->Session.SessionSettings.Get(FName(TEXT("HostTicket")), BannedTicket);
-		}
-	}
-
-	//기존코드
-	CancelQuickMatchLAN();	//여기에서 블랙리스트 리셋됨
-	bCancelRequested = false;
-
-	//[추가머지]입구컷 당한방 티켓을 블랙리스트에 등록
-	if (BannedTicket != 0) {
-		IgnoredHostTickets.Add(BannedTicket);
-	}
-
-	// 3. 서브시스템의 뇌 속 찌꺼기를 완벽하게 빈칸으로 강제 청소
-	LastUIState = ESessionUIState::None;
-	LastUIMessage = TEXT("");
-
-	//기존코드
-	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-		GameInstance->SetMatchFlowState(EMatchFlowState::None);
-		//재동매칭 변수 변경
-		if (bShouldAutoRematch) {
-			GameInstance->bAutoRestartMatch = true;
-		}
-	}
-
-	//[추가머지]입구컷 당했다면 자동재매칭 실행
-	if (bShouldAutoRematch) {
-		if (SessionInterface.IsValid() && SessionInterface->GetNamedSession(SessionName)) {
-			// CancelQuickMatchLAN에 의해 세션 파괴가 진행 중이므로, 파괴 완료 후 검색하도록 플래그 설정
-			// (OnDestroySessionCompleted에서 이 플래그를 보고 FindLANSessions를 실행)
-			bSearchAfterDestroy = true;
-		}
-		else {
-			// 파괴할 세션이 없다면 다음 프레임에 즉시 검색 시작
-			if (World) {
-				World->GetTimerManager().SetTimerForNextTick([this]() {
-					FindLANSessions();
-					});
-			}
-		}
-	}
-
-	// 4. 복구 및 청소가 끝났으므로 다음 프레임에 안전하게 음소거 해제
-	if (World) {
-		World->GetTimerManager().SetTimerForNextTick([this]() {
-			bIsNetworkError = false;
-			});
-	}
-	else {
-		bIsNetworkError = false;
-	}
-}
-
-void UAllPlayMode_SessionSubsystem::ReturnToTitle()
-{
-	// UI 팝업 음소거 모드 켜기 (이후 발생하는 세션 파괴 방송을 UI가 듣지 못하게 함)
-	bIsNetworkError = true;
-
-	// 세션 및 찌꺼기 변수 초기화
-	CancelQuickMatchLAN();
-	bCancelRequested = false;
-
-	LastUIState = ESessionUIState::None;
-	LastUIMessage = TEXT("");
-
-	// GameInstance 상태 초기화
-	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
-		GameInstance->SetMatchFlowState(EMatchFlowState::None);
-	}
-
-	// 아주 짧은 시간 뒤에 음소거 해제 (비동기 파괴 신호가 지나간 후)
-	if (UWorld* World = GetWorld()) {
-		World->GetTimerManager().SetTimerForNextTick([this]() {
-			bIsNetworkError = false;
-			});
-	}
-	else {
-		bIsNetworkError = false;
-	}
-}

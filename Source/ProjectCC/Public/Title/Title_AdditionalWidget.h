@@ -29,6 +29,10 @@ protected:
 	UFUNCTION()
 	void OnClicked_CancelButton();
 
+	//[Å¬¸¯]
+	UFUNCTION()
+	void PlayCommonUIClickSound();
+
 protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Yes;

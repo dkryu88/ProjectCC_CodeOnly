@@ -1,10 +1,12 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Result/Result_PlayerController.h"
 #include "Result/Player_ResultWidget.h"
 #include "AllPlayMode_GameInstance.h"
 #include "AllPlayMode_SessionSubsystem.h"
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Sound/SoundDataAsset.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 
@@ -27,6 +29,14 @@ void AResult_PlayerController::BeginPlay() {
 
 			if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 				ResultWidget->InitWidget(GameInstance->GetMatchResult(), GameInstance->GetMatchResults());
+			}
+		}
+	}
+
+	if (IsLocalController()) {
+		if (UAllPlayMode_SoundSubsystem* AudioSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			if (AudioSubsystem->GetAudioData() && AudioSubsystem->GetAudioData()->ResultBGM) {
+				AudioSubsystem->PlayBGM(AudioSubsystem->GetAudioData()->ResultBGM, 0.5f);
 			}
 		}
 	}
@@ -58,7 +68,7 @@ void AResult_PlayerController::OnPressedExitToTitle()
 {
 	if (!bCanExitMatch) return;
 
-	//[ë¨¸ì§€][ë²„ê·¸]ë§¤ì¹˜ ì¢…ë£Œ í›„ ê²°ê³¼ì°½ì—ì„œ íƒ€ì´í‹€ í™”ë©´ìœ¼ë¡œ ëŒì•„ê°ˆ ë•Œ ê¸°ì¡´ ì„¸ì…˜ì„ ì¢…ë£Œ
+	//¸ÅÄ¡ Á¾·á ÈÄ °á°úÃ¢¿¡¼­ Å¸ÀÌÆ² È­¸éÀ¸·Î µ¹¾Æ°¥ ¶§ ±âÁ¸ ¼¼¼ÇÀ» Á¾·á
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->ReturnToTitle();

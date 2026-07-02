@@ -60,6 +60,7 @@ public:
 	void HideMatchEventUI();
 
 	void SetShopButtonVisible(bool bVisible);
+	void SetShopClosedState(bool bClosed);
 	UButton* GetShopButton() const { return Button_Shop; }
 
 	//Overlay내의 이미지 자동 캐싱 (Image를 찾지 못한 경우)
@@ -143,6 +144,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Shop;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> Image_ShopClosedOverlay;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCanvasPanel> CanvasPanel_Countdown;

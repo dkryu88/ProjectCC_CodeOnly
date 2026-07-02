@@ -20,6 +20,7 @@ void AWeapon_SuperHammer::EquipEffect_Implementation(APlayer_Character* Player) 
 		OwnPlayer->bIsDodgeLocked = true;
 
 		if (OwnPlayer->ConditionComp && DamageImmunityDataAsset) {
+			OwnPlayer->AddImmunityController(FName(TEXT("SuperHammer")), EPlayerImmunityType::DamageImmunity, 1, false);
 			OwnPlayer->ConditionComp->ApplyCondition(DamageImmunityDataAsset, OwnPlayer, Duration);
 		}
 
@@ -59,6 +60,7 @@ void AWeapon_SuperHammer::Destroyed()
 		OwnPlayer->bInteractionLock = false;
 		OwnPlayer->bEquipLock = false;
 		OwnPlayer->bIsDodgeLocked = false;
+		OwnPlayer->RemoveImmunityControllerByName(FName(TEXT("SuperHammer")));
 	}
 
 	GetWorldTimerManager().ClearTimer(AttackTimerHandle);
