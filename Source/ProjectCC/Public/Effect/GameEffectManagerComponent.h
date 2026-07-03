@@ -33,17 +33,31 @@ public:
 	void PlayGameEffect_Local(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams());
 
 	//모든 클라이언트에서 실행
-	void PlayGameEffect_Multicast(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams());
+	void PlayGameEffect_Multicast(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams = FGameEffectRuntimeParams(), FName SoundKey = NAME_None);
 
+	//이펙트의 루프 사운드를 Delay이후 정리(LifeTime의 경우)
+	void StopEffectSoundAfterDelay(FName SoundKey, float Delay, float FadeOutTime);
 protected:
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_PlayResolvedGameEffect(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams, const FGameEffectContext& Context);
+	void Multicast_PlayResolvedGameEffect(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams, const FGameEffectContext& Context, FName SoundKey = NAME_None);
 
-	void SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams, const FGameEffectContext& Context);
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StopEffectSound(FName SoundKey, float FadeOutTime);
+
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UAudioComponent>> ActiveEffectSounds;
+
+	TMap<FName, FTimerHandle> EffectSoundStopTimers;
+
+	void StopEffectSound_Local(FName SoundKey, float FadeOutTime);
+
+	void SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams, const FGameEffectContext& Context, FName SoundKey = NAME_None);
 
 	FTransform ResolveGameEffectTransform(const FGameEffectData& EffectData, const FGameEffectContext& Context);
 	
 	void ApplyGameEffectRuntimeParams(UNiagaraComponent* NiagaraComp, const FGameEffectRuntimeParams& RuntimeParams);
 
 	TArray<FActiveTranslationFollowEffect> ActiveTranslationFollowEffects;
+
+	
 };

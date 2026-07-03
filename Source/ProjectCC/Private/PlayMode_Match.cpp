@@ -272,6 +272,7 @@ void APlayMode_Match::SendMatchResultsToPlayers()
 		Data.Rank = PS->GetPlayerRank();
 		Data.Eliminate = PS->GetPlayerEliminate();
 		Data.Out = PS->GetPlayerOut();
+		Data.PortraitId = PS->GetPortraitId();
 		Data.MapName = CurrentMapName;
 
 		AllResults.Add(Data);
@@ -294,6 +295,7 @@ void APlayMode_Match::SendMatchResultsToPlayers()
 		OwnData.Coin = OwnPS->GetPlayerCoin();
 		OwnData.Eliminate = OwnPS->GetPlayerEliminate();
 		OwnData.Out = OwnPS->GetPlayerOut();
+		OwnData.PortraitId = OwnPS->GetPortraitId();
 		OwnData.MapName = CurrentMapName;
 
 		MPC->Client_SaveResultData(OwnData, AllResults);

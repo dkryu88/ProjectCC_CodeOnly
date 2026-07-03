@@ -1,0 +1,111 @@
+매치에서 Aim실행 시 마우스 포인터가 창모드에서 화면 밖으로 나가짐
+
+[Player_Character.cpp]
+void APlayer_Character::Aim(const struct FInputActionValue& inputValue) 함수 안에서 1728번째 줄
+
+InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);	//기존:DoNotLock -> 변경:LockAlways
+
+
+=====================================================================================
+=====================================================================================
+
+선물상자를 데미지 블록에 던져 파괴하면 아이템이 3~4개 생성됨
+
+[Objects_GiftBox.h] 선언
+private:
+bool bIsDestroyed = false;
+
+[Objects_GiftBox.cpp] 1번만 실행되도록 설정
+void AObjects_GiftBox::Func_Destroy_Implementation() {
+	if (bIsDestroyed) return;	//추가
+	if (HasAuthority()) {
+		SpawnRandomGradeItem();
+	}
+	bIsDestroyed = true;	//추가
+}
+
+=====================================================================================
+=====================================================================================
+
+호스트가 매칭 중 취소 누르면 크래쉬 발생 해결
+
+[Title_PlayerController.cpp] 376번째 줄
+void ATitle_PlayerController::HandleCancelRequested() 함수 안에서
+
+제일 아래쪽 람다 함수의 This를 약한포인터로 변경(선언 및 2곳 수정)
+
+	//[크래쉬]
+	TWeakObjectPtr<ATitle_PlayerController> WeakThis = this;	//추가
+
+	GetWorld()->GetTimerManager().SetTimerForNextTick([WeakThis]() {
+		UGameplayStatics::OpenLevel(WeakThis.Get(), FName("/Game/Levels/LV_Title"));
+	});
+
+=====================================================================================
+=====================================================================================
+
+자동매칭 실행되었을 때 취소버튼 눌러도 자동매칭 재실행 되는 버그 수정
+
+[UAllPlayMode_SessionSubsystem.cpp]
+
+void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN() 함수 안에서
+bIsHostingSession = false; 와 PendingJoinResult.Reset(); 사이에 아래 내용 추가 //240번째 줄
+
+//[자동매칭버그] 
+LastUIState = ESessionUIState::None;
+LastUIMessage = TEXT("");
+if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+	GameInstance->SetMatchFlowState(EMatchFlowState::None);
+	GameInstance->bPendingCreateLANSession = false;
+	GameInstance->bAutoRestartMatch = false;
+}
+
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+void UAllPlayMode_SessionSubsystem::QuickMatchLAN() 함수안에
+BroadcastState(ESessionUIState::Searching, TEXT("Destroy existing session first")); 와 LeaveCurrentSession(); 사이에 추가
+
+
+//[자동매칭버그] 추가
+bSearchAfterDestroy = true;
+
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName, bool bWasSuccessful) 함수 마지막줄 
+
+FindLANSessions(); //[자동매칭버그]삭제(주석처리)
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+void UAllPlayMode_SessionSubsystem::LeaveCurrentSession() 함수 안에서 
+두번째 if문과 DestroySessionCompleteHandle= 사이에 추가
+
+// [자동매칭버그] 중복 방지 위해 이전 델리게이트 끊음
+SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+[Title_PlayerController.cpp]
+
+void ATitle_PlayerController::BeginPlay()함수 안에서
+
+CreateAndShowTitleWidget();
+FindPreviewActor();
+FindAndSetTitleCamera();
+
+위 3줄의 기본설정들을 if문 위쪽 상단으로 이동
+
+
+
+=====================================================================================
+=====================================================================================
+
+
+
+
+
+
+
+

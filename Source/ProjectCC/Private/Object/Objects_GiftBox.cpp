@@ -7,11 +7,9 @@
 #include "Item.h"
 
 void AObjects_GiftBox::Func_Destroy_Implementation() {
-	if (bIsDestroyed) return;
 	if (HasAuthority()) {
 		SpawnRandomGradeItem();
 	}
-	bIsDestroyed = true;
 }
 
 
@@ -22,7 +20,7 @@ void AObjects_GiftBox::SpawnRandomGradeItem() {
 	APlayMode_Match* PMM = Cast<APlayMode_Match>(World->GetAuthGameMode());	//서버 사이드 로직에서 더 안전하게 게임 모드를 가져오는 방법
 	if (!PMM) return;
 
-	// 확률 계산bIsDestroyed
+	// 확률 계산
 	int32 RandomRoll = FMath::RandRange(1, 100);
 	EGrade SelectedGrade;
 

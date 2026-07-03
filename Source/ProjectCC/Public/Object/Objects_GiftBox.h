@@ -21,5 +21,4 @@ protected:
 
 private:
 	void SpawnRandomGradeItem();
-	bool bIsDestroyed = false;	//버그수정
 };

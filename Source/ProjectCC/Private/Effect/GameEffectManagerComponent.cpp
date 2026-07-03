@@ -47,7 +47,7 @@ void UGameEffectManagerComponent::PlayGameEffect_Local(const FGameEffectData& Ef
 	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams, Context);
 }
 
-void UGameEffectManagerComponent::PlayGameEffect_Multicast(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams)
+void UGameEffectManagerComponent::PlayGameEffect_Multicast(const FGameEffectData& EffectData, const FGameEffectContext& Context, const FGameEffectRuntimeParams& RuntimeParams, FName SoundKey)
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor) return;
@@ -57,16 +57,78 @@ void UGameEffectManagerComponent::PlayGameEffect_Multicast(const FGameEffectData
 
 	FTransform EffectTransform = ResolveGameEffectTransform(EffectData, Context);
 
-	Multicast_PlayResolvedGameEffect(EffectData, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), RuntimeParams, Context);
+	Multicast_PlayResolvedGameEffect(EffectData, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator(), EffectTransform.GetScale3D(), RuntimeParams, Context, SoundKey);
 }
 
-void UGameEffectManagerComponent::Multicast_PlayResolvedGameEffect_Implementation(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams, const FGameEffectContext& Context)
+void UGameEffectManagerComponent::Multicast_StopEffectSound_Implementation(FName SoundKey, float FadeOutTime)
+{
+	StopEffectSound_Local(SoundKey, FadeOutTime);
+}
+
+void UGameEffectManagerComponent::Multicast_PlayResolvedGameEffect_Implementation(FGameEffectData EffectData, FVector_NetQuantize EffectLocation, FRotator EffectRotation, FVector EffectScale, FGameEffectRuntimeParams RuntimeParams, const FGameEffectContext& Context, FName SoundKey)
 {
 	FTransform EffectTransform(EffectRotation, EffectLocation, EffectScale);
-	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams, Context);
+	SpawnGameEffectAtTransform_Local(EffectData, EffectTransform, RuntimeParams, Context, SoundKey);
 }
 
-void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams, const FGameEffectContext& Context)
+void UGameEffectManagerComponent::StopEffectSound_Local(FName SoundKey, float FadeOutTime)
+{
+	if (SoundKey.IsNone()) return;
+	if (FTimerHandle* TimerHandle = EffectSoundStopTimers.Find(SoundKey)) {
+		if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(*TimerHandle);
+		EffectSoundStopTimers.Remove(SoundKey);
+	}
+
+	TObjectPtr<UAudioComponent>* FoundComp = ActiveEffectSounds.Find(SoundKey);
+
+	if (!FoundComp || !FoundComp->Get()) {
+		ActiveEffectSounds.Remove(SoundKey);
+		return;
+	}
+
+	UAudioComponent* AudioComp = FoundComp->Get();
+	ActiveEffectSounds.Remove(SoundKey);
+
+	if (!IsValid(AudioComp)) return;
+
+	if (FadeOutTime > 0.f && AudioComp->IsPlaying()) {
+		AudioComp->FadeOut(FadeOutTime, 0.f);
+		FTimerHandle DestroyHandle;
+
+		if (UWorld* World = GetWorld()) {
+			World->GetTimerManager().SetTimer(DestroyHandle, FTimerDelegate::CreateWeakLambda(this, [AudioComp]() {
+				if (IsValid(AudioComp)) AudioComp->DestroyComponent();
+			}), FadeOutTime + 0.05f, false);
+		}
+	}
+	else {
+		AudioComp->Stop();
+		AudioComp->DestroyComponent();
+	}
+}
+
+void UGameEffectManagerComponent::StopEffectSoundAfterDelay(FName SoundKey, float Delay, float FadeOutTime)
+{
+	if (SoundKey.IsNone()) return;
+	if (!GetWorld()) return;
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !OwnerActor->HasAuthority()) return;
+
+	if (FTimerHandle* ExistingTimer = EffectSoundStopTimers.Find(SoundKey)){
+		GetWorld()->GetTimerManager().ClearTimer(*ExistingTimer);
+		EffectSoundStopTimers.Remove(SoundKey);
+	}
+
+	FTimerHandle& TimerHandle = EffectSoundStopTimers.FindOrAdd(SoundKey);
+
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, SoundKey, FadeOutTime]() {
+		EffectSoundStopTimers.Remove(SoundKey);
+		Multicast_StopEffectSound(SoundKey, FadeOutTime);
+	}), Delay, false);
+}
+
+void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEffectData& EffectData, const FTransform& EffectTransform, const FGameEffectRuntimeParams& RuntimeParams, const FGameEffectContext& Context, FName SoundKey)
 {
 	if (!GetWorld()) return;
 	if (APlayer_Character* SourcePlayer = Cast<APlayer_Character>(Context.SourceActor.Get())) {
@@ -78,19 +140,19 @@ void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEf
 
 	if (!bHavingNiagara && !bHavingSound) return;
 
+	USceneComponent* AttachComp = Context.SourceComponent.Get();
+
+	if (!AttachComp && Context.SourceActor) AttachComp = Context.SourceActor->GetRootComponent();
+	if (!AttachComp) {
+		if (AActor* OwnerActor = GetOwner()) AttachComp = OwnerActor->GetRootComponent();
+	}
+
+	bool bUseTranslationFollow = EffectData.bFollowSourceTranslationOnly && Context.SourceActor;
+	bool bShouldAttachToSource = !bUseTranslationFollow && EffectData.bAttachToSourceWhenSpawned && AttachComp;
+
 	if (bHavingNiagara) {
-		bool bUseTranslationFollow = EffectData.bFollowSourceTranslationOnly && Context.SourceActor;
-		USceneComponent* AttachComp = Context.SourceComponent.Get();
-
-		if (!AttachComp && !Context.SourceActor) AttachComp = Context.SourceActor->GetRootComponent();
-		if (!AttachComp) {
-			if (AActor* OwnerActor = GetOwner()) AttachComp = OwnerActor->GetRootComponent();
-		}
-
 		UNiagaraComponent* NiagaraComp = nullptr;
-
-		if (!bUseTranslationFollow && EffectData.bAttachToSourceWhenSpawned && AttachComp)
-		{
+		if (bShouldAttachToSource) {
 			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAttached(EffectData.NiagaraEffect, AttachComp, NAME_None, EffectData.LocationOffset, EffectData.RotationOffset, EAttachLocation::KeepRelativeOffset, true, false);
 			if (NiagaraComp) {
 				NiagaraComp->SetRelativeScale3D(EffectData.Scale);
@@ -126,7 +188,30 @@ void UGameEffectManagerComponent::SpawnGameEffectAtTransform_Local(const FGameEf
 		}
 	}
 	if (bHavingSound) {
-		UGameplayStatics::PlaySoundAtLocation(GetWorld(), EffectData.Sound, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator());
+		UAudioComponent* AudioComp = nullptr;
+
+		if (bShouldAttachToSource) {
+			AudioComp = UGameplayStatics::SpawnSoundAttached(EffectData.Sound, AttachComp, NAME_None, EffectData.LocationOffset, EffectData.RotationOffset, EAttachLocation::KeepRelativeOffset, true);
+		}
+		else AudioComp = UGameplayStatics::SpawnSoundAtLocation(GetWorld(), EffectData.Sound, EffectTransform.GetLocation(), EffectTransform.GetRotation().Rotator());
+
+		if (AudioComp && !SoundKey.IsNone()) {
+			if (TObjectPtr<UAudioComponent>* ExistingComp = ActiveEffectSounds.Find(SoundKey)) {
+				if (ExistingComp->Get()) {
+					ExistingComp->Get()->Stop();
+					ExistingComp->Get()->DestroyComponent();
+				}
+
+				ActiveEffectSounds.Remove(SoundKey);
+			}
+
+			ActiveEffectSounds.Add(SoundKey, AudioComp);
+			AudioComp->OnAudioFinishedNative.AddWeakLambda(this, [this, SoundKey](UAudioComponent* FinishedComp) {
+				TObjectPtr<UAudioComponent>* FoundComp = ActiveEffectSounds.Find(SoundKey);
+				if (FoundComp && FoundComp->Get() == FinishedComp) ActiveEffectSounds.Remove(SoundKey);
+
+			});
+		}
 	}
 }
 

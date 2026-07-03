@@ -94,6 +94,10 @@ public:
 	UPROPERTY()
 	TSet<TObjectPtr<AActor>> ProcessedActors;
 
+	UPROPERTY(EditAnywhere, Category = "KillPlane|Sound")
+	float DestroySoundCooldown = 0.15f;
+
+	float LastDestroySoundTime = -10.f;
 public:
 	void SetSizeofKillColliderwithMesh();
 

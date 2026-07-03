@@ -218,6 +218,10 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 	//이전 세션이 남아있는 경우 정리
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		BroadcastState(ESessionUIState::Searching, TEXT("Destroy existing session first"));
+
+		//[자동매칭버그] 추가
+		bSearchAfterDestroy = true;
+
 		LeaveCurrentSession();
 		return;
 	}
@@ -237,6 +241,14 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	bJoinInProgress = false;
 	bFindInProgress = false;
 	bIsHostingSession = false;
+
+	LastUIState = ESessionUIState::None;	//[추가]자동매칭버그
+	LastUIMessage = TEXT("");
+	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
+		GameInstance->SetMatchFlowState(EMatchFlowState::None);
+		GameInstance->bPendingCreateLANSession = false;
+		GameInstance->bAutoRestartMatch = false;
+	}
 
 	PendingJoinResult.Reset();
 	IgnoredHostTickets.Reset();
@@ -431,6 +443,9 @@ void UAllPlayMode_SessionSubsystem::LeaveCurrentSession()
 		BroadcastState(ESessionUIState::None, TEXT("No Session to Destroy"));
 		return;
 	}
+
+	// [자동매칭버그] 중복 방지 위해 이전 델리게이트 끊음
+	SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
 
 	DestroySessionCompleteHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
 	SessionInterface->DestroySession(SessionName);
@@ -841,7 +856,7 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 	}
 
 	//새로운 세션을 검색
-	FindLANSessions();
+	//FindLANSessions();	//[자동매칭버그] 주석처리
 }
 
 

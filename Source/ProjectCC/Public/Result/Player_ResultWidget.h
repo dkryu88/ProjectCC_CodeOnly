@@ -38,6 +38,7 @@ class PROJECTCC_API UPlayer_ResultWidget : public UUserWidget
 public:
 	void InitWidget(const FMatchResultData& OwnData, const TArray<FMatchResultData>& Results);
 	void SetAllPlayerResults(FString OwnNickname, int32 Rank, const TArray<FMatchResultData>& Results);
+	void ApplyPortrait(UImage* TargetImage, int32 PortraitId);
 	void ShowPlayerRankMedal(int32 Rank);
 	void SetExitEnabled(bool bEndEnabled);
 
@@ -71,6 +72,9 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UVerticalBox> VerticalBox_PlayerResults;
 
+	UPROPERTY(meta = (BindWidget))
+	UImage* Image_Player_OwnPortrait;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Scoreboard")
 	TSubclassOf<UPlayer_ScoreBoardWidget> ScoreWidget;
 
@@ -82,6 +86,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Result")
 	TArray<TObjectPtr<UTexture2D>> RankMedals;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Portrait")
+	TArray<UTexture2D*> PortraitTextures;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Result Medal")
 	float StartSize = 2.f;

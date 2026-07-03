@@ -36,6 +36,11 @@ void ATitle_PlayerController::BeginPlay()
 
 	SetTitleInputMode();
 
+	//[자동매칭버그] 위치이동
+	CreateAndShowTitleWidget();
+	FindPreviewActor();
+	FindAndSetTitleCamera();
+	
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
 			SessionSubsystem->OnSessionStateChanged.AddDynamic(this, &ATitle_PlayerController::HandleSessionStateChanged);
@@ -73,9 +78,6 @@ void ATitle_PlayerController::BeginPlay()
 		}
 	}
 
-	CreateAndShowTitleWidget();
-	FindPreviewActor();
-	FindAndSetTitleCamera();
 }
 
 void ATitle_PlayerController::PlayerTick(float DeltaTime)
@@ -373,9 +375,9 @@ void ATitle_PlayerController::HandleCancelRequested()
 			ATitle_PlayerController* PC = Cast<ATitle_PlayerController>(IT->Get());
 			if (PC && PC != this) PC->Client_ExitedByHost();
 		}
-
-		GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
-			UGameplayStatics::OpenLevel(this, FName("/Game/Levels/LV_Title"));
+		TWeakObjectPtr<ATitle_PlayerController> WeakThis = this;	//[추가]크래쉬 //검색어 [자동매칭버그]
+		GetWorld()->GetTimerManager().SetTimerForNextTick([WeakThis]() {
+			UGameplayStatics::OpenLevel(WeakThis.Get(), FName("/Game/Levels/LV_Title"));
 		});
 	}
 }

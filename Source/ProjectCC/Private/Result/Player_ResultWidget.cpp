@@ -23,6 +23,7 @@ void UPlayer_ResultWidget::InitWidget(const FMatchResultData& OwnData, const TAr
 		Text_Coin->SetText(FText::AsNumber(OwnData.Coin));
 	}
 
+	ApplyPortrait(Image_Player_OwnPortrait, OwnData.PortraitId);
 	SetAllPlayerResults(OwnData.Nickname,OwnData.Rank, Results);
 
 	GetWorld()->GetTimerManager().ClearTimer(ShowMedalTimer);
@@ -67,6 +68,17 @@ void UPlayer_ResultWidget::ShowPlayerRankMedal(int32 Rank)
 		Image_RankMedal->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
+}
+
+void UPlayer_ResultWidget::ApplyPortrait(UImage* TargetImage, int32 PortraitId)
+{
+	if (!TargetImage) return;
+	if (!PortraitTextures.IsValidIndex(PortraitId)) return;
+	if (PortraitTextures[PortraitId]) {
+		FSlateBrush Brush;
+		Brush.SetResourceObject(PortraitTextures[PortraitId]);
+		TargetImage->SetBrush(Brush);
+	}
 }
 
 void UPlayer_ResultWidget::SetExitEnabled(bool bEndEnabled)

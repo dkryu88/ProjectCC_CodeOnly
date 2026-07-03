@@ -28,7 +28,8 @@ bool AItem_AngelProtection::UseEffect_Implementation(APlayer_Character* Player)
 
 				Params.AddFloatParam(TEXT("User.LifeTime"), DamageImmunityDuration);
 
-				Player->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params);
+				Player->EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params, FName(TEXT("AngelProtection")));
+				Player->EffectManagerComp->StopEffectSoundAfterDelay(FName(TEXT("AngelProtection")), DamageImmunityDuration, 0.25f);
 			}
 		}
 

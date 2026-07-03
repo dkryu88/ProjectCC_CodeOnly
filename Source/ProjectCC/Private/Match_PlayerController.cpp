@@ -22,6 +22,7 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Camera/CameraActor.h"
 #include "TimerManager.h"
 
@@ -494,6 +495,14 @@ void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaitin
 		ApplyGameInputMode();
 
 		SetPlayWidget();
+
+		//각 플레이어의 머리 위젯 초기화 (데이터 동기화)
+		for (TActorIterator<APlayer_Character> It(GetWorld()); It; ++It){
+			if (APlayer_Character* player = *It)
+			{
+				player->InitPlayerWidget();
+			}
+		}
 	}
 	else {
 		//리스폰 상태 최초 진입시에만 초기화

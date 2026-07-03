@@ -38,6 +38,8 @@ void UPlayerConditionComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	if (!Player->HasAuthority()) return;
 
 	for (int32 i = CurrentConditions.Num() - 1; i >= 0; --i) {
+		if (!CurrentConditions.IsValidIndex(i)) continue;
+
 		FPlayerCondition& Condition = CurrentConditions[i];
 		bool bTimeOver = false;
 

@@ -916,6 +916,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 	if (ShouldIgnoreOwnerCollisionActor(OtherActor)) return;
 	if (Type == EObjectsType::Install || Type == EObjectsType::Normal) return;
 	
+	float DamageToApply = bHaveThrowDamage ? ThrowDamage : HitDamage;
 	bHavingHitPoint = true;
 	HitPoint = Hit.ImpactPoint;
 
@@ -924,7 +925,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		AObjects* HitObject = Cast<AObjects>(OtherActor);
 
 		if (HitPlayer && !HitPlayer->IsOut()) {
-			HitPlayer->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, ObjectsData->bApplyHitRotation, ObjectsData->bUsingHitAction, false);
+			HitPlayer->ApplyDamageInternal(DamageToApply, OwnPlayer, this, true, ObjectsData->bApplyHitRotation, ObjectsData->bUsingHitAction, false);
 
 			//물체 Hit 이펙트 생성
 			FGameEffectContext EffectContext;
@@ -941,7 +942,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 		}
 
 		else if (HitObject && HitObject->ObjectsData && HitObject->ObjectsData->bUseHP && HitObject->OwnPlayer != OwnPlayer) {
-			HitObject->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, false, -1.f, true, Hit.ImpactPoint, Hit.ImpactNormal);
+			HitObject->ApplyDamageInternal(DamageToApply, OwnPlayer, this, true, false, -1.f, true, Hit.ImpactPoint, Hit.ImpactNormal);
 
 			//물체 Hit 이펙트 생성
 			FGameEffectContext EffectContext;

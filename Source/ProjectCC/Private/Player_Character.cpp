@@ -21,6 +21,7 @@
 #include "Engine/World.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
+#include "EngineUtils.h"
 #include "ETC/AttackPreviewGuide.h"
 #include "Effect/GameEffectManagerComponent.h"
 #include "InputActionValue.h"
@@ -33,6 +34,7 @@
 #include "Match_PlayerController.h"
 #include "Player_CharacterWidget.h"
 #include "Player_AdditionalWidget.h"
+#include "Match_State.h"
 #include "PlayMode_Match.h"
 #include "MapConstructor.h"
 #include "BlockType.h"
@@ -116,6 +118,13 @@ APlayer_Character::APlayer_Character()
 	//ECC_GameTraceChannel1 <- 콜리전 프리셋 1번 (Interaction)
 	PickupDetectRange->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	PickupDetectRange->SetGenerateOverlapEvents(true);
+	//플레이어 방향 포인터 매쉬 부착
+	PlayerDirectionPlane = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlayerDirectionPointer"));
+	PlayerDirectionPlane->SetupAttachment(GetRootComponent());
+	PlayerDirectionPlane->SetGenerateOverlapEvents(false);
+	PlayerDirectionPlane->SetSimulatePhysics(false);
+	PlayerDirectionPlane->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PlayerDirectionPlane->SetCollisionResponseToAllChannels(ECR_Ignore);
 	//아이템 슬롯 컴포넌트 부착
 	ItemSlot = CreateDefaultSubobject<USceneComponent>(TEXT("ItemSlot"));
 	ItemSlot->SetupAttachment(GetRootComponent());
@@ -424,6 +433,16 @@ void APlayer_Character::OnRep_bIsOut()
 	else {
 		InitPlayerWidget();
 		SetPlayerWidgetVisibility(true);
+
+		//리스폰 된 순간 모든 플레이어의 Head Widget을 갱신
+		if (IsLocallyControlled()){
+			for (TActorIterator<APlayer_Character> It(GetWorld()); It; ++It){
+				if (APlayer_Character* PlayerCharacter = *It)
+				{
+					PlayerCharacter->InitPlayerWidget();
+				}
+			}
+		}
 	}
 }
 
@@ -976,6 +995,9 @@ bool APlayer_Character::BuildCurrentAttackPreviewData(FAimPreviewVisualData& Out
 
 //플레이어 회피 서버 요청
 void APlayer_Character::Dodge(const struct FInputActionValue& inputValue) {
+	//매치 시작 대기중 상태에서는 회피 불가
+	AMatch_State* MS = GetWorld() ? GetWorld()->GetGameState<AMatch_State>() : nullptr;
+	if (!MS || !MS->IsMatchStarted()) return;
 	if (!bCanControl) return;
 	if (bIsOut) return;
 	if (bIsDodging) return;
@@ -997,6 +1019,9 @@ void APlayer_Character::Dodge(const struct FInputActionValue& inputValue) {
 }
 //플레이어 회피 처리
 void APlayer_Character::DodgeInternal(FVector DodgeDir) {
+	//매치 시작 대기중 상태에서는 회피 불가
+	AMatch_State* MS = GetWorld() ? GetWorld()->GetGameState<AMatch_State>() : nullptr;
+	if (!MS || !MS->IsMatchStarted()) return;
 	if (!bCanControl) return;
 	UWorld* World = GetWorld();
 	UCharacterMovementComponent* Move = GetCharacterMovement();
@@ -1637,7 +1662,7 @@ void APlayer_Character::DropObjects(float Strength, bool bIsThrowing) {
 		NowObjects->BeginObjectThrow(this, ThrowDamage);
 	}
 
-	ApplyThrowOb(NowObjects, Strength, 0.f, 0.5f);
+	ApplyThrowOb(NowObjects, Strength, 0.f, 0.1f);
 	//현재 플레이어 상태 갱신
 	Weight = BaseStats.Default_Weight;
 	move_Speed = BaseStats.Default_Speed;
@@ -1725,7 +1750,7 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 			PC->CurrentMouseCursor = EMouseCursor::None;
 
 			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);	//기존:DoNotLock -> 변경:LockAlways
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 
@@ -3636,6 +3661,7 @@ void APlayer_Character::OnRep_PlayerState()
 	if (VisualManagerComp) {
 		VisualManagerComp->RefreshPortraitMaterials();
 	}
+
 }
 
 /*------------------애니메이션----------------------*/
@@ -3886,6 +3912,7 @@ void APlayer_Character::EndBigHitReaction()
 
 	if (ConditionComp) {
 		ConditionComp->ResumeCurrentConditionAnimation();
+		AddImmunityController("InstanceImmunity", EPlayerImmunityType::DamageImmunity, 1, false, 0.5f);
 	}
 
 	ForceNetUpdate();

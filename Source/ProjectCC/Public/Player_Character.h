@@ -202,6 +202,8 @@ public:
 	//?Œë ˆ?´ì–´ VisualManager ì»´í¬?ŒíŠ¸
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Visual Manager")
 	UPlayerVisualManagerComponent* VisualManagerComp;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="PlayerDirectionPointer")
+	TObjectPtr<UStaticMeshComponent> PlayerDirectionPlane;
 	//?Œë ˆ?´ì–´ SpeedController (?ë„ ì¡°ì •??
 	UPROPERTY()
 	TArray<FSpeedController> SpeedControllers;

@@ -33,6 +33,9 @@ struct FMatchResultData {
 	int32 Out = 0;
 
 	UPROPERTY(BlueprintReadWrite)
+	int32 PortraitId = -1;
+
+	UPROPERTY(BlueprintReadWrite)
 	FName MapName;
 };
 

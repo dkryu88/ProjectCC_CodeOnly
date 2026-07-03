@@ -90,7 +90,8 @@ void UPlayer_CharacterWidget::HandleCoinChanged(int32 Coin)
 //코인 수 세팅
 void UPlayer_CharacterWidget::SetCoin() {
 	if (!Text_Coin) return;
-
+	
+	if (!OwnerState && OwnerCharacter) OwnerState = OwnerCharacter->GetPlayerState<APlayer_State>();
 	if (!OwnerState) {
 		Text_Coin->SetText(FText::AsNumber(0));
 		return;

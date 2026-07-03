@@ -28,7 +28,7 @@ void AObjects_SnowBomb::Func_BecomeNormalType_Implementation(const FHitResult& H
 	if (!HasAuthority()) return;
 	if (bLanded) return;
 	bLanded = true;
-	GetWorldTimerManager().SetTimer(ExplodeTimerHandle, this, &AObjects_SnowBomb::SnowExplode, 2.f, false);
+	GetWorldTimerManager().SetTimer(ExplodeTimerHandle, this, &AObjects_SnowBomb::SnowExplode, 1.25f, false);
 }
 
 void AObjects_SnowBomb::Func_Destroy_Implementation()

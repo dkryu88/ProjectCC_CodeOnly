@@ -73,7 +73,7 @@ protected:
 	UFUNCTION()
 	void OnRep_TurretHeadYaw();
 
-	// 터렛 기본데미지 10
+	// 터렛 기본데미지
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret")
 	float Damage = 2.f;
 };

@@ -26,7 +26,7 @@ void AObjects_Bomb::Func_BecomeNormalType_Implementation(const FHitResult& Hit)
 	if (!HasAuthority()) return;
 	if (bLanded) return;
 	bLanded = true;
-	GetWorldTimerManager().SetTimer(ExplodeTimerHandle, this, &AObjects_Bomb::Explode, 2.f, false);
+	GetWorldTimerManager().SetTimer(ExplodeTimerHandle, this, &AObjects_Bomb::Explode, 1.f, false);
 }
 
 void AObjects_Bomb::Func_Destroy_Implementation()

@@ -164,10 +164,18 @@ void AKillPlane::PlayDestroyEffectForActor(AActor* TargetActor, UPrimitiveCompon
 	FVector PlaneScale = GetEffectPlaneScaleForShapeLocation(TargetActor, TargetComp, SurfaceInfo.SurfaceAxis);
 
 	float EffectLifeTime = TargetActor->IsA<APlayer_Character>() ? 3.f : 1.f;
+	FGameEffectData EffectDataCopy = KillPlaneDestroyEffect;
 
 	FGameEffectData* EffectData = &KillPlaneDestroyEffect;
 	EffectData->SpawnLocationType = EGameEffectSpawnLocationType::WorldLocation;
 	EffectData->SpawnRotationType = EGameEffectSpawnRotationType::WorldRotation;
+
+	float CurrentTime = GetWorld()->GetTimeSeconds();
+	bool bCanPlayDestroySound = CurrentTime - LastDestroySoundTime >= DestroySoundCooldown;
+
+	if (bCanPlayDestroySound) LastDestroySoundTime = CurrentTime;
+	else EffectDataCopy.Sound = nullptr;
+	
 
 	FGameEffectContext Context;
 	Context.SourceActor = this;
@@ -180,7 +188,7 @@ void AKillPlane::PlayDestroyEffectForActor(AActor* TargetActor, UPrimitiveCompon
 	Params.AddFloatParam(TEXT("User.PlaneScaleY"), PlaneScale.Y);
 	Params.AddFloatParam(TEXT("User.LifeTime"), EffectLifeTime);
 
-	EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params);
+	EffectManagerComp->PlayGameEffect_Multicast(*EffectData, Context, Params, bCanPlayDestroySound ? TEXT("KillPlaneDestroySound") : FName(NAME_None));
 }
 
 FKillPlaneSurfaceInfo AKillPlane::GetEffectSurfaceInfo(AActor* TargetActor)
