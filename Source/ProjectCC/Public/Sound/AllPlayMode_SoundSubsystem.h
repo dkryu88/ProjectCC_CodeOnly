@@ -23,8 +23,7 @@ public:
 
 	void InitializeAudioData(USoundDataAsset* NewSoundAsset);
 	void PlayBGMByMapName(FName MapName, float FadeInTime = 1.f);
-	//[추가]
-	void PlayBGM30SecByMapName(FName MapName, float FadeInTime = 1.f);
+	void PlayLast30SecondBGMByMapName(FName MapName, float FadeInTime = 1.f);
 
 	UFUNCTION(BlueprintCallable, Category = "Audio|BGM")
 	void PlayBGM(USoundBase* BGMSound, float FadeInTime = 1.f);
@@ -44,11 +43,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Audio|SFX")
 	void StopManagedSFX(USoundBase* SFXSound);
 
-	USoundDataAsset* GetAudioData();
-
-	//[클릭]
-	UFUNCTION(BlueprintCallable, Category = "Audio|UI")
+	UFUNCTION(BlueprintCallable, Category="Audio|UI")
 	void PlayUIClickSound();
+
+	USoundDataAsset* GetAudioData();
 
 protected:
 	UPROPERTY()

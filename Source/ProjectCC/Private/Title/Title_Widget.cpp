@@ -12,8 +12,8 @@
 #include "Components/Overlay.h"
 #include "AllPlayMode_GameInstance.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Sound/AllPlayMode_SoundSubsystem.h"	//[클릭]
-#include "Blueprint/WidgetTree.h"	//[클릭]
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Blueprint/WidgetTree.h"
 
 void UTitle_Widget::NativeConstruct() {
 	Super::NativeConstruct();
@@ -70,13 +70,14 @@ void UTitle_Widget::NativeConstruct() {
 	}
 	else {
 		ApplyMatchMode(EMatchMode::TwoPlayers, true);
-	}
+	}	
 
-	//[클릭]
 	if (WidgetTree) {
-		WidgetTree->ForEachWidget([this](UWidget* widget) {
-			if (UButton* Btn = Cast<UButton>(widget)) {
-				Btn->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::PlayCommonUIClickSound);
+		WidgetTree->ForEachWidget([this](UWidget* Widget) {
+			if (UButton* Button = Cast<UButton>(Widget)) {
+				if (Button == Button_Play) return;
+				else Button->OnClicked.AddUniqueDynamic(this, &UTitle_Widget::PlayCommonUIClickSound);
+				
 			}
 		});
 	}
@@ -267,6 +268,14 @@ void UTitle_Widget::SetStatusMessageFadeOut(const FText& text, float VisibleTime
 	StatusElapsedTime = 0.f;
 }
 
+//UI 버튼 클릭 사운드 재생
+void UTitle_Widget::PlayCommonUIClickSound()
+{
+	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		AudioSub->PlayUIClickSound();
+	}
+}
+
 //OnTitlePlayRequest 이벤트를 발생시켜 입력받은 닉네임을 PlayerController가 저장하도록 지정
 void UTitle_Widget::HandlePlayButtonClicked()
 {
@@ -402,14 +411,6 @@ void UTitle_Widget::SnapSelectedFrameToTargetLocation()
 
 	FrameSlot->SetPosition(TargetFramePosition);
 	bFrameMoving = false;
-}
-
-//[클릭]
-void UTitle_Widget::PlayCommonUIClickSound()
-{
-	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
-		AudioSub->PlayUIClickSound();
-	}
 }
 
 

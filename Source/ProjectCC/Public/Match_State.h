@@ -4,12 +4,32 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
+#include "Shop/ShopStock.h"
 #include "Match_State.generated.h"
 
 /**
  * 플레이어가 GameMode로 직접 접근이 불가능하므로
  * GameState를 통해 순위나 남은 시간을 획득
  */
+
+USTRUCT(BlueprintType)
+struct FShopPriceData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 B_BoxPrice = 20;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 A_BoxPrice = 30;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 S_BoxPrice = 50;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Random_BoxPrice = 40;
+};
+
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMatchTimeChanged, int32);
 
@@ -34,11 +54,19 @@ protected:
 	UFUNCTION()
 	void OnRep_MatchTime();
 
+	UPROPERTY(ReplicatedUsing = OnRep_ShopPriceData)
+	FShopPriceData ShopPriceData;
+
+	UFUNCTION()
+	void OnRep_ShopPriceData();
+
 public:
 	void SetDelayEndServerTime(float Time);
 	void SetMatchTime(int32 NewMatchTime);
 	void SetMatchStarted(bool bMatchState);
 	void SetMatchEnded(bool bMatchState);
+	void SetShopPriceData(const FShopPriceData& NewData);
+	int32 GetShopPrice(EShopBoxs Box);
 
 	float GetDelayEndServerTime(){ return DelayEndServerTime; }
 	int32 GetMatchTime() const { return MatchTime; }

@@ -75,6 +75,11 @@ void AArea::BeginPlay()
 		LifeTimeEffectComp->Activate(true);
 	}
 
+	if (LifeTimeAudioComp && LifeTimeSound) {
+		LifeTimeAudioComp->SetSound(LifeTimeSound);
+		LifeTimeAudioComp->Play();
+	}
+
 	if (!HasAuthority()) return;
 
 	if (AreaDuration > 0.f) {
@@ -85,6 +90,11 @@ void AArea::BeginPlay()
 }
 
 void AArea::EndPlay(const EEndPlayReason::Type EndPlayReason) {
+
+	if (LifeTimeAudioComp && LifeTimeAudioComp->IsPlaying()) {
+		LifeTimeAudioComp->FadeOut(0.3f, 0.f);
+	}
+
 	if (HasAuthority()) {
 		if (bApplyOutEffectOnEndPlay) {
 			ClearGroupEffects();

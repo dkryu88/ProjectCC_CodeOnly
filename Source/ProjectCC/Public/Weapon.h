@@ -160,6 +160,8 @@ public:
 	void CopyCollisionSetting(UPrimitiveComponent* AdditionalCollider);
 	//장착 상태 적용
 	virtual void ApplyEquipState() override;
+	//장착 상태 Visual 적용 (손에 들려있는 상태)
+	void ApplyEquipVisualToPlayer(APlayer_Character* Player);
 	//해제 상태 적용
 	virtual void ApplyWorldState() override;
 

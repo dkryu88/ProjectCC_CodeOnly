@@ -7,7 +7,7 @@
 #include "SoundDataAsset.generated.h"
 
 /**
- *
+ * 
  */
 class USoundBase;
 
@@ -27,9 +27,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BGM")
 	TMap<FName, USoundBase*> MatchBGM_Map;
 
-	//[추가]
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BGM")
-	TMap<FName, USoundBase*> MatchBGM30Sec_Map;
+	TMap<FName, USoundBase*> MatchBGM_Last30_Map;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BGM")
 	USoundBase* ResultBGM;
@@ -42,16 +41,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SFX")
 	USoundBase* CountDownSound;
 
-	//[클릭] 버튼 클릭 사운드(타이틀&상점)
+	//기본 UI 클릭 사운드
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
 	USoundBase* UIClickSound;
 
-	//[클릭] 구매 성공 SFX
+	//UI 기능 승낙 클릭 사운드 [Yes 버튼]
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
-	USoundBase* PurchaseSuccessSound;
+	USoundBase* UIClickYesSound;
 
-	//[클릭] 구매 실패 SFX
+	//UI 기능 거부 클릭 사운드 [No 버튼]
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
-	USoundBase* PurchaseFailSound;
-
+	USoundBase* UIClickNoSound;
+	
 };

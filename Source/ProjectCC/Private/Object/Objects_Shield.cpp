@@ -16,7 +16,6 @@ AObjects_Shield::AObjects_Shield(const FObjectInitializer& ObjectInitializer)
 	ZOffset = 15.f;
 }
 
-
 void AObjects_Shield::ApplyAdditionalSetting()
 {
 	if (Type == EObjectsType::Support) {
@@ -28,5 +27,11 @@ void AObjects_Shield::ApplyAdditionalSetting()
 		PhysicsCollider->SetCollisionResponseToChannel(ECC_GameTraceChannel6, ECR_Block); //Bullet
 		PhysicsCollider->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	}
+}
+
+void AObjects_Shield::Func_AttackedByPlayer_Implementation(APlayer_Character* Player)
+{
+	if (!OwnPlayer) return;
+	OwnPlayer->AddImmunityController(FName(TEXT("Sheild")), EPlayerImmunityType::Invincible, 0, true, 0.25f);
 }
 

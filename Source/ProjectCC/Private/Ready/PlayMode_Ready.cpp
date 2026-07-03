@@ -138,6 +138,8 @@ void APlayMode_Ready::AssignPortraitId()
 		APlayer_State* PS = Cast<APlayer_State>(GameState->PlayerArray[i]);
 		if (!PS) continue;
 		PS->SetPortraitId(i);
+		PS->SetSpawnSlotIndex(i);
+
 		PS->ForceNetUpdate();
 	}
 }

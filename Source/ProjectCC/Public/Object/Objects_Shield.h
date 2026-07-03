@@ -18,4 +18,5 @@ public:
 	AObjects_Shield(const FObjectInitializer& ObjectInitializer);
 
 	virtual void ApplyAdditionalSetting() override;
+	virtual void Func_AttackedByPlayer_Implementation(APlayer_Character* Player) override;
 };

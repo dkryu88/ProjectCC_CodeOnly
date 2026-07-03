@@ -27,6 +27,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayDamageSound();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	USceneComponent* Root;
 
@@ -47,6 +50,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
 	TObjectPtr<USoundBase> LifeTimeSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DamageBlock|Sound")
+	TObjectPtr<USoundBase> DamageSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DamageBlock|Sound")
+	float DamageSoundCooldown = 0.05f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
 	float DamageAmount = 10.f;
@@ -73,6 +82,7 @@ protected:
 
 	TMap<TWeakObjectPtr<AActor>, float> ActorsDamageIntervals;
 
+	float LastDamageSoundTime = -10.f;
 protected:
 	
 	UFUNCTION()

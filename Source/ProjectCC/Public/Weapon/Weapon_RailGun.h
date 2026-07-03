@@ -12,6 +12,7 @@
  */
 
 class APlayer_Character;
+class UAudioComponent;
 
 enum class ERailGunAnimState : uint8 {
 	None,
@@ -25,6 +26,7 @@ class PROJECTCC_API AWeapon_RailGun : public AWeapon
 	GENERATED_BODY()
 	
 public:
+	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual bool BeforeAttackWeaponFunction() override;
 	virtual bool InteractionWeaponFunction(EFunctionInterActionReason Reason) override;
@@ -143,4 +145,23 @@ public:
 	FName GetAnimationSlotName();
 	//재생중인 애니메이션 슬롯 전환
 	void RefreshRailGunAnimationSlot();
+
+	//사운드 관련
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	TObjectPtr<USoundBase> ChargeSound = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> FireLoopSound = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> FireCompleteSound = nullptr;
+
+	UPROPERTY(Transient)
+	UAudioComponent* ChargeAudioComp;
+
+	UPROPERTY(Transient)
+	UAudioComponent* FireAudioComp;
+
+	bool bWasChargingSoundPlaying = false;
+	bool bWasFiringSoundPlaying = false;
 };

@@ -29,7 +29,6 @@ protected:
 	UFUNCTION()
 	void OnClicked_CancelButton();
 
-	//[Å¬¸¯]
 	UFUNCTION()
 	void PlayCommonUIClickSound();
 

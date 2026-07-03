@@ -80,6 +80,9 @@ public:
 	bool bNicknameLocked = false;
 	float CurrentStatusVisibleTIme = 0.f;
 
+	UFUNCTION()
+	void PlayCommonUIClickSound();
+
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Title UI")
 	EMatchMode SelectedMatchMode;
@@ -90,6 +93,9 @@ public:
 	//위젯 바인딩
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Play;
+	//플레이 버튼 클릭 사운드
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
+	USoundBase* GameStartSound;
 
 	//2인-4인플레이 전환 버튼
 	UPROPERTY(meta = (BindWidget))
@@ -165,8 +171,4 @@ public:
 	void RefreshMatchModeButtons();
 	void UpdateSelectedFrameTargetPosition();
 	void SnapSelectedFrameToTargetLocation();
-
-	//[클릭]
-	UFUNCTION()
-	void PlayCommonUIClickSound();
 };

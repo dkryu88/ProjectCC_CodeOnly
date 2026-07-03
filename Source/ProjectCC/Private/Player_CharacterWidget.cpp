@@ -27,12 +27,12 @@ void UPlayer_CharacterWidget::InitWidget(APlayer_Character* Player)
 	OwnerCharacter = Player;
 	OwnerState = OwnerCharacter ? OwnerCharacter->GetPlayerState<APlayer_State>() : nullptr;
 
+	SetUI();
 	SetNickname();
 	SetItemIcon();
 	SetHPBar();
 	SetCoin();
-	SetUI();
-
+	
 	BindCharacterEvents();
 }
 
@@ -104,12 +104,37 @@ void UPlayer_CharacterWidget::SetCoin() {
 void UPlayer_CharacterWidget::SetNickname()
 {
 	if (!Text_Nickname) return;
+
 	if (!OwnerState) {
 		Text_Nickname->SetText(FText::GetEmpty());
 		return;
 	}
 
 	Text_Nickname->SetText(FText::FromString(OwnerState->GetNickName()));
+
+	int32 NicknameLength = OwnerState->GetNickName().Len();
+	int32 MaxFontLength = 7;
+	int32 MinFontLength = 12;
+
+	float MaxFontSize = 17.f;
+	float MinFontSize = 10.f;
+
+	float NewFontSize = MaxFontSize;
+
+	if (NicknameLength <= MaxFontLength) {
+		NewFontSize = MaxFontSize;
+	}
+	else if (NicknameLength >= MinFontLength) {
+		NewFontSize = MinFontSize;
+	}
+	else {
+		float Alpha = (float)(NicknameLength - MaxFontLength) / (float)(MinFontLength - MaxFontLength);
+		NewFontSize = FMath::Lerp(MaxFontSize, MinFontSize, Alpha);
+	}
+
+	FSlateFontInfo FontInfo = Text_Nickname->GetFont();
+	FontInfo.Size = FMath::RoundToInt(NewFontSize);
+	Text_Nickname->SetFont(FontInfo);
 }
 //아이템 아이콘 세팅 / 갱신
 void UPlayer_CharacterWidget::SetItemIcon()

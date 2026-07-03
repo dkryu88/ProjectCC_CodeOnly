@@ -91,6 +91,6 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 
 		PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
-		Destroy();
+		DelayForDestroyEffect();
 	}
 }

@@ -25,6 +25,8 @@ bool AItem_Lotto::UseEffect_Implementation(APlayer_Character* Player)
 		if (Player->EffectManagerComp && RewardLevel >= 0.f && RewardLevel < 3.f) {
 			FGameEffectData* CoinGetEffect = ItemData->CustomEffects.Find(FName(TEXT("LottoUseEffect")));
 			if (CoinGetEffect) {
+				FGameEffectData CoinGetLocalEffect = *CoinGetEffect;
+
 				FGameEffectContext Context;
 				FGameEffectRuntimeParams Params;
 
@@ -35,7 +37,9 @@ bool AItem_Lotto::UseEffect_Implementation(APlayer_Character* Player)
 
 				Params.AddFloatParam(FName(TEXT("User.RewardLevel")), RewardLevel);
 
-				Player->EffectManagerComp->PlayGameEffect_Multicast(*CoinGetEffect, Context, Params);
+				if (RewardCoin == 0) CoinGetLocalEffect.Sound = NoCoinGet;
+
+				Player->EffectManagerComp->PlayGameEffect_Multicast(CoinGetLocalEffect, Context, Params);
 			}
 		}
 

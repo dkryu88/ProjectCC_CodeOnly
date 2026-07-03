@@ -27,15 +27,13 @@ void UAllPlayMode_SoundSubsystem::PlayBGMByMapName(FName MapName, float FadeInTi
 	}
 }
 
-//[추가] 매치 종료 30초 전 사용할 BGM 재생함수
-void UAllPlayMode_SoundSubsystem::PlayBGM30SecByMapName(FName MapName, float FadeInTime)
+void UAllPlayMode_SoundSubsystem::PlayLast30SecondBGMByMapName(FName MapName, float FadeInTime)
 {
 	USoundDataAsset* audioData = GetAudioData();
 	if (!audioData) return;
-	if (USoundBase** FoundBGM30Sec = audioData->MatchBGM30Sec_Map.Find(MapName)) {
-		PlayBGM(*FoundBGM30Sec, FadeInTime);
+	if (USoundBase** FoundLast30SecondBGM = audioData->MatchBGM_Last30_Map.Find(MapName)) {
+		PlayBGM(*FoundLast30SecondBGM, FadeInTime);
 	}
-
 }
 
 void UAllPlayMode_SoundSubsystem::PlayBGM(USoundBase* BGMSound, float FadeInTime)
@@ -117,6 +115,15 @@ void UAllPlayMode_SoundSubsystem::StopManagedSFX(USoundBase* SFXSound)
 	}
 }
 
+void UAllPlayMode_SoundSubsystem::PlayUIClickSound()
+{
+	if (USoundDataAsset* DataAsset = GetAudioData()) {
+		if (DataAsset->UIClickSound) {
+			PlayOneShotSFX(DataAsset->UIClickSound);
+		}
+	}
+}
+
 USoundDataAsset* UAllPlayMode_SoundSubsystem::GetAudioData() {
 	if (AudioData) return AudioData;
 	if (UGameInstance* GI = GetGameInstance()) {
@@ -125,15 +132,4 @@ USoundDataAsset* UAllPlayMode_SoundSubsystem::GetAudioData() {
 		}
 	}
 	return AudioData;
-}
-
-//[클릭]
-void UAllPlayMode_SoundSubsystem::PlayUIClickSound()
-{
-	// 안전망을 통해 데이터 에셋을 가져오고, 클릭음이 존재하면 1회성으로 재생합니다.
-	if (USoundDataAsset* DataAsset = GetAudioData()) {
-		if (DataAsset->UIClickSound) {
-			PlayOneShotSFX(DataAsset->UIClickSound);
-		}
-	}
 }

@@ -583,6 +583,8 @@ void UPlayerConditionComponent::StopConditionOverlay_Local(FName ConditionName, 
 	FName OpacityParamName = TEXT("Opacity");
 	float SafeFadeTime = FMath::Max(0.1f, FadeOutTime);
 
+	ActiveConditionOverlays.Remove(ConditionName);
+
 	TSharedRef<float, ESPMode::ThreadSafe> Elapsed = MakeShared<float, ESPMode::ThreadSafe>(0.f);
 
 	World->GetTimerManager().SetTimer(OverlayFadeTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, ConditionName, FadingMID, OpacityParamName, SafeFadeTime, Elapsed]() {
@@ -599,7 +601,6 @@ void UPlayerConditionComponent::StopConditionOverlay_Local(FName ConditionName, 
 		}
 		if (Alpha >= 1.f) {
 			World->GetTimerManager().ClearTimer(OverlayFadeTimerHandle);
-			ActiveConditionOverlays.Remove(ConditionName);
 			ApplyHighestConditionOverlay_Local();
 		}
 	}), 0.015f, true);

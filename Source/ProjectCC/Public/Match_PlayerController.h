@@ -66,6 +66,13 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMatch_ShopWidget> ShopWidget;
 	
+	//상점 구매 성공 사운드
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
+	USoundBase* PurchaseSuccessSound;
+	//상점 구매 실패 사운드
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Click")
+	USoundBase* PurchaseFailSound;
+
 	//현재 관전중은 플레이어
 	UPROPERTY()
 	TObjectPtr<AActor> CurrentSpectatingTarget = nullptr;
@@ -95,6 +102,7 @@ protected:
 	void TryFinishLocalSetup();
 	void ApplyLocalInputMapping();
 
+	void ApplyPreMatchInputMode();
 	void ApplyGameInputMode();
 	void ApplyUIInputMode();
 
@@ -122,7 +130,7 @@ protected:
 public:
 	//서버에 Player_State 데이터를 전송
 	UFUNCTION(Server, Reliable)
-	void Server_SubmitMatchData(const FString& nickname, int32 portraitId);
+	void Server_SubmitMissingMatchData(const FString& nickname, int32 portraitId);
 
 	//서버에 게임 시작 준비가 완료됨을 전송
 	UFUNCTION(Server, Reliable)
@@ -139,6 +147,9 @@ public:
 	//UI 입력 모드 Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyUIInputMode();
+	//부활 시 UI 갱신 ClientRPC
+	UFUNCTION(Client, Reliable)
+	void Client_RefreshRespawnedUI();
 	//관전 시작 Client RPC
 	UFUNCTION(Client, Reliable)
 	void Client_StartSpectating(AActor* SpectatorTarget);
@@ -175,8 +186,6 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void Client_FadeOutBGM();
-
-	//[추가] 매치 종료 30초 전 BGM재생 명령(서버->클라이언트)
 	UFUNCTION(Client, Reliable)
-	void Client_PlayBGM30Sec();
+	void Client_PlayLast30SecondBGM();
 };

@@ -4,8 +4,8 @@
 #include "Title/Title_AdditionalWidget.h"
 #include "Components/Button.h"
 #include "Title/Title_PlayerController.h"
-#include "Sound/AllPlayMode_SoundSubsystem.h"	//[클릭]
-#include "Blueprint/WidgetTree.h"	//[클릭]
+#include "Sound/AllPlayMode_SoundSubsystem.h"
+#include "Blueprint/WidgetTree.h"
 
 void UTitle_AdditionalWidget::NativeConstruct()
 {
@@ -21,18 +21,17 @@ void UTitle_AdditionalWidget::NativeConstruct()
 		Button_No->OnClicked.AddDynamic(this, &UTitle_AdditionalWidget::OnClicked_NoButton);
 	}
 
-	if (Button_Cancel) {	//[x버튼]
+	if (Button_Cancel) {
 		Button_Cancel->OnClicked.RemoveAll(this);
 		Button_Cancel->OnClicked.AddDynamic(this, &UTitle_AdditionalWidget::OnClicked_CancelButton);
 	}
 
-	//[클릭]
 	if (WidgetTree) {
-		WidgetTree->ForEachWidget([this](UWidget* widget) {
-			if (UButton* Btn = Cast<UButton>(widget)) {
-				Btn->OnClicked.AddUniqueDynamic(this, &UTitle_AdditionalWidget::PlayCommonUIClickSound);
+		WidgetTree->ForEachWidget([this](UWidget* Widget) {
+			if (UButton* Button = Cast<UButton>(Widget)) {
+				Button->OnClicked.AddUniqueDynamic(this, &UTitle_AdditionalWidget::PlayCommonUIClickSound);
 			}
-			});
+		});
 	}
 }
 
@@ -60,9 +59,7 @@ void UTitle_AdditionalWidget::OnClicked_CancelButton()
 	PC->ToggleAdditionalWidget();
 }
 
-//[클릭]
-void UTitle_AdditionalWidget::PlayCommonUIClickSound()
-{
+void UTitle_AdditionalWidget::PlayCommonUIClickSound() {
 	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
 		AudioSub->PlayUIClickSound();
 	}

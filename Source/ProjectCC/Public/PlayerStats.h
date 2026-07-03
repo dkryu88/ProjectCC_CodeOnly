@@ -58,7 +58,7 @@ struct FPlayerStats {
 	float AttackRadius = 15.f;
 	//공격 선딜레이
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AttackEarlierDelay = 0.15f;
+	float AttackEarlierDelay = 0.075f;
 	//공격 대상 넉백 기본값
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float KnockBackStrength = 750.f;

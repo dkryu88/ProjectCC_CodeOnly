@@ -28,7 +28,6 @@ ATitle_PlayerController::ATitle_PlayerController()
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
 	bEnableMouseOverEvents = true;
-	//DefaultMouseCursor = EMouseCursor::Default;	//테스트
 }
 
 void ATitle_PlayerController::BeginPlay()
@@ -36,11 +35,6 @@ void ATitle_PlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	SetTitleInputMode();
-
-	//[자동매칭버그] 위치 이동
-	CreateAndShowTitleWidget();
-	FindPreviewActor();
-	FindAndSetTitleCamera();
 
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (UAllPlayMode_SessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UAllPlayMode_SessionSubsystem>()) {
@@ -79,6 +73,9 @@ void ATitle_PlayerController::BeginPlay()
 		}
 	}
 
+	CreateAndShowTitleWidget();
+	FindPreviewActor();
+	FindAndSetTitleCamera();
 }
 
 void ATitle_PlayerController::PlayerTick(float DeltaTime)
@@ -149,7 +146,6 @@ void ATitle_PlayerController::CloseAdditionalWidget()
 	if (!AdditionalWidget) return;
 
 	AdditionalWidget->SetVisibility(ESlateVisibility::Collapsed);
-	//[x버튼]
 	TitleWidgetInstance->Button_Exit->SetVisibility(ESlateVisibility::Visible);
 }
 
@@ -307,6 +303,10 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 			TitleWidgetInstance->SetMatchingMode(false);
 			TitleWidgetInstance->SetNicknameLocked(false);
 		}
+		//매칭 시작을 알리는 버튼 클릭 사운드 재생
+		if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+			if (AudioSub->GetAudioData()) AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->UIClickNoSound);
+		}
 		return;
 	}
 
@@ -323,6 +323,11 @@ void ATitle_PlayerController::HandlePlayRequested(FString NickName, EMatchMode M
 
 	//GameInstance에 선택된 매치모드 저장
 	GameInstance->SetSelectedMatchMode(MatchMode);
+
+	//매칭 시작을 알리는 버튼 클릭 사운드 재생
+	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		if (TitleWidgetInstance && TitleWidgetInstance->GameStartSound) AudioSub->PlayOneShotSFX(TitleWidgetInstance->GameStartSound);
+	}
 
 	//GameInstance에 입력받은 닉네임 저장
 	GameInstance->SetLocalPlayerNickname(SanitizedNickname);
@@ -369,11 +374,8 @@ void ATitle_PlayerController::HandleCancelRequested()
 			if (PC && PC != this) PC->Client_ExitedByHost();
 		}
 
-		//[자동매칭버그]
-		TWeakObjectPtr<ATitle_PlayerController> WeakThis = this;
-
-		GetWorld()->GetTimerManager().SetTimerForNextTick([WeakThis]() {
-			UGameplayStatics::OpenLevel(WeakThis.Get(), FName("/Game/Levels/LV_Title"));
+		GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
+			UGameplayStatics::OpenLevel(this, FName("/Game/Levels/LV_Title"));
 		});
 	}
 }
@@ -470,7 +472,7 @@ bool ATitle_PlayerController::ValidateNickname(const FString& nickname, FString&
 	return true;
 }
 
-void ATitle_PlayerController::Client_ExitedByHost_Implementation()
+void ATitle_PlayerController::Client_ExitedByHost()
 {
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		GameInstance->SetMatchFlowState(EMatchFlowState::Searching);

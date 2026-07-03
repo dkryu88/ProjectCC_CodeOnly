@@ -1,4 +1,4 @@
-ï»¿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Weapon/Weapon_SniperRifle.h"
@@ -102,7 +102,7 @@ float AWeapon_SniperRifle::OnPreHit(APlayer_Character* TPlayer, bool& bSkipRotat
 	return 0.25f;
 }
 
-//ìŠ¤ë‚˜ì´í¼ëŠ” Previewë¥¼ ìƒì„±í•˜ì§€ ì•ŠìŒ
+//½º³ªÀÌÆÛ´Â Preview¸¦ »ý¼ºÇÏÁö ¾ÊÀ½
 bool AWeapon_SniperRifle::BuildAimPreviewData(APlayer_Character* Player, FAimPreviewVisualData& PreviewData)
 {
 	PreviewData.Reset();
@@ -125,7 +125,7 @@ void AWeapon_SniperRifle::UnEquipEffect_Implementation(APlayer_Character* Player
 	if (IsValid(Player) && HasAuthority()) {
 		Player->OnTakeAnyDamage.RemoveDynamic(this, &AWeapon_SniperRifle::HandleOwnerTakenDamage);
 	}
-	//ì €ê²© ëª¨ë“œë¥¼ ì‚¬ìš©í•˜ì§€ ì•Šì€ ìƒíƒœì—ì„œ ë¬´ê¸° í•´ì œ ì‹œ íšŒì „ê°’ì´ 0,0,0ìœ¼ë¡œ ì´ˆê¸°í™”ë˜ëŠ” í˜„ìƒ ìˆ˜ì •
+	//Àú°Ý ¸ðµå¸¦ »ç¿ëÇÏÁö ¾ÊÀº »óÅÂ¿¡¼­ ¹«±â ÇØÁ¦ ½Ã È¸Àü°ªÀÌ 0,0,0À¸·Î ÃÊ±âÈ­µÇ´Â Çö»ó ¼öÁ¤
 	if (bIsScopeModeActive) {
 		bIsScopeModeActive = false;
 		ApplyScopeModeEffects(false);
@@ -252,7 +252,7 @@ void AWeapon_SniperRifle::ToggleScopeMode() {
 	bool bNewState = !bIsScopeModeActive;
 	ApplyScopeModeEffects(bNewState);
 
-	//ì„œë²„ ë™ê¸°í™”
+	//¼­¹ö µ¿±âÈ­
 	if (!HasAuthority()) {
 		Server_SyncScopeState(bNewState);
 	}
@@ -461,7 +461,7 @@ void AWeapon_SniperRifle::UpdateScopeLogic() {
 		ScopeCameraActor->SetActorRotation(FRotator(-90.f, ScopeEntryRotation.Yaw, 0.f));
 	}
 
-	// ë””ë²„ê·¸: ì €ê²© ì´ë™ ê°€ëŠ¥ ë²”ìœ„
+	// µð¹ö±×: Àú°Ý ÀÌµ¿ °¡´É ¹üÀ§
 	const FVector CircleCenter =
 		EquippedPlayer->GetActorLocation() + FVector(0.f, 0.f, ScopeCameraHeight - 300.f);
 
@@ -533,7 +533,7 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 		if (bAutoExitScopeAfterFire) {
 			GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
 			FTimerHandle ExitScopeModeTimerHandle;
-			//ì¦‰ì‹œ ëŠì–´ì§€ì§€ ì•Šê³  0.15ì´ˆ í›„ì— ì¡°ì¤€ ëª¨ë“œ í•´ì œ
+			//Áï½Ã ²÷¾îÁöÁö ¾Ê°í 0.15ÃÊ ÈÄ¿¡ Á¶ÁØ ¸ðµå ÇØÁ¦
 			GetWorldTimerManager().SetTimer(ExitScopeModeTimerHandle, FTimerDelegate::CreateWeakLambda(this, [&]() {
 				if (!bIsScopeModeActive) return;
 				ApplyScopeModeEffects(false);
@@ -546,7 +546,7 @@ void AWeapon_SniperRifle::Local_RequestFire() {
 void AWeapon_SniperRifle::HandleOwnerTakenDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatedBy, AActor* DamageCauser)
 {
 	UE_LOG(LogTemp, Error, TEXT("Snipermode Damaged!!!!!!"));
-	// í”¼ê²© ì‹œ ì¦‰ì‹œ ì €ê²© ëª¨ë“œ í•´ì œ
+	// ÇÇ°Ý ½Ã Áï½Ã Àú°Ý ¸ðµå ÇØÁ¦
 	if (bIsScopeModeActive && bAutoExitScopeOnDamage) {
 		bIsScopeModeActive = false;
 		GetWorldTimerManager().ClearTimer(ResumeAimAnimationTimerHandle);
@@ -555,7 +555,7 @@ void AWeapon_SniperRifle::HandleOwnerTakenDamage(AActor* DamagedActor, float Dam
 	}
 }
 
-//Server/Client RPC ëª¨ìŒ
+//Server/Client RPC ¸ðÀ½
 void AWeapon_SniperRifle::Client_InitializeScopeUI_Implementation(APlayer_Character* Player) {
 	if (!Player || !Player->IsLocallyControlled()) return;
 
@@ -619,7 +619,7 @@ void AWeapon_SniperRifle::Server_ExecuteFireTrace_Implementation(FVector TraceSt
 	{
 		if (AActor* HitActor = Hit.GetActor())
 		{
-			bool bIsDamageTarget = Cast<APlayer_Character>(HitActor) != nullptr && Cast<AObjects>(HitActor) != nullptr;
+			bool bIsDamageTarget = Cast<APlayer_Character>(HitActor) != nullptr || Cast<AObjects>(HitActor) != nullptr;
 
 			if (bIsDamageTarget) {
 				float FinalDamage = GetWeaponStats()->Attack;

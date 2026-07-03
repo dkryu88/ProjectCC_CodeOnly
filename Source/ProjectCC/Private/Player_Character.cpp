@@ -40,6 +40,7 @@
 #include "Equipment.h"
 #include "Weapon.h"
 #include "ObjectsDataAsset.h"
+#include "Sound/PlayerSoundDataAsset.h"
 #include "Item.h"
 #include "Coin.h"
 #include "KillPlane.h"
@@ -195,6 +196,18 @@ void APlayer_Character::PossessedBy(AController* NewController)
 void APlayer_Character::PawnClientRestart() {
 	Super::PawnClientRestart();
 	InitPlayerWidget();
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController())) {
+		PC->SetAudioListenerOverride(GetCapsuleComponent(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
+}
+
+void APlayer_Character::OnJumped_Implementation()
+{
+	Super::OnJumped_Implementation();
+	if (PlayerSoundData && PlayerSoundData->JumpSound) {
+		UGameplayStatics::PlaySoundAtLocation(this, PlayerSoundData->JumpSound, GetActorLocation());
+	}
 }
 
 void APlayer_Character::OnRep_MoveSpeed()
@@ -404,13 +417,20 @@ void APlayer_Character::OnRep_HP()
 
 void APlayer_Character::OnRep_bIsOut()
 {
-	if (bIsOut) CancelAimState();
-	SetPlayerWidgetVisibility(false);
+	if (bIsOut) {
+		CancelAimState();
+		SetPlayerWidgetVisibility(false);
+	}
+	else {
+		InitPlayerWidget();
+		SetPlayerWidgetVisibility(true);
+	}
 }
 
 void APlayer_Character::OnRep_NowWeapon()
 {
 	AStat = GetWeaponStat();
+	if (NowWeapon) NowWeapon->ApplyEquipVisualToPlayer(this);
 	CancelAimState();
 	if (bIsAiming) SetAimInternal(false);
 	OnWeaponChanged.Broadcast();
@@ -631,6 +651,12 @@ void APlayer_Character::InitPlayerWidget()
 	}
 
 	WidgetComponent->SetVisibility(true);
+
+	if (!GetPlayerState<APlayer_State>()) {
+		GetWorldTimerManager().ClearTimer(InitPlayerWidgetRetryTimerHandle);
+		GetWorldTimerManager().SetTimer(InitPlayerWidgetRetryTimerHandle, this, &APlayer_Character::InitPlayerWidget, 0.1f, false);
+		return;
+	}
 
 	if (APlayerController* LocalPC = UGameplayStatics::GetPlayerController(this, 0)) {
 		if (AMatch_PlayerController* MatchPC = Cast<AMatch_PlayerController>(LocalPC)) {
@@ -987,7 +1013,6 @@ void APlayer_Character::DodgeInternal(FVector DodgeDir) {
 	bIsAttacking = false;
 	GetWorldTimerManager().ClearTimer(EndAttackStateTimerHandle);
 	bIsDodging = true;
-
 	//회피시 Holding 공격은 즉시 끊어짐
 	if (NowWeapon && NowWeapon->WeaponData && NowWeapon->WeaponData->Stats.AttackInputType == EWeaponAttackInputType::Continuous && bNowHoldingAttack) {
 		NowWeapon->ReleaseAttackWeaponFunction();
@@ -1272,6 +1297,9 @@ bool APlayer_Character::PickWeapon(TObjectPtr<AWeapon> weapon) {
 	if (VisualManagerComp) {
 		VisualManagerComp->Multi_RefreshVisuals();
 	}
+
+	if(NowWeapon) NowWeapon->ForceNetUpdate();
+	ForceNetUpdate();
 
 	return true;
 }
@@ -1697,7 +1725,7 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 			PC->CurrentMouseCursor = EMouseCursor::None;
 
 			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);	//기존:DoNotLock -> 변경:LockAlways
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 
@@ -4996,6 +5024,7 @@ void APlayer_Character::Client_Out_Implementation()
 			springArmComp->CameraLagSpeed = 3.f;
 			springArmComp->CameraLagMaxDistance = 100.f;
 		}
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ClearAudioListenerOverride();
 	}
 }
 

@@ -84,8 +84,10 @@ void AMatch_PlayerController::SetPawn(APawn* InPawn)
 	UpdateShopButtonVisibility();
 
 	if (InPawn) {
-		if(bWaitingRespawn) ApplyUIInputMode();
-		else ApplyGameInputMode();
+		AMatch_State* MS = GetWorld() ? GetWorld()->GetGameState<AMatch_State>() : nullptr;
+		if (bWaitingRespawn) ApplyUIInputMode();
+		else if (MS && MS->IsMatchStarted()) ApplyGameInputMode();
+		else ApplyPreMatchInputMode();
 	}
 
 	if (!bWaitingRespawn) {
@@ -109,8 +111,11 @@ void AMatch_PlayerController::UpdateShopButtonVisibility()
 {
 	if (!ScreenWidget) return;
 
-	bool bShowShopButton = bWaitingRespawn && !bAlreadyPurchasedInShop;
-	ScreenWidget->SetShopButtonVisible(bShowShopButton);
+	bool bCanOpenShop = bWaitingRespawn;
+	bool bShowShopClosedImage = bWaitingRespawn && (bAlreadyPurchasedInShop || bShopClosedForce);
+
+	ScreenWidget->SetShopButtonVisible(bCanOpenShop);
+	ScreenWidget->SetShopClosedState(bShowShopClosedImage);
 }
 
 void AMatch_PlayerController::SaveResultData(const FMatchResultData& OwnerResult, const TArray<FMatchResultData>& AllResults)
@@ -142,7 +147,17 @@ void AMatch_PlayerController::TryFinishLocalSetup()
 	ApplyLocalInputMapping();
 
 	if (GetPawn()) {
-		ApplyGameInputMode();
+		AMatch_State* MS = GetWorld() ? GetWorld()->GetGameState<AMatch_State>() : nullptr;
+
+		if (bWaitingRespawn){
+			ApplyUIInputMode();
+		}
+		else if (MS && MS->IsMatchStarted()){
+			ApplyGameInputMode();
+		}
+		else{
+			ApplyPreMatchInputMode();
+		}
 	}
 
 	if (Player_State->GetNickName().IsEmpty()) {
@@ -150,7 +165,7 @@ void AMatch_PlayerController::TryFinishLocalSetup()
 		int32 LocalPortraitId = GameInstance->GetLocalPortraitId();
 
 		if (!LocalNickname.IsEmpty()) {
-			Server_SubmitMatchData(LocalNickname, LocalPortraitId);
+			Server_SubmitMissingMatchData(LocalNickname, LocalPortraitId);
 		}
 	}
 
@@ -177,6 +192,29 @@ void AMatch_PlayerController::ApplyLocalInputMapping()
 	}
 }
 
+void AMatch_PlayerController::ApplyPreMatchInputMode()
+{
+	if (!IsLocalController()) return;
+
+	bShowMouseCursor = false;
+	bEnableClickEvents = false;
+	bEnableMouseOverEvents = false;
+
+	ResetIgnoreLookInput();
+	ResetIgnoreMoveInput();
+
+	SetIgnoreLookInput(false);
+	SetIgnoreMoveInput(true);
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+
+	if (UGameViewportClient* GameViewportClient = GetWorld() ? GetWorld()->GetGameViewport() : nullptr){
+		GameViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown);
+		GameViewportClient->SetMouseLockMode(EMouseLockMode::LockAlways);
+	}
+}
+
 void AMatch_PlayerController::ApplyGameInputMode()
 {
 	if (!IsLocalController()) return;
@@ -184,6 +222,9 @@ void AMatch_PlayerController::ApplyGameInputMode()
 	bShowMouseCursor = false;
 	bEnableClickEvents = false;
 	bEnableMouseOverEvents = false;
+
+	ResetIgnoreLookInput();
+	ResetIgnoreMoveInput();
 
 	SetIgnoreLookInput(false);
 	SetIgnoreMoveInput(false);
@@ -204,6 +245,9 @@ void AMatch_PlayerController::ApplyUIInputMode()
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
 	bEnableMouseOverEvents = true;
+
+	ResetIgnoreLookInput();
+	ResetIgnoreMoveInput();
 
 	SetIgnoreLookInput(true);
 	SetIgnoreMoveInput(true);
@@ -314,7 +358,6 @@ void AMatch_PlayerController::OpenShop()
 	if (bAlreadyPurchasedInShop) return;
 	if (bShopClosedForce) return;
 
-	//[클릭]
 	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
 		AudioSub->PlayUIClickSound();
 	}
@@ -357,13 +400,22 @@ void AMatch_PlayerController::CloseShop()
 }
 
 /*--------------RPC 모음 -------------------*/
-void AMatch_PlayerController::Server_SubmitMatchData_Implementation(const FString& nickname, int32 portraitId)
+void AMatch_PlayerController::Server_SubmitMissingMatchData_Implementation(const FString& nickname, int32 portraitId)
 {
 	APlayer_State* Player_State = GetPlayerState<APlayer_State>();
 	if (!Player_State) return;
 
 	Player_State->SetNickName(nickname);
-	Player_State->SetPortraitId(portraitId);
+
+	//Ready에서 설정되지 않은 경우에만 재초기화
+	if (Player_State->GetNickName().IsEmpty() && !nickname.IsEmpty()){
+		Player_State->SetNickName(nickname);
+	}
+
+	//Ready에서 설정되지 않은 경우에만 재초기화
+	if (Player_State->GetPortraitId() < 0){
+		Player_State->SetPortraitId(portraitId);
+	}
 }
 
 void AMatch_PlayerController::Server_ReportMatchLoaded_Implementation()
@@ -431,17 +483,24 @@ void AMatch_PlayerController::Client_ApplyGameInputMode_Implementation()
 void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaiting, bool bCanRespawn)
 {
 	if (!IsLocalController()) return;
-
+	bool bWasWaitingRespawn = bWaitingRespawn;
 	bWaitingRespawn = bWaiting;
 	bCanRespawnNow = bCanRespawn;
 
 	if (!bWaitingRespawn) {
+		bAlreadyPurchasedInShop = false;
+
 		CloseShop();
 		ApplyGameInputMode();
+
+		SetPlayWidget();
 	}
 	else {
-		bAlreadyPurchasedInShop = false;
+		//리스폰 상태 최초 진입시에만 초기화
+		if(!bWasWaitingRespawn) bAlreadyPurchasedInShop = false;
 		ApplyUIInputMode();
+
+		SetOutWidget();
 	}
 
 	if (!ScreenWidget) return;
@@ -462,6 +521,16 @@ void AMatch_PlayerController::Client_SetRespawnState_Implementation(bool bWaitin
 	}
 
 	UpdateShopButtonVisibility();
+}
+
+void AMatch_PlayerController::Client_RefreshRespawnedUI_Implementation()
+{
+	if (!IsLocalController()) return;
+	APlayer_Character* player = Cast<APlayer_Character>(GetPawn());
+
+	if (ScreenWidget && player) ScreenWidget->InitWidget(player);
+
+	SetPlayWidget();
 }
 
 void AMatch_PlayerController::Client_StartSpectatingPlayer_Implementation(APlayer_Character* SpectatorTarget)
@@ -508,6 +577,7 @@ void AMatch_PlayerController::Client_StartSpectatingDefaultCamera_Implementation
 
 void AMatch_PlayerController::Client_SetPreMatchDelay_Implementation()
 {
+	ApplyPreMatchInputMode();
 	if (ScreenWidget) {
 		ScreenWidget->SetUIState(EPlayerUIState::StartWaiting);
 		UpdateShopButtonVisibility();
@@ -547,11 +617,14 @@ void AMatch_PlayerController::Client_UpdateCountDown_Implementation(int32 number
 
 void AMatch_PlayerController::Client_StartPlayingUI_Implementation()
 {
+	ApplyGameInputMode();
+
 	if (ScreenWidget)
 	{
 		ScreenWidget->SetUIState(EPlayerUIState::Playing);
 		UpdateShopButtonVisibility();
 	}
+	SetPlayWidget();
 }
 
 void AMatch_PlayerController::Client_SaveResultData_Implementation(const FMatchResultData& OwnerResult, const TArray<FMatchResultData>& AllResults)
@@ -569,18 +642,9 @@ void AMatch_PlayerController::Client_ShopPurchaseResult_Implementation(bool bSuc
 {
 	if (!IsLocalController()) return;
 
-	//[클릭]
 	if (UAllPlayMode_SoundSubsystem* AudioSub = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
-		if (AudioSub->GetAudioData()) {
-			if (bSuccess) {
-				// 구매 성공 사운드
-				AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->PurchaseSuccessSound);
-			}
-			else {
-				// 구매 실패 사운드
-				AudioSub->PlayOneShotSFX(AudioSub->GetAudioData()->PurchaseFailSound);
-			}
-		}
+		if (bSuccess && PurchaseSuccessSound) AudioSub->PlayOneShotSFX(PurchaseSuccessSound);
+		else if(!bSuccess && PurchaseFailSound) AudioSub->PlayOneShotSFX(PurchaseFailSound);
 	}
 
 	if (!bSuccess) return;
@@ -589,7 +653,7 @@ void AMatch_PlayerController::Client_ShopPurchaseResult_Implementation(bool bSuc
 	bAlreadyPurchasedInShop = true;
 	//상점 닫기
 	CloseShop();
-	//상점 버튼 숨김처리
+	//상점 Closed 이미지 표시
 	UpdateShopButtonVisibility();
 }
 
@@ -599,7 +663,7 @@ void AMatch_PlayerController::Client_UpdateMatchEventCountdown_Implementation(FN
 		ScreenWidget->ShowMatchEventCountdown(EventName, SecondsUntilEvent);
 	}
 
-	if (SecondsUntilEvent == 3) {
+	if (SecondsUntilEvent == 2) {
 		if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
 			SoundSubsystem->StartDucking(1.5f, 0.3f);
 			if (SoundSubsystem->GetAudioData() && SoundSubsystem->GetAudioData()->EventWarningSound) {
@@ -616,12 +680,10 @@ void AMatch_PlayerController::Client_ShowMatchEventActive_Implementation(FName E
 	}
 
 	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
-		SoundSubsystem->StartDucking(1.5f, 0.3f);
 		if (SoundSubsystem->GetAudioData() && SoundSubsystem->GetAudioData()->EventWarningSound) {
 			SoundSubsystem->StopManagedSFX(SoundSubsystem->GetAudioData()->EventWarningSound);
 		}
-		//테스트
-		SoundSubsystem->StopDucking(1.5f);
+		SoundSubsystem->StopDucking(0.3f);
 		SoundSubsystem->SetBGMPitch(1.5f);
 	}
 }
@@ -631,6 +693,7 @@ void AMatch_PlayerController::Client_HideMatchEventUI_Implementation() {
 		ScreenWidget->HideMatchEventUI();
 	}
 	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
+		SoundSubsystem->StopDucking(0.2f);
 		SoundSubsystem->SetBGMPitch(1.f);
 	}
 }
@@ -653,12 +716,9 @@ void AMatch_PlayerController::Client_FadeOutBGM_Implementation()
 	}
 }
 
-//[추가]
-void AMatch_PlayerController::Client_PlayBGM30Sec_Implementation()
-{
+void AMatch_PlayerController::Client_PlayLast30SecondBGM_Implementation() {
 	if (UAllPlayMode_SoundSubsystem* SoundSubsystem = GetGameInstance()->GetSubsystem<UAllPlayMode_SoundSubsystem>()) {
 		FString matchMapName = UGameplayStatics::GetCurrentLevelName(this, true);
-		SoundSubsystem->PlayBGM30SecByMapName(FName(*matchMapName), 2.f);
+		SoundSubsystem->PlayLast30SecondBGMByMapName(FName(*matchMapName), 2.f);
 	}
 }
-

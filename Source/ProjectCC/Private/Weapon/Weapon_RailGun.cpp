@@ -16,6 +16,8 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Components/AudioComponent.h"
+#include "WeaponDataAsset.h"
 
 void AWeapon_RailGun::ExecuteRailGunContinuousAttack()
 {
@@ -348,6 +350,48 @@ void AWeapon_RailGun::ReleaseRailGunAttack()
 	if (!CheckUseCounting()) bWaitingRepress = true;
 }
 
+void AWeapon_RailGun::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bRailGunCharging) {
+		if (ChargeGauge < 25.f) {
+			if (bWasFiringSoundPlaying) {
+				if (FireAudioComp) FireAudioComp->Stop();
+				bWasFiringSoundPlaying = false;
+			}
+
+			if (!bWasChargingSoundPlaying && ChargeSound) {
+				if (!ChargeAudioComp) ChargeAudioComp = UGameplayStatics::SpawnSoundAttached(ChargeSound, WeaponCollider);
+				else ChargeAudioComp->Play();
+				bWasChargingSoundPlaying = true;
+			}
+		}
+		else {
+			if (bWasChargingSoundPlaying) {
+				if (ChargeAudioComp) ChargeAudioComp->Stop();
+				bWasChargingSoundPlaying = false;
+			}
+			if (!bWasFiringSoundPlaying && FireLoopSound) {
+				if (!FireAudioComp) FireAudioComp = UGameplayStatics::SpawnSoundAttached(FireLoopSound, WeaponCollider);
+				else FireAudioComp->Play();
+				bWasFiringSoundPlaying = true;
+			}
+		}
+	}
+	else {
+		if ((bWasChargingSoundPlaying || bWasFiringSoundPlaying)) {
+			if (ChargeAudioComp) ChargeAudioComp->Stop();
+			if (FireAudioComp) FireAudioComp->Stop();
+
+			if (bMaxChargeFired && FireCompleteSound) UGameplayStatics::SpawnSoundAttached(FireCompleteSound, WeaponCollider.Get());
+
+			bWasChargingSoundPlaying = false;
+			bWasFiringSoundPlaying = false;
+		}
+	}
+}
+
 void AWeapon_RailGun::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -415,6 +459,9 @@ bool AWeapon_RailGun::InteractionWeaponFunction(EFunctionInterActionReason Reaso
 	case EFunctionInterActionReason::Jump:
 		// 레일건은 점프로 취소하지 않음
 		return true;
+	case EFunctionInterActionReason::Aim:
+		//공격 중 조준 시 공격 애니메이션 끊김 방지
+		if (bRailGunCharging) return false;
 	default:
 		return true;
 	}
@@ -459,6 +506,7 @@ bool AWeapon_RailGun::BuildAimPreviewData(APlayer_Character* Player, FAimPreview
 	if (!Player) return false;
 	if (!Player->NowMap) return false;
 	if (!WeaponData) return false;
+	if (!WeaponData->bUseAimPreview) return false;
 	if (!CheckUseCounting()) {
 		PreviewData.Reset();
 		return true;
@@ -562,7 +610,7 @@ void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePer
 		ObjectTypes,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::ForDuration,
+		EDrawDebugTrace::ForOneFrame,
 		TraceHits,
 		true
 	);

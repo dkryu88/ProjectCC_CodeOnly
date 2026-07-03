@@ -28,7 +28,12 @@ void AMatch_Event::StartEvent_Implementation(AMapConstructor* map, APlayMode_Mat
 void AMatch_Event::StopEvent_Implementation()
 {
 	GetWorldTimerManager().ClearTimer(EventDurationTimerHandle);
+	if (!bEventRunning) return;
+
 	bEventRunning = false;
+	
+	if (MatchMode) MatchMode->NotifyMatchEventFinished(this);
+
 	Destroy();
 }
 

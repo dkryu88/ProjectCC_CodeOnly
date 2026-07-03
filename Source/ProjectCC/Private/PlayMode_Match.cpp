@@ -47,9 +47,9 @@ void APlayMode_Match::BeginPlay()
 	}
 
 	if (MaxPlayers == 4) {
-		MatchDuration = 600;
-		MatchEventTimes = {525, 375, 225, 75};
-		CoinWaveTime = {600, 500, 400, 300, 200, 100};
+		MatchDuration = 360;
+		MatchEventTimes = {300, 200, 100};
+		CoinWaveTime = {350, 250, 150, 50};
 		SupplyWeaponMaxCount = 12;
 		SupplyItemMaxCount = 8;
 	}
@@ -58,9 +58,18 @@ void APlayMode_Match::BeginPlay()
 	
 	AMatch_State* _MatchState = GetGameState<AMatch_State>();
 	if (_MatchState) {
+		FShopPriceData PriceData;
+
 		_MatchState->SetMatchStarted(false);
 		_MatchState->SetMatchEnded(false);
 		_MatchState->SetMatchTime(MatchDuration);
+
+		PriceData.B_BoxPrice = GetShopPrice(EShopBoxs::B_Box);
+		PriceData.A_BoxPrice = GetShopPrice(EShopBoxs::A_Box);
+		PriceData.S_BoxPrice = GetShopPrice(EShopBoxs::S_Box);
+		PriceData.Random_BoxPrice = GetShopPrice(EShopBoxs::Random_Box);
+
+		_MatchState->SetShopPriceData(PriceData);
 	}
 }
 
@@ -202,9 +211,8 @@ void APlayMode_Match::UpdateMatchTimer()
 
 	UpdateActiveMatchEventUI();
 
-	//[추가]
 	if (NewMatchTime == 30) {
-		BroadcastPlayBGM30Sec();
+		BroadcastMatchLast30Sec();
 	}
 
 	if (NewMatchTime <= 0) {
@@ -385,7 +393,7 @@ const TArray<TSubclassOf<AItem>>& APlayMode_Match::GetItemListByGrade(EGrade gra
 int32 APlayMode_Match::GetShopPrice(EShopBoxs Box)
 {
 	switch (Box) {
-	case EShopBoxs::B_Box:		return 10;
+	case EShopBoxs::B_Box:		return 20;
 	case EShopBoxs::A_Box:		return 30;
 	case EShopBoxs::S_Box:		return 50;
 	case EShopBoxs::Random_Box: return 40;
@@ -538,14 +546,34 @@ void APlayMode_Match::SetAllPlayersUI()
 	}
 }
 //Portrait Id 바인딩
-void APlayMode_Match::AssignPortraitId()
+void APlayMode_Match::AssignMissingPortraitId()
 {
 	if (!GameState) return;
 
-	for (int32 i = 0; i < GameState->PlayerArray.Num(); ++i) {
-		APlayer_State* PS = Cast<APlayer_State>(GameState->PlayerArray[i]);
+	TSet<int32> UsedPortraitIds;
+
+	for (APlayerState* PSBase : GameState->PlayerArray) {
+		APlayer_State* PS = Cast<APlayer_State>(PSBase);
 		if (!PS) continue;
-		PS->SetPortraitId(i);
+
+		int32 CurrentID = PS->GetPortraitId();
+
+		if (CurrentID >= 0) UsedPortraitIds.Add(CurrentID);
+	}
+
+	int32 NextId = 0;
+
+	for (APlayerState* PSBase : GameState->PlayerArray) {
+		APlayer_State* PS = Cast<APlayer_State>(PSBase);
+		if (!PS) continue;
+		if (PS->GetPortraitId() >= 0) continue;
+
+		while (UsedPortraitIds.Contains(NextId)) {
+			NextId++;
+		}
+
+		PS->SetPortraitId(NextId);
+		UsedPortraitIds.Add(NextId);
 	}
 }
 
@@ -656,8 +684,8 @@ void APlayMode_Match::CheckAllPlayersLoadedAndStartDelay()
 		APlayer_State* PS = Cast<APlayer_State>(PSBase);
 		if (!PS || !PS->IsMatchLevelLoaded()) return;
 	}
-
-	AssignPortraitId();
+	//Ready에서 Id 매칭 실패 시 재설정
+	AssignMissingPortraitId();
 
 	SetAllPlayersGameplayLocked(true);
 
@@ -1053,12 +1081,13 @@ void APlayMode_Match::Respawn(AMatch_PlayerController* PC) {
 	PC->bAutoManageActiveCameraTarget = true;
 	PC->SetViewTarget(SpawnPlayer);
 
-	PC->Client_StartPlayingUI();
-	PC->Client_SetRespawnState(false, false);
-
 	SpawnPlayer->LoadNowItem();
 	SpawnPlayer->ApplyResevedWeapon();
 	SpawnPlayer->EquipSavedEquipmentAfterRespawn();
+
+	PC->Client_StartPlayingUI();
+	PC->Client_SetRespawnState(false, false);
+	PC->Client_RefreshRespawnedUI();
 
 	//리스폰 플레이어에게 무적 3초 부여
 	SpawnPlayer->ConditionComp->ApplyCondition(InvincibleData, SpawnPlayer, RespawnImmunityDuration);
@@ -1206,11 +1235,7 @@ void APlayMode_Match::StartMatchEvent()
 
 void APlayMode_Match::StopMatchEvent()
 {
-	for (AMatch_Event* Event : ActiveMatchEvents) {
-		if (IsValid(Event)) {
-			Event->StopEvent();
-		}
-	}
+	TArray<AMatch_Event*> EventsToStop = ActiveMatchEvents;
 
 	ActiveMatchEvents.Reset();
 
@@ -1218,6 +1243,10 @@ void APlayMode_Match::StopMatchEvent()
 	CurrentEventTime = -1.f;
 	bActiveMatchEvent = false;
 	bActiveShopClose = false;
+
+	for (AMatch_Event* Event : EventsToStop) {
+		if (IsValid(Event)) Event->StopEvent();
+	}
 
 	BroadcastMatchEventEnded();
 }
@@ -1338,14 +1367,13 @@ void APlayMode_Match::BroadcastMatchEventEnded()
 	}
 }
 
-//[추가]
-void APlayMode_Match::BroadcastPlayBGM30Sec()
+void APlayMode_Match::BroadcastMatchLast30Sec()
 {
 	for (FConstPlayerControllerIterator IT = GetWorld()->GetPlayerControllerIterator(); IT; ++IT) {
 		AMatch_PlayerController* PC = Cast<AMatch_PlayerController>(IT->Get());
 		if (!PC) continue;
 
-		PC->Client_PlayBGM30Sec();
+		PC->Client_PlayLast30SecondBGM();
 	}
 }
 

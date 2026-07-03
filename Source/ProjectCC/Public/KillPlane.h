@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Effect/FGameEffectData.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "KillPlane.generated.h"
 
 class UBoxComponent;
@@ -58,6 +60,11 @@ public:
 	TObjectPtr<UNiagaraComponent> LifeTimeEffectComp;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	TObjectPtr<UGameEffectManagerComponent> EffectManagerComp;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<UAudioComponent> LifeTimeAudioComp;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> LifeTimeSound;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "KillPlane")
 	UStaticMeshComponent* Mesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "KillPlane")

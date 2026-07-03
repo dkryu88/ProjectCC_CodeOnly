@@ -940,7 +940,7 @@ void AObjects::HandleObjectsHit(const FHitResult& Hit)
 			LastHitPlayer = HitPlayer;
 		}
 
-		else if (HitObject && HitObject->ObjectsData && HitObject->ObjectsData->bUseHP) {
+		else if (HitObject && HitObject->ObjectsData && HitObject->ObjectsData->bUseHP && HitObject->OwnPlayer != OwnPlayer) {
 			HitObject->ApplyDamageInternal(HitDamage, OwnPlayer, this, true, false, -1.f, true, Hit.ImpactPoint, Hit.ImpactNormal);
 
 			//물체 Hit 이펙트 생성

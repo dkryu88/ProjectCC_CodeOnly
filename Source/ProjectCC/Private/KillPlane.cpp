@@ -8,6 +8,8 @@
 #include "MapConstructor.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "Effect/GameEffectManagerComponent.h"
 #include "Effect/FGameEffectData.h"
 
@@ -39,6 +41,11 @@ AKillPlane::AKillPlane()
 
 	EffectManagerComp = CreateDefaultSubobject<UGameEffectManagerComponent>(TEXT("EffectManager"));
 	if (EffectManagerComp) EffectManagerComp->SetIsReplicated(true);
+
+	LifeTimeAudioComp = CreateDefaultSubobject<UAudioComponent>(TEXT("Audio"));
+	LifeTimeAudioComp->SetupAttachment(KillCollider);
+	LifeTimeAudioComp->bAutoDestroy = false;
+	LifeTimeAudioComp->bAutoActivate = false;
 }
 
 // Called when the game starts or when spawned

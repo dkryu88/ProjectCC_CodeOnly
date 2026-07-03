@@ -36,6 +36,7 @@ protected:
 	void OnClicked_Random_Box();
 
 	void Purchase(EShopBoxs Box);
+	void RefreshPriceTexts();
 
 protected:
 	UPROPERTY(meta = (BindWidget))
@@ -49,4 +50,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Random_Box;
+
+	UPROPERTY(meta = (BindWIdget))
+	TObjectPtr<UTextBlock> Text_B_BoxPrice;
+	UPROPERTY(meta = (BindWIdget))
+	TObjectPtr<UTextBlock> Text_A_BoxPrice;
+	UPROPERTY(meta = (BindWIdget))
+	TObjectPtr<UTextBlock> Text_S_BoxPrice;
+	UPROPERTY(meta = (BindWIdget))
+	TObjectPtr<UTextBlock> Text_Random_BoxPrice;
 };

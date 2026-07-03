@@ -29,35 +29,34 @@ AObjects_FakeCoin::AObjects_FakeCoin(const FObjectInitializer& ObjectInitializer
 
 }
 
-void AObjects_FakeCoin::BeginPlay()
+void AObjects_FakeCoin::ApplyAdditionalSetting()
 {
-	Super::BeginPlay();
-
-	USphereComponent* SphereCollider = Cast<USphereComponent>(PhysicsCollider);
-	if (SphereCollider) {
+	if (USphereComponent* SphereCollider = Cast<USphereComponent>(PhysicsCollider))
+	{
 		SphereCollider->SetSimulatePhysics(false);
 		SphereCollider->SetEnableGravity(false);
 
 		SphereCollider->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		SphereCollider->SetCollisionObjectType(ECC_GameTraceChannel4);
+
 		SphereCollider->SetCollisionResponseToAllChannels(ECR_Ignore);
 		SphereCollider->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		SphereCollider->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 		SphereCollider->SetCollisionResponseToChannel(ECC_GameTraceChannel4, ECR_Overlap);
-		
+
+		SphereCollider->SetGenerateOverlapEvents(true);
+
+		// 중복 바인딩 방지
+		SphereCollider->OnComponentBeginOverlap.RemoveDynamic(this, &AObjects_FakeCoin::OnOverlapBegin);
 		SphereCollider->OnComponentBeginOverlap.AddDynamic(this, &AObjects_FakeCoin::OnOverlapBegin);
 
-		if (OwnPlayer) {
+		if (OwnPlayer){
 			SphereCollider->IgnoreActorWhenMoving(OwnPlayer, true);
 		}
 
-		SphereCollider->RecreatePhysicsState();
 		SetSizeofSphereColliderwithMesh(SphereCollider);
+		SphereCollider->RecreatePhysicsState();
 	}
-}
-
-void AObjects_FakeCoin::ApplyAdditionalSetting()
-{
 	if (InterActionCollider) {
 		InterActionCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		InterActionCollider->SetGenerateOverlapEvents(false);
@@ -77,28 +76,24 @@ void AObjects_FakeCoin::Tick(float DeltaTime)
 void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool vFromSweep, const FHitResult& SweepResult)
 {
 	if (!HasAuthority() || bIsExploded) return;
+	if (!NowMap) return;
 
 	APlayer_Character* HittedPlayer = Cast<APlayer_Character>(OtherActor);
-	AMatch_PlayerController* HittedPlayerController;
-	if (HittedPlayer) {
-		HittedPlayerController = Cast<AMatch_PlayerController>(HittedPlayer->GetController());
-	}
+	if (!HittedPlayer) return;
+	AMatch_PlayerController* HittedPlayerController = Cast<AMatch_PlayerController>(HittedPlayer->GetController());
 
-	if (HittedPlayer && (HittedPlayer != OwnPlayer || HittedPlayerController != OwnPlayerController)) {
+	if (!(HittedPlayer == OwnPlayer || (HittedPlayerController && HittedPlayerController == OwnPlayerController))) {
 		bIsExploded = true;
 
 		FVector ExplosionOrigin = GetActorLocation();
 		float HalfSize = NowMap->BlockSize * 0.5f;
 
-		if (NowMap) {
-			int32 X = 0;
-			int32 Y = 0;
-			int32 Z = 0;
-			if (NowMap->WorldToMapGrid(ExplosionOrigin - FVector(0.f, 0.f, 5.f), X, Y, Z)) {
-				ExplosionOrigin = NowMap->GridToWorldCenter(X, Y, Z);
-				ExplosionOrigin.Z -= HalfSize;
-			}
-		}
+		int32 X = 0;
+		int32 Y = 0;
+		int32 Z = 0;
+
+		NowMap->WorldToGridTopBlock(ExplosionOrigin, X, Y, Z);
+		ExplosionOrigin = GetActorLocation() + FVector(0.f, 0.f, 50.f);
 
 		TArray<FOverlapResult> OverlapResults;
 		FVector BoxExtent = FVector(HalfSize, HalfSize, HalfSize - 5.f);
@@ -126,7 +121,7 @@ void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAct
 		//이펙트 파라미터 설정 및 재생
 		FGameEffectContext EffectContext;
 		EffectContext.SourceActor = this;
-		EffectContext.SourceComponent = GetRootComponent();
+		EffectContext.SourceComponent = Mesh;
 		EffectContext.WorldLocation = ExplosionOrigin;
 		EffectContext.WorldRotation = FRotator::ZeroRotator;
 		EffectContext.HitPoint = ExplosionOrigin;
@@ -134,6 +129,6 @@ void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAct
 
 		PlayObjectsEffect(EEffectType::Destroy, EffectContext);
 
-		Destroy();
+		DelayForDestroyEffect();
 	}
 }

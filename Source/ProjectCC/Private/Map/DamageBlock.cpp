@@ -93,6 +93,12 @@ void ADamageBlock::EndPlay(const EEndPlayReason::Type EndPlayReason) {
 	Super::EndPlay(EndPlayReason);
 }
 
+void ADamageBlock::Multicast_PlayDamageSound_Implementation()
+{
+	if (!DamageSound) return;
+	UGameplayStatics::PlaySoundAtLocation(this, DamageSound, GetActorLocation(), GetActorRotation());
+}
+
 void ADamageBlock::InitializeDamageBlock(float InBlockSize, AMapConstructor* Map, const FIntVector& Grid) {
 	BlockSize = InBlockSize;
 	NowMap = Map;
@@ -117,14 +123,22 @@ bool ADamageBlock::CanDamageActor(AActor* TargetActor) {
 
 void ADamageBlock::ApplyDamageToActor(AActor* OtherActor) {
 	if (!OtherActor) return;
+	if (!HasAuthority()) return;
+
 	UGameplayStatics::ApplyDamage(OtherActor, DamageAmount, nullptr, this, UDamageType::StaticClass());
+
+	if (DamageSound) {
+		float NowTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		if (NowTime - LastDamageSoundTime >= DamageSoundCooldown){
+			LastDamageSoundTime = NowTime;
+			Multicast_PlayDamageSound();
+		}
+	}
 }
 
 void ADamageBlock::OnDamageTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
 	if (!HasAuthority()) return;
 	if (!CanDamageActor(OtherActor)) return;
-	if (!CanDamageActor(OtherActor)) return;
-
 	if (ActorsDamageIntervals.Contains(OtherActor)) return;
 
 	float NowTime = GetWorld()->GetTimeSeconds();

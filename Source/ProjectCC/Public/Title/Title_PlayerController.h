@@ -32,7 +32,7 @@ public:
 	void CloseAdditionalWidget();
 	UFUNCTION()
 	void ConfirmQuitGame();
-	UFUNCTION(Client,Reliable)
+	UFUNCTION()
 	void Client_ExitedByHost();
 
 protected:

@@ -500,6 +500,18 @@ void AWeapon::SetSizeofCapsuleColliderWithMesh(UCapsuleComponent* Capsule)
 void AWeapon::ApplyEquipState()
 {
 	Super::ApplyEquipState();
+	if (!EquippedPlayer){
+		UE_LOG(LogTemp, Error, TEXT("No Detected EquippedPlayer"));
+		return;
+	}
+	
+	ApplyEquipVisualToPlayer(EquippedPlayer);
+}
+
+void AWeapon::ApplyEquipVisualToPlayer(APlayer_Character* Player)
+{
+	if (!Player) return;
+	EquippedPlayer = Player;
 
 	if (WeaponCollider) {
 		if (WeaponCollider) {
@@ -509,14 +521,13 @@ void AWeapon::ApplyEquipState()
 			WeaponCollider->IgnoreActorWhenMoving(EquippedPlayer, true);
 			WeaponCollider->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		}
+		if (Player->GetCapsuleComponent()) Player->GetCapsuleComponent()->IgnoreActorWhenMoving(this, true);
+
 		if (MeshPivot) {
 			MeshPivot->SetRelativeLocation(MeshLocation);
 			MeshPivot->SetRelativeRotation(MeshRotation);
 		}
-		if (!EquippedPlayer) {
-			UE_LOG(LogTemp, Error, TEXT("No Detected EquippedPlayer"));
-			return;
-		}
+
 		AttachToComponent(EquippedPlayer->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("SK_PlayerHand"));
 
 		if (!GripSocketName.IsNone() && Mesh && Mesh->DoesSocketExist(GripSocketName)) {

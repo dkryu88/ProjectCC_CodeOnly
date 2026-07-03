@@ -280,11 +280,12 @@ void UPlayer_ControllerWidget::SetShopButtonVisible(bool bVisible)
 	if (!Button_Shop) return;
 
 	Button_Shop->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	Button_Shop->SetIsEnabled(true);
 }
 
 void UPlayer_ControllerWidget::SetShopClosedState(bool bClosed)
 {
-	if (Image_ShopClosedOverlay) Image_ShopClosedOverlay->SetVisibility(bClosed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (Image_ShopClosedOverlay) Image_ShopClosedOverlay->SetVisibility(bClosed ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void UPlayer_ControllerWidget::SetMatchTime() {

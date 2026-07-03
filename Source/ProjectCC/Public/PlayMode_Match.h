@@ -66,10 +66,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
-protected:
+public:
 	//매치 진행 시간 (60 * 5 = 300 <-- 5분)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
-	int32 MatchDuration = 300;	//테스트
+	int32 MatchDuration = 300;
 	//매치 진행 시간 관리
 	FTimerHandle MatchTimerHandle;
 	//매치 시작 딜레이 타이머
@@ -154,7 +154,7 @@ protected:
 	//현재 몇 번째 매치 이벤트인지 확인
 	int32 MatchEventTimeIndex = 0;
 	//PortraitId 바인딩
-	void AssignPortraitId();
+	void AssignMissingPortraitId();
 	//매치 이벤트 시간 체크
 	void CheckMapEvent(int32 RemainingTime);
 	//랜덤 이벤트 데이터를 리스트에서 획득
@@ -172,10 +172,7 @@ protected:
 	void BroadcastMatchEventCountdown(FName EventName, int32 SecondsUntilEvent);
 	void BroadcastMatchEventActive(FName EventName, int32 RemainingSeconds);
 	void BroadcastMatchEventEnded();
-
-	//[추가]
-	void BroadcastPlayBGM30Sec();
-
+	void BroadcastMatchLast30Sec();
 	/* ----------------------Coin Wave-------------------------- */
 	UPROPERTY(EditDefaultsOnly, Category="CoinWave")
 	TSubclassOf<ACoin> Coin;

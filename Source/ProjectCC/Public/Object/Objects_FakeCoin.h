@@ -19,7 +19,6 @@ public:
 	AObjects_FakeCoin(const FObjectInitializer& ObjectInitializer);
 
 protected:
-	virtual void BeginPlay() override;
 	virtual void ApplyAdditionalSetting() override;
 
 public:
