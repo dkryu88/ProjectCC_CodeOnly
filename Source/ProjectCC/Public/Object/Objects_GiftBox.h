@@ -21,4 +21,6 @@ protected:
 
 private:
 	void SpawnRandomGradeItem();
+
+	bool bDestroyed = false;
 };

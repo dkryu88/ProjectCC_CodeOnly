@@ -45,7 +45,7 @@ public:
 	void QuickMatchLAN();
 	//¸ÅÄª Ãë¼Ò
 	UFUNCTION(BlueprintCallable)
-	void CancelQuickMatchLAN();
+	void CancelQuickMatchLAN(bool bUserCancel = true);
 
 	UFUNCTION(BlueprintCallable)
 	void LeaveCurrentSession();

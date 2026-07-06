@@ -7,9 +7,11 @@
 #include "Item.h"
 
 void AObjects_GiftBox::Func_Destroy_Implementation() {
+	if (bDestroyed) return;
 	if (HasAuthority()) {
 		SpawnRandomGradeItem();
 	}
+	bDestroyed = true;
 }
 
 

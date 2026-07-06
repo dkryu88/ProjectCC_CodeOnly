@@ -1750,7 +1750,7 @@ void APlayer_Character::Aim(const struct FInputActionValue& inputValue) {
 			PC->CurrentMouseCursor = EMouseCursor::None;
 
 			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 

@@ -45,7 +45,7 @@ void UAllPlayMode_SessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriv
 	bool bShouldAutoRematch = false;
 	int32 BannedTicket = 0;
 	//입장중이나 매치완료상태에서 연결이 끊겼다면 자동으로 리매치 상태로 돌입
-	if (LastUIState == ESessionUIState::Matched || LastUIState == ESessionUIState::Joining) {
+	if (!bCancelRequested && (LastUIState == ESessionUIState::Matched || LastUIState == ESessionUIState::Joining)) {
 		bShouldAutoRematch = true;
 		//연결이 끊긴 방의 티켓번호 저장 후 블랙리스트 등록
 		if (LastTriedJoinResult.IsValid()) {
@@ -53,8 +53,7 @@ void UAllPlayMode_SessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriv
 		}
 	}
 
-	CancelQuickMatchLAN();
-	bCancelRequested = false;
+	CancelQuickMatchLAN(false);
 
 	if (BannedTicket != 0) {
 		IgnoredHostTickets.Add(BannedTicket);
@@ -163,7 +162,6 @@ void UAllPlayMode_SessionSubsystem::ReturnToTitle()
 
 	//세션 및 찌꺼기 변수 초기화
 	CancelQuickMatchLAN();
-	bCancelRequested = false;
 
 	LastUIState = ESessionUIState::None;
 	LastUIMessage = TEXT("");
@@ -218,10 +216,7 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 	//이전 세션이 남아있는 경우 정리
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		BroadcastState(ESessionUIState::Searching, TEXT("Destroy existing session first"));
-
-		//[자동매칭버그] 추가
 		bSearchAfterDestroy = true;
-
 		LeaveCurrentSession();
 		return;
 	}
@@ -230,10 +225,12 @@ void UAllPlayMode_SessionSubsystem::QuickMatchLAN()
 	FindLANSessions();
 }
 
-void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
+void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN(bool bUserCancel)
 {
 	if (!EnsureSessionInterface()) return;
-	bCancelRequested = true;
+
+	if(bUserCancel) bCancelRequested = true;
+	
 	bPendingHostAfterFindComplete = false;
 	bPendingStartHostMergeCheck = false;
 	bJoinAfterDestroy = false;
@@ -242,7 +239,7 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	bFindInProgress = false;
 	bIsHostingSession = false;
 
-	LastUIState = ESessionUIState::None;	//[추가]자동매칭버그
+	LastUIState = ESessionUIState::None;
 	LastUIMessage = TEXT("");
 	if (UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		GameInstance->SetMatchFlowState(EMatchFlowState::None);
@@ -251,9 +248,9 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	}
 
 	PendingJoinResult.Reset();
-	IgnoredHostTickets.Reset();
 	LastTriedJoinResult.Reset();
 	SessionSearch.Reset();
+	if(bUserCancel) IgnoredHostTickets.Reset();
 
 	if (UWorld* World = GetWorld()) {
 		World->GetTimerManager().ClearTimer(DelayedHostTimerHandle);
@@ -270,13 +267,14 @@ void UAllPlayMode_SessionSubsystem::CancelQuickMatchLAN()
 	if (SessionInterface->GetNamedSession(SessionName)) {
 		LeaveCurrentSession();
 	}
-	else {
+	else if(bUserCancel) {
 		BroadcastState(ESessionUIState::None, TEXT("Matching Cancelled!"));
 	}
 }
 
 //LAN 세션(로컬 멀티플레이) 찾기 시작
 void UAllPlayMode_SessionSubsystem::FindLANSessions() {
+	if (bCancelRequested) return;
 	if (!EnsureSessionInterface()) return;
 	if (bFindInProgress) return;
 
@@ -300,6 +298,8 @@ void UAllPlayMode_SessionSubsystem::FindLANSessions() {
 //Session 검색 직후 랜덤한 시간이 지난 다음 한번 더 Session 검색
 void UAllPlayMode_SessionSubsystem::ScheduleDelayedHost()
 {
+	if (bCancelRequested) return;
+
 	if (UWorld* World = GetWorld()) {
 		float Delay = FMath::FRandRange(HostCreateDelayMin, HostCreateDelayMax);
 
@@ -314,11 +314,13 @@ void UAllPlayMode_SessionSubsystem::ScheduleDelayedHost()
 //Host Session 생성 전 한번 더 Session 검색 
 void UAllPlayMode_SessionSubsystem::DelayedHostAfterSecondSearch()
 {
+	if (bCancelRequested) return;
 	FindLANSessions();
 }
 
 //자신이 Host가 됨 (세션 검색 실패시/Join 실패시 호출)
 void UAllPlayMode_SessionSubsystem::HostLANSession() {
+	if (bCancelRequested) return;
 	if (!EnsureSessionInterface()) return;
 
 	if (bFindInProgress) {
@@ -350,6 +352,7 @@ void UAllPlayMode_SessionSubsystem::HostLANSession() {
 
 void UAllPlayMode_SessionSubsystem::CreateLANSessionInternal()
 {
+	if (bCancelRequested) return;
 	if (!EnsureSessionInterface()) return;
 
 	UAllPlayMode_GameInstance* GameInstance = Cast<UAllPlayMode_GameInstance>(GetGameInstance());
@@ -443,8 +446,6 @@ void UAllPlayMode_SessionSubsystem::LeaveCurrentSession()
 		BroadcastState(ESessionUIState::None, TEXT("No Session to Destroy"));
 		return;
 	}
-
-	// [자동매칭버그] 중복 방지 위해 이전 델리게이트 끊음
 	SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
 
 	DestroySessionCompleteHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
@@ -511,6 +512,11 @@ void UAllPlayMode_SessionSubsystem::OnFindSessionsCompleted(bool bWasSuccessful)
 	if (SessionInterface.IsValid()) {
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
 	}
+	if (bCancelRequested) {
+		SessionSearch.Reset();
+		return;
+	}
+	
 	//Host 예약 상태라면 검색이 끝나면 Host가 됨
 	if (bPendingHostAfterFindComplete) {
 		bPendingHostAfterFindComplete = false;
@@ -725,6 +731,7 @@ void UAllPlayMode_SessionSubsystem::StartHostMergeCheck()
 
 void UAllPlayMode_SessionSubsystem::HostMergeCheckTick()
 {
+	if (bCancelRequested) return;
 	if (!EnsureSessionInterface() || !bIsHostingSession) return;
 	if (bFindInProgress) return;
 
@@ -757,6 +764,8 @@ void UAllPlayMode_SessionSubsystem::OnJoinSessionCompleted(FName sessionName, EO
 	}
 
 	bJoinInProgress = false;
+
+	if (bCancelRequested) return;
 
 	if (Result != EOnJoinSessionCompleteResult::Success) {
 		if (LastTriedJoinResult.IsValid()) {
@@ -824,7 +833,10 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 	}
 
 	if (bCancelRequested) {
-		bCancelRequested = false;
+		bJoinAfterDestroy = false;
+		bSearchAfterDestroy = false;
+		PendingJoinResult.Reset();
+
 		BroadcastState(ESessionUIState::None, TEXT("Matching Cancelled!"));
 		return;
 	}
@@ -854,9 +866,6 @@ void UAllPlayMode_SessionSubsystem::OnDestroySessionCompleted(FName sessionName,
 	if (UAllPlayMode_GameInstance* GI = Cast<UAllPlayMode_GameInstance>(GetGameInstance())) {
 		if (GI->bAutoRestartMatch) return;
 	}
-
-	//새로운 세션을 검색
-	//FindLANSessions();	//[자동매칭버그] 주석처리
 }
 
 
