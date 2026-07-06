@@ -24,4 +24,6 @@ protected:
 
 private:
 	void SpawnRandomGradeWeapon();
+
+	bool bDestroyed = false;
 };

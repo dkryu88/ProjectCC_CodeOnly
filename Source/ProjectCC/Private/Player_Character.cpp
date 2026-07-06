@@ -2191,6 +2191,18 @@ void APlayer_Character::UpdateKnockBackAirDamping(float DeltaTime)
 
 //플레이어 공격 (클라이언트 처리)
 void APlayer_Character::AttackInternal(bool bPlayAnimation) {
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[AttackInternal] ENTER / Weapon=%s / AttackType=%d / TargetType=%d / Range=%f / Radius=%f / Degree=%f"),
+		NowWeapon ? *NowWeapon->GetName() : TEXT("None"),
+		(int32)AStat.AttackType,
+		(int32)AStat.AttackTargetType,
+		AStat.AttackRange,
+		AStat.AttackRadius,
+		AStat.AttackDegree
+	);
+
 	if (!NowMap) {
 		UWorld* World = GetWorld();
 		if (!World) return;
@@ -2354,18 +2366,22 @@ void APlayer_Character::AttackInternal(bool bPlayAnimation) {
 				VerticalAngle *= 0.5f;
 			}
 			int32 VerticalTraceCount = CalculateTraceIntervalCount(VerticalAngle, AdjustedRange, ARadius);
+			
+			HorizontalTraceCount = FMath::Max(2, HorizontalTraceCount);
+			VerticalTraceCount = FMath::Max(2, VerticalTraceCount);
+			
 			FVector ForwardDir = Forward.GetSafeNormal();
 
 			for (int32 VerIndex = 0; VerIndex <= VerticalTraceCount; VerIndex++) {
 				float VerAlpha = (float)VerIndex / (float)VerticalTraceCount;
-				float VerAngle = FMath::Lerp(-(AHalfAngle / 2), AHalfAngle / 2, VerAlpha);
+				float VerAngle = FMath::Lerp(-VerticalAngle, VerticalAngle, VerAlpha);
 
 				for (int32 HorIndex = 0; HorIndex <= HorizontalTraceCount; HorIndex++) {
 					float HorAlpha = (float)HorIndex / (float)HorizontalTraceCount;
 					float HorAngle = FMath::Lerp(-AHalfAngle, AHalfAngle, HorAlpha);
 					//각 방향으로 정규화
 					float NormalizedHor = AHalfAngle > 0 ? HorAngle / AHalfAngle : 0.f;
-					float NormalizedVer = AHalfAngle * 0.5f > 0 ? VerAngle / (AHalfAngle * 0.5f) : 0.f;
+					float NormalizedVer = VerticalAngle > 0.f ? VerAngle / VerticalAngle : 0.f;
 					//Hor방향, Ver방향으로 특정 지점과 중심과의 거리를 재었을 때 1이 넘으면 원(타원) 밖으로 간주하고 continue (* 공식 : X^2 + Y^2 <= 1) 
 					if (NormalizedHor * NormalizedHor + NormalizedVer * NormalizedVer > 1.f) continue;
 
@@ -2771,6 +2787,10 @@ float APlayer_Character::ApplyDamageInternal(float Damage, APlayer_Character* At
 	//변신 중이라면 피격 효과 발동 및 피격 상황 알림
 	if (TransformationComp) {
 		TransformationComp->NotifyHittedDuringTransformation(AttackPlayer);
+	}
+	//무기에 설정된 피격 특수 기능 실행
+	if (NowWeapon){
+		NowWeapon->InteractionWeaponFunction(EFunctionInterActionReason::Hitted);
 	}
 
 	bool bSkipRotation = !bApplyRotation;
@@ -4770,7 +4790,38 @@ void APlayer_Character::Server_Attack_Implementation(bool bHolding, FVector Clie
 		AttackInternal(true);
 		return;
 	}
+	if (InputType == EWeaponAttackInputType::Repeat){
+		// 아직 최초 공격 선딜레이 타이머가 돌고 있으면 Holding 입력은 무시
+		if (GetWorldTimerManager().IsTimerActive(AttackEarlierDelayTimerHanlde)) return;
+		if (CurrentTime - LastAttackTime < AttackInterval) return;
+		//최초 공격 입력인지 확인
+		bool bFirstAttackOfHold = !bNowHoldingAttack;
 
+		if (NowWeapon && !NowWeapon->BeforeAttackWeaponFunction()){
+			LastAttackTime = CurrentTime;
+			return;
+		}
+		LastAttackTime = CurrentTime;
+		
+		if (bFirstAttackOfHold) {
+			float Delay = AStat.AttackEarlierDelay;
+			if (Delay > 0.f) {
+				PlayEquipmentAnimation(EFunctionInterActionReason::Attack);
+				GetWorldTimerManager().SetTimer(AttackEarlierDelayTimerHanlde, FTimerDelegate::CreateWeakLambda(this, [this]() {
+					if (!bCanControl) return;
+					if (bIsOut) return;
+					if (bIsDodging) return;
+					if (TransformationComp && !TransformationComp->CanAttackDuringTransformation()) return;
+
+					AttackInternal(false);
+					}), Delay, false);
+				return;
+			}
+		}
+		
+		AttackInternal(true);
+		return;
+	}
 
 	if (InputType == EWeaponAttackInputType::Continuous) {
 		if (!bNowHoldingAttack) {
@@ -4841,7 +4892,11 @@ void APlayer_Character::Server_AttackRelease_Implementation()
 		OnWeaponChanged.Broadcast();
 		return;
 	}
-	if (Stat->AttackInputType == EWeaponAttackInputType::Repeat) return;
+	if (Stat->AttackInputType == EWeaponAttackInputType::Repeat) {
+		bNowHoldingAttack = false;
+		OnWeaponChanged.Broadcast();
+		return;
+	}
 }
 
 void APlayer_Character::Server_HoldAttack_Implementation()

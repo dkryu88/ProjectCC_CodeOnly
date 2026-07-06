@@ -550,6 +550,7 @@ bool AWeapon_RailGun::BuildAimPreviewData(APlayer_Character* Player, FAimPreview
 void AWeapon_RailGun::FireRailGunBeam(float Damage, float Radius, float GaugePercent)
 {
 	if (!HasAuthority() || !EquippedPlayer || !EquippedPlayer->NowMap) return;
+	if (!bRailGunCharging) return;
 
 	float AttackRealRange = WeaponData->Stats.AttackRange * EquippedPlayer->NowMap->BlockSize;
 	float RailGunAttackRealRange = FMath::Lerp(AttackRealRange * 0.25f, AttackRealRange, GaugePercent);

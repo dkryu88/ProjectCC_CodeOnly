@@ -47,7 +47,7 @@ public:
 	TObjectPtr<UWeaponDataAsset> WeaponData;
 	//무기 오버레이 머터리얼의 다이나믹 머터리얼 인스턴스
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> WeaponOverlayMID;
+	TMap<TObjectPtr<UMeshComponent>, TObjectPtr<UMaterialInstanceDynamic>> WeaponOverlayMIDMap;
 	//무기 오버레이 머터리얼 데이터
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> TheWeaponOverlayMaterial;
@@ -202,7 +202,7 @@ public:
 
 	//무기 오버레이 머터리얼 관련
 	void SetWeaponOverlayOpacity_Local(float opacity);
-	UMaterialInstanceDynamic* GetOrCreateWeaponOverlayMID();
+	UMaterialInstanceDynamic* GetOrCreateWeaponOverlayMID(UMeshComponent* TargetMesh);
 };
 
 //효과 구현은 Equipment에 있는 효과 함수를 Override 하여 사용

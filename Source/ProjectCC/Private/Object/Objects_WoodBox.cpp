@@ -16,9 +16,11 @@ AObjects_WoodBox::AObjects_WoodBox(const FObjectInitializer& ObjectInitializer):
 }
 
 void AObjects_WoodBox::Func_Destroy_Implementation() {
+	if (bDestroyed) return;
 	if (HasAuthority()) {
 		SpawnRandomGradeWeapon();
 	}
+	bDestroyed = true;
 }
 
 void AObjects_WoodBox::SpawnRandomGradeWeapon() {

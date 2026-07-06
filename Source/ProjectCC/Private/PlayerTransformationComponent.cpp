@@ -174,12 +174,14 @@ void UPlayerTransformationComponent::ApplyTransformationVisual()
 	CreateVisualMesh();
 
 	if (TransformStaticMesh) {
+		TransformStaticMesh->EmptyOverrideMaterials();
 		TransformStaticMesh->SetStaticMesh(CurrentTransformation.TransformStaticMesh);
 		TransformStaticMesh->SetRelativeScale3D(CurrentTransformation.MeshScale);
 		TransformStaticMesh->SetVisibility(CurrentTransformation.TransformStaticMesh != nullptr, true);
 	}
 
 	if (TransformSkeletalMesh) {
+		TransformSkeletalMesh->EmptyOverrideMaterials();
 		TransformSkeletalMesh->SetSkeletalMesh(CurrentTransformation.TransformSkeletalMesh);
 		TransformSkeletalMesh->SetRelativeScale3D(CurrentTransformation.MeshScale);
 

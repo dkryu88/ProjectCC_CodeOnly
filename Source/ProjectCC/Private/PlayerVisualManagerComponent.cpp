@@ -137,11 +137,7 @@ void UPlayerVisualManagerComponent::RefreshPortraitMaterials()
 
 	int32 PortraitId = PS->GetPortraitId();
 
-	if (PortraitId < 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Portrait] PortraitId is not initialized yet. PS=%s"), *GetNameSafe(PS));
-		return;
-	}
+	if (PortraitId < 0) return;
 
 	TArray<UMeshComponent*> Meshes;
 
@@ -149,6 +145,9 @@ void UPlayerVisualManagerComponent::RefreshPortraitMaterials()
 
 	if (Player->TransformationComp) {
 		Player->TransformationComp->GetActiveTransformationMeshes(Meshes);
+	}
+	if (Meshes.Num() == 0) {
+		Player->GetComponents<UMeshComponent>(Meshes);
 	}
 	for (UMeshComponent* Mesh : Meshes) {
 		ApplyPortraitIdToMesh(Mesh, PortraitId);

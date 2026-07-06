@@ -87,21 +87,6 @@ void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAct
 	if ((HittedPlayerState && HittedPlayerState->GetPortraitId() != OwnerPortraitId) && (HittedPlayerController && HittedPlayerController != OwnPlayerController)) {
 		bIsExploded = true;
 
-		if (GEngine) {
-			FString Message = FString::Printf(TEXT("OwnerPortraitId = %d"),OwnerPortraitId);
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, Message);
-		}
-
-		if (GEngine) {
-			FString Message2 = FString::Printf(TEXT("HittedPlayerState->GetPortraitId() = %d"), HittedPlayerState->GetPortraitId());
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, Message2);
-		}
-
-		if (GEngine) {
-			FString Message3 = FString::Printf(TEXT("Hit PC: %s | Own PC: %s"),*HittedPlayerController->GetName(), OwnPlayerController ? *OwnPlayerController->GetName() : TEXT("NULL"));
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::White, Message3);
-		}
-
 		FVector ExplosionOrigin = GetActorLocation();
 		float HalfSize = NowMap->BlockSize * 0.5f;
 

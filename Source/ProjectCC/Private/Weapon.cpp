@@ -155,6 +155,7 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 		}
 	}
 	else if (HitObjects) {
+		if (EquippedPlayer && EquippedPlayer->NowSupport && EquippedPlayer->NowSupport == HitObjects) return;
 		HitObjects->ApplyDamageInternal(ThrowDamage, EquippedPlayer, this, true, false);
 		ApplyHitEffect(HitObjects, Hit);
 		if (HitObjects->ObjectsEffectManagerComp) {
@@ -174,8 +175,9 @@ void AWeapon::OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 				Context.HitNormal = Hit.ImpactNormal;
 				Context.WorldLocation = Hit.ImpactPoint;
 				Context.WorldRotation = Hit.ImpactNormal.Rotation();
+
+				HitObjects->ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);
 			}
-			HitObjects->ObjectsEffectManagerComp->PlayGameEffect_Multicast(*ThrowEffect, Context);
 		}
 	}
 
@@ -1030,37 +1032,43 @@ void AWeapon::PlayHitScanAdditionalAttackEffect(APlayer_Character* Player, const
 
 void AWeapon::SetWeaponOverlayOpacity_Local(float opacity)
 {
-	UMaterialInstanceDynamic* MID = GetOrCreateWeaponOverlayMID();
+	TArray<UMeshComponent*> MeshComponents;
+	GetComponents<UMeshComponent>(MeshComponents);
 
-	if (!MID || !Mesh) return;
+	for (UMeshComponent* MeshComp : MeshComponents) {
+		if (!MeshComp) continue;
 
-	MID->SetScalarParameterValue(TEXT("Opacity"), opacity);
+		UMaterialInstanceDynamic* MID = GetOrCreateWeaponOverlayMID(MeshComp);
+		if (!MID) continue;
 
-	Mesh->MarkRenderStateDirty();
+		MID->SetScalarParameterValue(TEXT("Opacity"), opacity);
+
+		MeshComp->MarkRenderStateDirty();
+	}	
 }
 
-UMaterialInstanceDynamic* AWeapon::GetOrCreateWeaponOverlayMID()
+UMaterialInstanceDynamic* AWeapon::GetOrCreateWeaponOverlayMID(UMeshComponent* TargetMesh)
 {
-	if (!Mesh) return nullptr;
-	if (WeaponOverlayMID) return WeaponOverlayMID;
-
-	UMaterialInterface* CurrentOverlay = Mesh->GetOverlayMaterial();
-
-	if (!CurrentOverlay) return nullptr;
-
-	TheWeaponOverlayMaterial = CurrentOverlay;
-
-	if (UMaterialInstanceDynamic* ExistingMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay)) WeaponOverlayMID = ExistingMID;
-	else {
-		WeaponOverlayMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
-
-		if (WeaponOverlayMID) {
-			Mesh->SetOverlayMaterial(WeaponOverlayMID);
-			Mesh->MarkRenderStateDirty();
-		}
+	if (!TargetMesh) return nullptr;
+	if (TObjectPtr<UMaterialInstanceDynamic>* FoundMID = WeaponOverlayMIDMap.Find(TargetMesh)){
+		return FoundMID->Get();
 	}
 
-	return WeaponOverlayMID;
+	UMaterialInterface* CurrentOverlay = TargetMesh->GetOverlayMaterial();
+	if (!CurrentOverlay) return nullptr;
+
+	UMaterialInstanceDynamic* NewMID = Cast<UMaterialInstanceDynamic>(CurrentOverlay);
+
+	if (!NewMID) {
+		NewMID = UMaterialInstanceDynamic::Create(CurrentOverlay, this);
+		if (!NewMID) return nullptr;
+		TargetMesh->SetOverlayMaterial(NewMID);
+	}
+	
+	WeaponOverlayMIDMap.Add(TargetMesh, NewMID);
+	TargetMesh->MarkRenderStateDirty();
+
+	return NewMID;
 }
 
 //---------------------------------------------------------------------------------------------//
