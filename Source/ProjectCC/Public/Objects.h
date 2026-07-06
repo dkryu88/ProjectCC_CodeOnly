@@ -145,6 +145,8 @@ public:
 	void OnRep_IsEquipped();
 	UFUNCTION()
 	void OnRep_Type();
+	UFUNCTION()
+	void OnRep_OwnerPortraitId();
 	UPROPERTY(Replicated)
 	bool bHaveThrowDamage = false;
 	UPROPERTY(Replicated)
@@ -220,6 +222,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float HitDamage = 0.f;
 
+	UPROPERTY(ReplicatedUsing = OnRep_OwnerPortraitId)
+	int32 OwnerPortraitId = -1;
+
 	UFUNCTION()
 	virtual void OnRep_OwnPlayer();
 
@@ -265,6 +270,8 @@ public:
 	void ApplyEquipState();
 	//물체 설치(Install Type)
 	void ApplyInstallState();
+	//물체의 소유주 세팅
+	void SetObjectOwnerPlayer(APlayer_Character* NewOwner);
 	//물체 상호작용 상태
 	virtual void ApplyInteractionState(APlayer_Character* InterActionPlayer);
 	//물체 발사(Projectile Type), 투척(Throwable Type) 상태

@@ -66,7 +66,7 @@ bool AItem_FakeCoin::UseEffect_Implementation(APlayer_Character* Player) {
 		AObjects_FakeCoin* NewTrap = GetWorld()->SpawnActor<AObjects_FakeCoin>(FakeCoin, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
 		if (NewTrap) {
 			NewTrap->SetActorLocation(SpawnLocation);	//위치 보정
-			NewTrap->OwnPlayer = Player;
+			NewTrap->SetObjectOwnerPlayer(Player);
 			return true;
 		}
 	}

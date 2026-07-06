@@ -67,8 +67,7 @@ bool AItem_Mine::UseEffect_Implementation(APlayer_Character* Player)
 		AObjects_Mine* NewTrap = GetWorld()->SpawnActor<AObjects_Mine>(Mine, TopBlock, FRotator::ZeroRotator, SpawnParams);
 		if (NewTrap) {
 			NewTrap->SetActorLocation(TopBlock);
-			NewTrap->OwnPlayer = Player;
-			NewTrap->OwnPlayerController = Cast<AMatch_PlayerController>(Player->GetController());
+			NewTrap->SetObjectOwnerPlayer(Player);
 			return true;
 		}
 	}

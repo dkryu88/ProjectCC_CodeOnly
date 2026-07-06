@@ -100,6 +100,7 @@ void AObjects::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AObjects, bNowActivated);
 	DOREPLIFETIME(AObjects, FunctionInterval);
 	DOREPLIFETIME(AObjects, OwnPlayer);
+	DOREPLIFETIME(AObjects, OwnerPortraitId);
 	DOREPLIFETIME(AObjects, AttackRange);
 	DOREPLIFETIME(AObjects, StartLocation);
 	DOREPLIFETIME(AObjects, TargetLocation);
@@ -272,6 +273,11 @@ void AObjects::OnRep_Type() {
 	ApplyCurrentState();
 }
 
+void AObjects::OnRep_OwnerPortraitId()
+{
+	ApplyPortraitIdColorToMesh();
+}
+
 void AObjects::OnRep_HP() {
 	RefreshHPWidget();
 }
@@ -420,15 +426,10 @@ void AObjects::SetSizeofSphereColliderwithMesh(USphereComponent* Collider) {
 
 void AObjects::ApplyPortraitIdColorToMesh()
 {
-	if (!OwnPlayer) return;
-	
-	APlayer_State* PS = OwnPlayer->GetThePlayerState();
-	if (!PS) return;
+	if (OwnerPortraitId < 0) return;
 
 	TArray<UMeshComponent*> MeshComponents;
 	GetComponents<UMeshComponent>(MeshComponents);
-
-	int32 PortraitId = PS->GetPortraitId();
 	
 	for (UMeshComponent* mesh : MeshComponents) {
 		
@@ -450,7 +451,7 @@ void AObjects::ApplyPortraitIdColorToMesh()
 			if (!MID) MID = mesh->CreateDynamicMaterialInstance(MaterialIndex, CurrentMaterial);
 			if (!MID) continue;
 
-			MID->SetScalarParameterValue(TEXT("PortraitId"), (float)PortraitId);
+			MID->SetScalarParameterValue(TEXT("PortraitId"), (float)OwnerPortraitId);
 		}
 	}
 	
@@ -571,8 +572,7 @@ void AObjects::Equip(APlayer_Character* Player) {
 	if (!Player) return;
 	//물체를 장착된 상태로 변경, 무기 매쉬의 물리 설정 변경
 	bIsEquipped = true;
-	OwnPlayer = Player;
-	OwnPlayerController = Cast<AMatch_PlayerController>(Player->GetController());
+	SetObjectOwnerPlayer(Player);
 	ApplyEquipState();
 	if (!OwnPlayer) {
 		UE_LOG(LogTemp, Error, TEXT("No Detected OwnPlayer"));
@@ -588,8 +588,7 @@ void AObjects::EquipSupport(APlayer_Character* Player)
 	if (!HasAuthority() || !Player) return;
 
 	bIsEquipped = true;
-	OwnPlayer = Player;
-	OwnPlayerController = Cast<AMatch_PlayerController>(Player->GetController());
+	SetObjectOwnerPlayer(Player);
 	ApplySupportState();
 
 	if (!OwnPlayer) return;
@@ -659,13 +658,12 @@ void AObjects::UnEquip(APlayer_Character* Player) {
 //물체 던지기 상태 설정
 void AObjects::BeginObjectThrow(APlayer_Character* owner, float damage) {
 	if (!HasAuthority()) return;
-	OwnPlayer = owner;
+	SetObjectOwnerPlayer(owner);
 	PhysicsCollider->SetCollisionObjectType(ECC_GameTraceChannel6);
 	PhysicsCollider->IgnoreActorWhenMoving(OwnPlayer, true);
 	OwnPlayer->GetCapsuleComponent()->IgnoreActorWhenMoving(this, false);
 	PhysicsCollider->SetNotifyRigidBodyCollision(true);
 	PhysicsCollider->SetAllUseCCD(true);
-	OwnPlayerController = Cast<AMatch_PlayerController>(owner->GetController());
 	ThrowDamage = damage;
 	bHaveThrowDamage = true;
 }
@@ -728,6 +726,23 @@ void AObjects::ApplyInstallState() {
 	}
 	ApplyAdditionalSetting();
 	bRuntimeStateResolved = true;
+}
+
+void AObjects::SetObjectOwnerPlayer(APlayer_Character* NewOwner)
+{
+	OwnPlayer = NewOwner;
+	OwnPlayerController = NewOwner ? Cast<AMatch_PlayerController>(NewOwner->GetController()) : nullptr;
+	OwnerPortraitId = -1;
+
+	if (NewOwner) {
+		if (APlayer_State* PS = NewOwner->GetThePlayerState()) {
+			OwnerPortraitId = PS->GetPortraitId();
+		}
+	}
+
+	ApplyPortraitIdColorToMesh();
+
+	if (HasAuthority()) ForceNetUpdate();
 }
 
 //물체 상호작용 상태
@@ -840,8 +855,7 @@ void AObjects::ShootOrThrowWithLaunchData(APlayer_Character* UsePlayer, const FV
 		return;
 	}
 
-	OwnPlayer = UsePlayer;
-	OwnPlayerController = Cast<AMatch_PlayerController>(UsePlayer->GetController());
+	SetObjectOwnerPlayer(UsePlayer);
 
 	StartLocation = TheStartLocation;
 	TargetLocation = TheTargetLocation;

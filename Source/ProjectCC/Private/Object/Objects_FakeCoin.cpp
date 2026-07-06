@@ -7,6 +7,7 @@
 #include "Engine/OverlapResult.h"
 #include "Components/BoxComponent.h"
 #include "Match_PlayerController.h"
+#include "Player_State.h"
 #include "MapConstructor.h"
 
 AObjects_FakeCoin::AObjects_FakeCoin(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer.SetDefaultSubobjectClass<USphereComponent>(TEXT("PhysicsCollider")))
@@ -81,9 +82,25 @@ void AObjects_FakeCoin::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAct
 	APlayer_Character* HittedPlayer = Cast<APlayer_Character>(OtherActor);
 	if (!HittedPlayer) return;
 	AMatch_PlayerController* HittedPlayerController = Cast<AMatch_PlayerController>(HittedPlayer->GetController());
+	APlayer_State* HittedPlayerState = Cast<APlayer_State>(HittedPlayer->GetThePlayerState());
 
-	if (!(HittedPlayer == OwnPlayer || (HittedPlayerController && HittedPlayerController == OwnPlayerController))) {
+	if ((HittedPlayerState && HittedPlayerState->GetPortraitId() != OwnerPortraitId) && (HittedPlayerController && HittedPlayerController != OwnPlayerController)) {
 		bIsExploded = true;
+
+		if (GEngine) {
+			FString Message = FString::Printf(TEXT("OwnerPortraitId = %d"),OwnerPortraitId);
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, Message);
+		}
+
+		if (GEngine) {
+			FString Message2 = FString::Printf(TEXT("HittedPlayerState->GetPortraitId() = %d"), HittedPlayerState->GetPortraitId());
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, Message2);
+		}
+
+		if (GEngine) {
+			FString Message3 = FString::Printf(TEXT("Hit PC: %s | Own PC: %s"),*HittedPlayerController->GetName(), OwnPlayerController ? *OwnPlayerController->GetName() : TEXT("NULL"));
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::White, Message3);
+		}
 
 		FVector ExplosionOrigin = GetActorLocation();
 		float HalfSize = NowMap->BlockSize * 0.5f;

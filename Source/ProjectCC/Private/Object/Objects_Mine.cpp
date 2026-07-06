@@ -7,6 +7,7 @@
 #include "MapConstructor.h"
 #include "Match_PlayerController.h"
 #include "Player_Character.h"
+#include "Player_State.h"
 #include "Engine/OverlapResult.h"
 
 AObjects_Mine::AObjects_Mine(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(TEXT("PhysicsCollider"))){
@@ -38,12 +39,15 @@ void AObjects_Mine::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	if (!NowMap) return;
 
 	APlayer_Character* HittedPlayer = Cast<APlayer_Character>(OtherActor);
-	AMatch_PlayerController* HittedPlayerController;
+	AMatch_PlayerController* HittedPlayerController = nullptr;
+	APlayer_State* HittedPlayerState = nullptr;
+
 	if (HittedPlayer) {
 		HittedPlayerController = Cast<AMatch_PlayerController>(HittedPlayer->GetController());
+		HittedPlayerState = Cast<APlayer_State>(HittedPlayer->GetThePlayerState());
 	}
 
-	if (HittedPlayer && (HittedPlayer != OwnPlayer || HittedPlayerController != OwnPlayerController)) {
+	if (HittedPlayer && (HittedPlayerState && HittedPlayerState->GetPortraitId() != OwnerPortraitId) && (HittedPlayerController && HittedPlayerController != OwnPlayerController)) {
 		bIsExploded = true;
 
 		FVector ExplosionOrigin = GetActorLocation();
